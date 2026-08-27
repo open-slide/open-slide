@@ -151,4 +151,15 @@ test.describe('inspector editing', () => {
       'true',
     );
   });
+
+  test('selecting text inside an Agenda wrapper opens the panel', async ({ page }) => {
+    await openSlide(page, 'agenda-select');
+    await expect(page.locator('[data-inspector-ready]')).toBeVisible();
+    await editorCanvas(page).getByText('What changed?').click();
+
+    const panel = page.locator('aside[data-inspector-ui]');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText('<span>')).toBeVisible();
+    await expect(panel.getByPlaceholder('Element text')).toHaveValue('What changed?');
+  });
 });
