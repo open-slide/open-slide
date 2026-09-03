@@ -106,7 +106,7 @@ export function registerEditRoutes(server: ViteDevServer, ctx: ApiContext): void
         for (let i = 0; i < body.edits.length; i++) {
           const edit = body.edits[i];
           if (edit == null || typeof edit !== 'object') continue;
-          if (edit?.file !== undefined && typeof edit.file !== 'string') {
+          if (edit.file !== undefined && typeof edit.file !== 'string') {
             results[i] = { ok: false, error: 'invalid file' };
             continue;
           }

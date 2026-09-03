@@ -42,6 +42,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import { hasOnlyInlineTextChildren } from '@/lib/inspector/inline-text';
+import { sameSlideLoc } from '@/lib/inspector/slide-loc';
 import { styleContext } from '@/lib/inspector/text-selection';
 import type { EditOp } from '@/lib/inspector/use-editor';
 import { useAgentSocketConnected } from '@/lib/use-agent-socket';
@@ -80,12 +81,7 @@ type RangeStylePreview = {
 function resolveSelectedTarget(target: SelectedTarget, slideId: string): SelectedTarget {
   const hit = findSlideSource(target.anchor, slideId, { hostOnly: true });
   if (!hit) return target;
-  if (
-    hit.line === target.line &&
-    hit.column === target.column &&
-    (hit.file ?? null) === (target.file ?? null) &&
-    hit.anchor === target.anchor
-  ) {
+  if (sameSlideLoc(hit, target) && hit.anchor === target.anchor) {
     return target;
   }
   return { file: hit.file, line: hit.line, column: hit.column, anchor: hit.anchor };
