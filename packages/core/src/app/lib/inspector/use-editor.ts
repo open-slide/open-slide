@@ -15,7 +15,13 @@ export type EditOp =
   | { kind: 'replace-placeholder-with-image'; assetPath: string }
   | { kind: 'remove-element' };
 
-export type Edit = { line: number; column: number; ops: EditOp[]; dependsOn?: number };
+export type Edit = {
+  file?: string | null;
+  line: number;
+  column: number;
+  ops: EditOp[];
+  dependsOn?: number;
+};
 
 export type EditResult = { ok: boolean; error?: string };
 
@@ -30,11 +36,17 @@ export class NoOpEditError extends Error {
 
 export function useEditor(slideId: string) {
   const applyEdit = useCallback(
-    async (line: number, column: number, ops: EditOp[]) => {
+    async (line: number, column: number, ops: EditOp[], file?: string | null) => {
       const res = await fetch('/__edit', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slideId, line, column, ops }),
+        body: JSON.stringify({
+          slideId,
+          line,
+          column,
+          ops,
+          ...(file ? { file } : {}),
+        }),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string; changed?: boolean };
       if (!res.ok) {
@@ -56,7 +68,10 @@ export function useEditor(slideId: string) {
       const res = await fetch('/__edit/batch', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slideId, edits }),
+        body: JSON.stringify({
+          slideId,
+          edits: edits.map(({ file, ...rest }) => (file ? { ...rest, file } : rest)),
+        }),
       });
       const body = (await res.json().catch(() => ({}))) as {
         error?: string;
