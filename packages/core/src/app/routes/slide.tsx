@@ -109,7 +109,7 @@ import {
   type PptxExportProgress,
 } from '../lib/export-pptx';
 import { changeNotesPages } from '../lib/inspector/use-notes';
-import type { SlideModule } from '../lib/sdk';
+import type { Page, SlideModule } from '../lib/sdk';
 import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion';
 import { useSlideModule } from '../lib/use-slide-module';
 
@@ -118,10 +118,18 @@ const { showSlideUi, showSlideBrowser, allowHtmlDownload } = config.build;
 const noop = () => {};
 
 type PagePlan = {
+  // `order[i]` is the page that lands at position `i`; -1 stands for a page that
+  // has no source index yet (a blank page being added).
   order: number[];
   request: string;
   init: RequestInit;
+  // Page to show once the change is applied; defaults to following the current one.
+  show?: number;
 };
+
+// Stands in for the new page until the dev server's HMR update delivers the
+// real component written to index.tsx.
+const BlankPage: Page = () => <div style={{ width: '100%', height: '100%' }} />;
 
 export function Slide() {
   const { slideId = '' } = useParams();
@@ -312,9 +320,10 @@ export function Slide() {
         const at = indexRef.current;
         const next = plan(before.map((_, i) => i));
         if (!next) return null;
-        const moved = next.order.map((i) => before[i]);
+        const moved = next.order.map((i) => (i < 0 ? BlankPage : before[i]));
         const position = next.order.indexOf(at);
-        const nextIndex = position < 0 ? Math.min(at, next.order.length - 1) : position;
+        const nextIndex =
+          next.show ?? (position < 0 ? Math.min(at, next.order.length - 1) : position);
         return {
           order: next.order,
           apply: async () => {
@@ -360,6 +369,31 @@ export function Slide() {
       }
     },
     [slideId, changePages],
+  );
+
+  const addPage = useCallback(
+    async (afterIndex: number) => {
+      try {
+        const changed = await changePages((order) => {
+          if (afterIndex < -1 || afterIndex >= order.length) return null;
+          order.splice(afterIndex + 1, 0, -1);
+          return {
+            order,
+            request: `/__slides/${encodeURIComponent(slideId)}/pages`,
+            init: {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ afterIndex }),
+            },
+            show: afterIndex + 1,
+          };
+        });
+        if (changed) toast.success(format(t.thumbnailRail.toastAdded, { n: afterIndex + 2 }));
+      } catch (err) {
+        toast.error(`${t.thumbnailRail.toastAddFailed}: ${String((err as Error).message ?? err)}`);
+      }
+    },
+    [slideId, changePages, t.thumbnailRail],
   );
 
   const duplicatePage = useCallback(
@@ -410,11 +444,12 @@ export function Slide() {
     () =>
       import.meta.env.DEV
         ? {
+            onAddAfter: addPage,
             onDuplicate: duplicatePage,
             onDelete: deletePage,
           }
         : undefined,
-    [duplicatePage, deletePage],
+    [addPage, duplicatePage, deletePage],
   );
 
   useEffect(() => {

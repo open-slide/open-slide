@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import type { ViteDevServer } from 'vite';
 import {
+  addPageToDefaultExportInSource,
   createBlankSlideDir,
   duplicateNotesElementInSource,
   duplicatePageInDefaultExportInSource,
@@ -25,6 +26,7 @@ import { type ApiContext, json, readBody } from './context.ts';
 
 // POST   /__slides                        create a blank slide → { slideId }
 // PUT    /__slides/:id/reorder            reorder pages { order: number[] } → { layout }
+// POST   /__slides/:id/pages              add blank page { afterIndex } → { layout }
 // DELETE /__slides/:id/pages/:i           remove page → { layout }
 // POST   /__slides/:id/pages/:i/duplicate duplicate page → { layout }
 // POST   /__slides/:id/duplicate          duplicate slide directory { newId? }
@@ -113,6 +115,43 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
           slideId,
           order,
           layout: pageLayoutOfSource(result.source),
+        });
+      }
+
+      const addPageMatch = url.pathname.match(/^\/([^/]+)\/pages$/);
+      if (addPageMatch && method === 'POST') {
+        const requestCheck = validateMutationRequest(req, { requireJsonBody: true });
+        if (!requestCheck.ok) {
+          return json(res, requestCheck.status, { error: requestCheck.error });
+        }
+        const slideId = addPageMatch[1];
+        if (!SLIDE_ID_RE.test(slideId)) return json(res, 400, { error: 'invalid slideId' });
+
+        const body = (await readBody(req)) as { afterIndex?: unknown };
+        const afterIndex = body.afterIndex;
+        if (typeof afterIndex !== 'number' || !Number.isInteger(afterIndex) || afterIndex < -1) {
+          return json(res, 400, { error: 'invalid afterIndex' });
+        }
+
+        const entry = resolveSlideEntry(ctx.slidesRoot, slideId);
+        if (!entry) return json(res, 400, { error: 'invalid slideId' });
+
+        let source: string;
+        try {
+          source = await fs.readFile(entry, 'utf8');
+        } catch {
+          return json(res, 404, { error: 'slide not found' });
+        }
+
+        const added = addPageToDefaultExportInSource(source, afterIndex);
+        if (!added.ok) return json(res, added.status, { error: added.error });
+        await fs.writeFile(entry, added.source, 'utf8');
+        return json(res, 200, {
+          ok: true,
+          slideId,
+          index: added.index,
+          name: added.name,
+          layout: pageLayoutOfSource(added.source),
         });
       }
 
