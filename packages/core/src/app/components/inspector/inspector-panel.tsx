@@ -17,7 +17,7 @@ import {
   UnfoldVertical,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { IconSwitcherIndicator } from '@/components/icon-switcher-indicator';
 import {
   CollapsibleSection,
@@ -42,7 +42,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { opaqueHex, rgbToHex } from '@/lib/inspector/color';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import { hasOnlyInlineTextChildren } from '@/lib/inspector/inline-text';
+import { countLocInstances, inspectorStatus } from '@/lib/inspector/source-location';
 import { styleContext } from '@/lib/inspector/text-selection';
+import { useUntracedPick } from '@/lib/inspector/untraced-pick';
 import type { EditOp } from '@/lib/inspector/use-editor';
 import { useAgentSocketConnected } from '@/lib/use-agent-socket';
 import { format, useLocale } from '@/lib/use-locale';
@@ -52,6 +54,7 @@ import { ArrangePanel } from './arrange-panel';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { type SelectedTarget, useInspector } from './inspector-provider';
 import { type PageInfo, PagePanel } from './page-panel';
+import { InspectorEmptyState, SourceLocationBar } from './source-location-bar';
 
 type ElementSnapshot = {
   fontSize: number;
@@ -116,7 +119,14 @@ export function InspectorPanel({
   const [contentSelection, setContentSelection] = useState<ContentSelection | null>(null);
   const [rangeStylePreview, setRangeStylePreview] = useState<RangeStylePreview | null>(null);
   const reloadCounter = useReloadCounter();
+  const untracedTag = useUntracedPick(slideId);
   const t = useLocale();
+  const instances = useMemo(() => {
+    void opsVersion;
+    void reloadCounter;
+    return selected ? countLocInstances(selected.anchor.closest('[data-osd-canvas]'), selected) : 0;
+  }, [selected, opsVersion, reloadCounter]);
+  const status = inspectorStatus({ selectionCount: selection.length, untracedTag, instances });
 
   useEffect(() => {
     void selected;
@@ -261,7 +271,7 @@ export function InspectorPanel({
       <CollapsibleSection title={t.inspector.sourceSection}>
         <div className="flex items-center justify-between gap-2">
           <span className="font-mono text-[10.5px] text-muted-foreground">
-            &lt;{selected.anchor.tagName.toLowerCase()}&gt; · {selected.line}:{selected.column}
+            &lt;{selected.anchor.tagName.toLowerCase()}&gt;
           </span>
           <AgentWatchingBadge />
         </div>
@@ -304,35 +314,43 @@ export function InspectorPanel({
         }
         banner={
           selected && snapshot ? (
-            <div className="flex shrink-0 items-center justify-between gap-3 px-3.5 pt-3.5 pb-1">
-              <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium">
-                <ElementIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-                <span className="truncate">{elementLabel}</span>
+            <>
+              <div className="flex shrink-0 items-center justify-between gap-3 px-3.5 pt-3.5 pb-1">
+                <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium">
+                  <ElementIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{elementLabel}</span>
+                </div>
+                <TabsList
+                  className="relative isolate shrink-0 rounded-lg group-data-[orientation=horizontal]/tabs:h-8"
+                  aria-label={t.inspector.format}
+                >
+                  <IconSwitcherIndicator index={tab === 'arrange' ? 1 : 0} />
+                  <TabsTrigger
+                    value="format"
+                    disabled={multiple}
+                    title={formatLabel}
+                    className="z-10 h-full w-8 flex-none rounded-md px-0 data-active:bg-transparent data-active:shadow-none dark:data-active:bg-transparent"
+                  >
+                    <FormatIcon aria-hidden />
+                    <span className="sr-only">{formatLabel}</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="arrange"
+                    title={t.inspector.arrangeSection}
+                    className="z-10 h-full w-8 flex-none rounded-md px-0 data-active:bg-transparent data-active:shadow-none dark:data-active:bg-transparent"
+                  >
+                    <Move aria-hidden />
+                    <span className="sr-only">{t.inspector.arrangeSection}</span>
+                  </TabsTrigger>
+                </TabsList>
               </div>
-              <TabsList
-                className="relative isolate shrink-0 rounded-lg group-data-[orientation=horizontal]/tabs:h-8"
-                aria-label={t.inspector.format}
-              >
-                <IconSwitcherIndicator index={tab === 'arrange' ? 1 : 0} />
-                <TabsTrigger
-                  value="format"
-                  disabled={multiple}
-                  title={formatLabel}
-                  className="z-10 h-full w-8 flex-none rounded-md px-0 data-active:bg-transparent data-active:shadow-none dark:data-active:bg-transparent"
-                >
-                  <FormatIcon aria-hidden />
-                  <span className="sr-only">{formatLabel}</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="arrange"
-                  title={t.inspector.arrangeSection}
-                  className="z-10 h-full w-8 flex-none rounded-md px-0 data-active:bg-transparent data-active:shadow-none dark:data-active:bg-transparent"
-                >
-                  <Move aria-hidden />
-                  <span className="sr-only">{t.inspector.arrangeSection}</span>
-                </TabsTrigger>
-              </TabsList>
-            </div>
+              <SourceLocationBar
+                slideId={slideId}
+                selected={selected}
+                selection={selection}
+                status={status}
+              />
+            </>
           ) : undefined
         }
         footer={footer}
@@ -431,7 +449,9 @@ export function InspectorPanel({
           </>
         ) : page ? (
           <PagePanel page={page} />
-        ) : null}
+        ) : (
+          <InspectorEmptyState slideId={slideId} status={status} />
+        )}
       </PanelShell>
     </Tabs>
   );
