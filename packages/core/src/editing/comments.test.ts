@@ -3,7 +3,10 @@ import {
   b64urlDecode,
   b64urlEncode,
   buildMarker,
+  COMMENT_INTENTS,
   findInsertion,
+  isCommentIntent,
+  markerDeleteRegex,
   parseMarkers,
   removeMarker,
   resolveTargets,
@@ -199,5 +202,52 @@ describe('updateMarkerNote', () => {
       page: 1,
     });
     expect(updateMarkerNote(source, 'c-ffffffff', 'new')).toBeNull();
+  });
+});
+
+const TS = '2026-04-25T00:00:00.000Z';
+const marker = (id: string, text: string) =>
+  `    {/* @slide-comment id="${id}" ts="${TS}" text="${text}" */}`;
+
+describe('comment intent', () => {
+  it('accepts exactly the closed set', () => {
+    for (const intent of COMMENT_INTENTS) expect(isCommentIntent(intent)).toBe(true);
+    for (const bad of ['remove', 'DELETE', '', 'move', 1, null, undefined, {}]) {
+      expect(isCommentIntent(bad)).toBe(false);
+    }
+  });
+
+  it('round-trips every intent through a marker', () => {
+    for (const intent of COMMENT_INTENTS) {
+      const text = b64urlEncode(JSON.stringify({ note: 'n', intent }));
+      const [c] = parseMarkers(marker('c-0000beef', text));
+      expect(c).toEqual({ id: 'c-0000beef', line: 1, ts: TS, note: 'n', intent });
+    }
+  });
+
+  it('parses a legacy marker with no intent key unchanged', () => {
+    const [c] = parseMarkers(marker('c-12345678', 'eyJub3RlIjoieCIsImhpbnQiOiJoIn0'));
+    expect(c).toEqual({ id: 'c-12345678', line: 1, ts: TS, note: 'x', hint: 'h' });
+  });
+
+  it('drops an unknown or null intent on read but keeps the comment', () => {
+    for (const intent of ['explode', null]) {
+      const text = b64urlEncode(JSON.stringify({ note: 'keep me', intent }));
+      const [c] = parseMarkers(marker('c-12345678', text));
+      expect(c).toEqual({ id: 'c-12345678', line: 1, ts: TS, note: 'keep me' });
+    }
+  });
+});
+
+describe('markerDeleteRegex', () => {
+  it('matches legacy and intent-bearing markers alike', () => {
+    const legacy = marker('c-aaaaaaaa', b64urlEncode(JSON.stringify({ note: 'a' })));
+    const withIntent = marker(
+      'c-bbbbbbbb',
+      b64urlEncode(JSON.stringify({ note: 'b', hint: 'h', intent: 'move-after' })),
+    );
+    expect(markerDeleteRegex('c-aaaaaaaa').test(legacy)).toBe(true);
+    expect(markerDeleteRegex('c-bbbbbbbb').test(withIntent)).toBe(true);
+    expect(markerDeleteRegex('c-aaaaaaaa').test(withIntent)).toBe(false);
   });
 });
