@@ -22,6 +22,7 @@ import {
   type TextEditOp,
   type TextEditStep,
 } from '@/lib/inspector/text-edit-timeline';
+import { setUntracedPick } from '@/lib/inspector/untraced-pick';
 import { type AddCommentInput, type SlideComment, useComments } from '@/lib/inspector/use-comments';
 import { type Edit, type EditOp, useEditor } from '@/lib/inspector/use-editor';
 import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-editor';
@@ -1362,6 +1363,7 @@ export function InspectorProvider({
 
   useEffect(() => {
     setSelectionState([]);
+    setUntracedPick(null);
     const pending = pendingRevealRef.current;
     if (!pending) return;
     if (pending.pageIndex !== pageIndex) {
