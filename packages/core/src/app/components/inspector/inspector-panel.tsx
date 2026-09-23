@@ -43,6 +43,7 @@ import { opaqueHex, rgbToHex } from '@/lib/inspector/color';
 import type { DesignSystem } from '@/lib/design';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import { hasOnlyInlineTextChildren } from '@/lib/inspector/inline-text';
+import { swatchValue } from '@/lib/inspector/swatch-value';
 import { styleContext } from '@/lib/inspector/text-selection';
 import type { EditOp } from '@/lib/inspector/use-editor';
 import { useAgentSocketConnected } from '@/lib/use-agent-socket';
@@ -119,11 +120,8 @@ export function InspectorPanel({
     applyEdit,
   } = useInspector();
   const [snapshot, setSnapshot] = useState<ElementSnapshot | null>(null);
-  // Computed styles resolve var() to a colour, so the saved token is read from the inline style.
-  const styleValue = (target: SelectedTarget, key: 'color' | 'backgroundColor') => {
-    const pending = pendingStyleValue(target.line, target.column, key);
-    return pending === undefined ? target.anchor.style[key] : pending;
-  };
+  const styleValue = (target: SelectedTarget, key: 'color' | 'backgroundColor') =>
+    swatchValue(pendingStyleValue(target.line, target.column, key), target.anchor.style[key]);
   const [contentSelection, setContentSelection] = useState<ContentSelection | null>(null);
   const [rangeStylePreview, setRangeStylePreview] = useState<RangeStylePreview | null>(null);
   const reloadCounter = useReloadCounter();
