@@ -1,5 +1,4 @@
 packages:
   - "apps/*"
-  - "apps/marketing/*"
   - "packages/*"
   - "packages/core/e2e/fixture"

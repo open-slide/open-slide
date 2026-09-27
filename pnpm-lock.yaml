@@ -43,13 +43,7 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(@types/react@19.2.18)
 
-  apps/marketing/cover:
-    devDependencies:
-      '@playwright/test':
-        specifier: ~1.63.0
-        version: 1.63.0
-
-  apps/marketing/launch-video:
+  apps/marketing:
     devDependencies:
       '@playwright/test':
         specifier: ~1.63.0

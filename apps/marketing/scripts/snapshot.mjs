@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { filmOut, listFilms, loadFilm, root } from './films.mjs';
+import { listFilms, loadFilm, outDir, root } from './projects.mjs';
 
 // Films share src/lib and src/ui, so a change made for one film can shift
 // another. `--save` records key frames of each film; a plain run re-renders
@@ -43,8 +43,8 @@ for (const id of ids) {
   for (const hit of film.hits) add(hit.t + 0.1);
   const list = [...times].sort((a, b) => a - b);
 
-  const baseDir = filmOut(id, 'snapshots/base');
-  const dir = opts.save ? baseDir : filmOut(id, 'snapshots/current');
+  const baseDir = outDir(id, 'snapshots/base');
+  const dir = opts.save ? baseDir : outDir(id, 'snapshots/current');
   fs.rmSync(dir, { recursive: true, force: true });
   execFileSync(
     'node',

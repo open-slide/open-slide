@@ -1,37 +1,15 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
 import { renderSoundtrack } from '../audio/synth.mjs';
-import { filmOut, loadFilm, root } from './films.mjs';
 import { ensureFilmFonts } from './fonts.mjs';
+import { loadFilm, outDir, root } from './projects.mjs';
+import { gitInfo, parseRenderArgs, timestamp } from './render-kit.mjs';
 import { serve } from './serve.mjs';
 
-// `pnpm <script> -- --flag` forwards the bare `--`, which parseArgs would
-// read as the end of options.
-const { values: flags, positionals } = parseArgs({
-  args: process.argv.slice(2).filter((a) => a !== '--'),
-  allowPositionals: true,
-  options: {
-    fps: { type: 'string' },
-    samples: { type: 'string' },
-    shutter: { type: 'string' },
-    from: { type: 'string' },
-    to: { type: 'string' },
-    workers: { type: 'string' },
-    scale: { type: 'string' },
-    quality: { type: 'string' },
-    crf: { type: 'string' },
-    grain: { type: 'string' },
-    name: { type: 'string' },
-    out: { type: 'string' },
-    stills: { type: 'boolean', default: false },
-    draft: { type: 'boolean', default: false },
-    'no-audio': { type: 'boolean', default: false },
-  },
-});
+const { values: flags, positionals } = parseRenderArgs();
 
 // Positionals: the film id, and for --stills a comma list of seconds.
 const times = positionals.find((p) => /^[\d.,]+$/.test(p));
@@ -57,14 +35,14 @@ const fps = Number(opts.fps);
 const samples = Math.max(1, Number(opts.samples));
 const shutter = Number(opts.shutter);
 const scale = Number(opts.scale);
-const outDir = filmOut(film.id);
+const filmDir = outDir(film.id);
 const workDir = path.join(root, 'out/.work', film.id);
 const progressFile = path.join(workDir, 'progress.json');
 fs.mkdirSync(workDir, { recursive: true });
 
 await ensureFilmFonts(film);
 const server = await serve(root);
-const url = `http://127.0.0.1:${server.address().port}/index.html?render&film=${film.id}`;
+const url = `http://127.0.0.1:${server.address().port}/film.html?render&film=${film.id}`;
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH || undefined,
   args: ['--force-color-profile=srgb', '--disable-lcd-text', '--font-render-hinting=none'],
@@ -96,7 +74,7 @@ async function capture({ page, cdp }, t, format = 'jpeg') {
 
 if (opts.stills) {
   if (!times) throw new Error('--stills needs a comma list of seconds, e.g. 12.5,30');
-  const dir = opts.out ? path.resolve(root, opts.out) : path.join(outDir, 'stills');
+  const dir = opts.out ? path.resolve(root, opts.out) : path.join(filmDir, 'stills');
   fs.mkdirSync(dir, { recursive: true });
   const worker = await openPage();
   for (const t of times.split(',').map(Number)) {
@@ -129,14 +107,10 @@ filters.push('scale=in_color_matrix=bt601:in_range=full:out_color_matrix=bt709:o
 filters.push(`noise=c0s=${opts.grain}:c0f=t+u`);
 filters.push('format=yuv420p');
 
-const stamp = (() => {
-  const d = new Date();
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-})();
+const stamp = timestamp();
 const outFile = opts.out
   ? path.resolve(root, opts.out)
-  : path.join(outDir, 'renders', `${opts.name}-${stamp}.mp4`);
+  : path.join(filmDir, 'renders', `${opts.name}-${stamp}.mp4`);
 const size = { width: Math.round(1920 * scale), height: Math.round(1080 * scale) };
 
 let done = 0;
@@ -312,18 +286,6 @@ fs.writeFileSync(
   )}\n`,
 );
 console.log(`wrote ${path.relative(process.cwd(), outFile)}`);
-
-function gitInfo() {
-  try {
-    const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
-    return {
-      commit: git('rev-parse', '--short', 'HEAD'),
-      dirty: git('status', '--porcelain', '--', '.') !== '',
-    };
-  } catch {
-    return null;
-  }
-}
 
 async function run(args) {
   const p = spawn(FFMPEG, args, { stdio: 'inherit' });

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { FILM_ID, root } from './films.mjs';
+import { ID, listImages, root } from './projects.mjs';
 
 const { values: opts, positionals } = parseArgs({
   args: process.argv.slice(2).filter((a) => a !== '--'),
@@ -13,14 +13,14 @@ const { values: opts, positionals } = parseArgs({
 });
 
 const [id] = positionals;
-if (!id || !FILM_ID.test(id)) {
-  console.error('usage: pnpm --filter launch-video new <film-id> --feature "Name" [--tagline "…"]');
+if (!id || !ID.test(id)) {
+  console.error('usage: pnpm marketing new:film <film-id> --feature "Name" [--tagline "…"]');
   console.error('film-id: lowercase letters, digits, and dashes, e.g. comments-launch');
   process.exit(1);
 }
 const dest = path.join(root, 'films', id);
-if (fs.existsSync(dest)) {
-  console.error(`films/${id} already exists`);
+if (fs.existsSync(dest) || listImages().includes(id)) {
+  console.error(`"${id}" is taken; films and images share ids`);
   process.exit(1);
 }
 
@@ -46,6 +46,6 @@ fs.writeFileSync(
 
 console.log(`created films/${id} — "${feature} launch"
 
-  preview   pnpm dev:video → http://127.0.0.1:5180/#/${id}/composition
-  stills    pnpm --filter launch-video stills ${id} 2,8,16
-  render    pnpm --filter launch-video render ${id}`);
+  preview   pnpm dev:marketing → http://127.0.0.1:5180/#/${id}/preview
+  stills    pnpm marketing stills ${id} 2,8,16
+  render    pnpm marketing render ${id}`);

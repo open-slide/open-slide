@@ -1,6 +1,6 @@
 # launch-video reference
 
-Paths are relative to `apps/marketing/launch-video/`. Film code imports shared modules through `#lib/…`, `#ui/…`, and `#theme`. The same specifiers work in the browser (import map in `index.html`) and in Node (`imports` in `package.json`). Read the source for full return shapes. This is a map, not a spec.
+Paths are relative to `apps/marketing/`. Film code imports shared modules through `#lib/…`, `#ui/…`, and `#theme`. The same specifiers work in the browser (import map in `film.html` and `studio.html`) and in Node (`imports` in `package.json`). Read the source for full return shapes. This is a map, not a spec.
 
 ## Film
 
@@ -152,11 +152,11 @@ The mix and master are fixed in `audio/synth.mjs`: the tail fades over the last 
 ## Commands
 
 ```bash
-pnpm --filter launch-video new <id> --feature "…" --tagline "…"
-pnpm --filter launch-video stills <id> 1,2.5,8     # → out/<id>/stills/tSSS.ss.png
-pnpm --filter launch-video snapshot --save         # record every film's key frames
-pnpm --filter launch-video snapshot                # re-render and compare
-pnpm --filter launch-video soundtrack <id>         # → out/<id>/soundtrack.wav
-pnpm --filter launch-video render:draft <id>       # 30 fps, 960 × 540
-pnpm --filter launch-video render <id>             # master; the user usually runs this
+pnpm marketing new:film <id> --feature "…" --tagline "…"
+pnpm marketing stills <id> 1,2.5,8         # → out/<id>/stills/tSSS.ss.png
+pnpm marketing snapshot --save             # record every film's key frames
+pnpm marketing snapshot                    # re-render and compare
+pnpm marketing soundtrack <id>             # → out/<id>/soundtrack.wav
+pnpm marketing render:draft <id>           # 30 fps, 960 × 540
+pnpm marketing render <id>                 # master; the user usually runs this
 ```

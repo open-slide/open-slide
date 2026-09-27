@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fontCss } from '../src/theme.js';
-import { loadFilm, root } from './films.mjs';
+import { loadFilm, root } from './projects.mjs';
 
 // Headless renders shouldn't depend on network access, so each film's Google
 // Fonts stylesheet and its latin woff2 files are cached under out/fonts/<key>.

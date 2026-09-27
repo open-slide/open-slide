@@ -1,5 +1,5 @@
 {
-  "name": "launch-video",
+  "name": "marketing",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,12 +10,13 @@
   },
   "scripts": {
     "dev": "node scripts/serve.mjs",
-    "new": "node scripts/new-film.mjs",
-    "soundtrack": "node audio/synth.mjs",
+    "new:film": "node scripts/new-film.mjs",
+    "new:image": "node scripts/new-image.mjs",
+    "render": "node scripts/render.mjs",
+    "render:draft": "node scripts/render.mjs --draft",
     "stills": "node scripts/render.mjs --stills",
     "snapshot": "node scripts/snapshot.mjs",
-    "render": "node scripts/render.mjs",
-    "render:draft": "node scripts/render.mjs --draft"
+    "soundtrack": "node audio/synth.mjs"
   },
   "devDependencies": {
     "@playwright/test": "~1.63.0"

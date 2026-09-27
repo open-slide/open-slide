@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <title>open-slide cover</title>
+<link rel="stylesheet" href="/out/fonts/_base/fonts.css" />
 <style>
-  @font-face { font-family: 'Geist'; src: url(/fonts/geist.woff2) format('woff2'); font-weight: 100 900; }
-  @font-face { font-family: 'Geist Mono'; src: url(/fonts/geist-mono.woff2) format('woff2'); font-weight: 100 900; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 100vw; height: 100vh; background: #030304; overflow: hidden; }
   .frame { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
@@ -97,7 +96,7 @@
 </div>
 
 <script>
-  // Page numbers of the getting-started template deck; render.mjs screenshots each one on request.
+  // Page numbers of the getting-started template deck, screenshotted on request via /@deck.
   const WALL = [
     [6, 16, 12, 9, 3],
     [2, 8, 5, 10, 16],
@@ -130,7 +129,7 @@
       card.style.filter = `brightness(${Math.max(0.08, 1 - d * 0.46).toFixed(2)}) blur(${(Math.max(0, d - 0.6) * 2.2).toFixed(2)}px)`;
       if (d === 0) card.style.transform = 'translateZ(50px)';
       const img = document.createElement('img');
-      img.src = `/shots/${n}.png`;
+      img.src = `/@deck/getting-started/${n}.png`;
       img.alt = '';
       card.append(img);
       plane.append(card);

@@ -138,12 +138,12 @@ button {
   padding: 22px 10px 8px;
 }
 
-.film-list {
+.project-list {
   display: grid;
   gap: 2px;
 }
 
-.film-row {
+.project-row {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -158,25 +158,36 @@ button {
     color 150ms;
 }
 
-.film-row:hover {
+.project-row:hover {
   background: oklch(1 0 0 / 0.04);
   color: var(--fg);
 }
 
-.film-row[aria-current="page"] {
-  --swatch: 1;
+.project-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-row .ico {
+  margin: 0 1px;
+  opacity: 0.55;
+}
+
+.project-row[aria-current="page"] {
   color: var(--fg);
   font-weight: 500;
 }
 
-.film-row i {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  background: var(--brand);
-  margin: 0 2px;
-  opacity: var(--swatch, 0.35);
+.project-row[aria-current="page"] .ico {
+  color: var(--brand);
+  opacity: 1;
+}
+
+.none {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--dim-fg);
 }
 
 .side-foot {
@@ -221,12 +232,14 @@ button {
   overflow: auto;
 }
 
-.view[hidden] {
-  display: none;
+.overview {
+  padding: 40px 44px 60px;
 }
 
-.renders {
-  padding: 40px 44px 60px;
+.project {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .head {
@@ -234,6 +247,115 @@ button {
   align-items: center;
   gap: 10px;
   margin-bottom: 30px;
+}
+
+.project .head {
+  flex: none;
+  margin: 0;
+  padding: 28px 44px 22px;
+}
+
+.head .sub {
+  margin-left: 6px;
+  font-size: 12.5px;
+  color: var(--dim-fg);
+}
+
+.head-icon {
+  display: flex;
+}
+
+.head-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: 14px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--chrome);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--muted-fg);
+  transition:
+    background 150ms,
+    color 150ms;
+}
+
+.tab:hover {
+  color: var(--fg);
+}
+
+.tab[aria-selected="true"] {
+  background: var(--muted);
+  color: var(--fg);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.tab .count {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--dim-fg);
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--border);
+  color: var(--muted-fg);
+  transition: box-shadow 150ms;
+}
+
+.icon-btn:hover {
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 0.2);
+  color: var(--fg);
+}
+
+.pane {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.pane.renders {
+  padding: 10px 44px 60px;
+}
+
+.section + .section {
+  margin-top: 48px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-fg);
 }
 
 .head h1 {
@@ -251,6 +373,7 @@ button {
 
 .cmd {
   margin-left: auto;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -315,13 +438,31 @@ button {
     0 18px 40px -16px oklch(0 0 0 / 0.8);
 }
 
-.thumb video {
+.thumb video,
+.thumb img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.thumb.image {
+  background: var(--chrome);
+}
+
+.thumb.image img {
+  object-fit: contain;
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--dim-fg);
+  background: repeating-linear-gradient(-45deg, transparent 0 10px, oklch(1 0 0 / 0.02) 10px 20px);
 }
 
 .badges {
@@ -491,12 +632,66 @@ button {
   color: var(--fg);
 }
 
-.composition iframe {
+.preview > iframe {
   width: 100%;
   height: 100%;
   border: 0;
   display: block;
   background: #000;
+}
+
+.canvases {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+  align-items: start;
+  gap: 32px 26px;
+  padding: 10px 44px 60px;
+}
+
+.canvases figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.canvases figcaption {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted-fg);
+  white-space: nowrap;
+}
+
+.canvases figcaption b {
+  font-family: "Geist", system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.canvases .publish {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dim-fg);
+}
+
+.canvas {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #000;
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+.canvas iframe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border: 0;
+  transform-origin: 0 0;
 }
 
 .player {
@@ -529,7 +724,8 @@ button {
   animation: rise 320ms var(--ease-swift) both;
 }
 
-.player video {
+.player video,
+.player img {
   max-width: 100%;
   max-height: calc(100vh - 56px);
   border-radius: 10px;
@@ -635,6 +831,11 @@ button {
   display: grid;
   place-items: center;
   background: oklch(1 0 0 / 0.08);
+}
+
+/* Last, so it outranks the single-class display rules above. */
+[hidden] {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

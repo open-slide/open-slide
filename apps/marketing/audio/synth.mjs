@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { filmOut, loadFilm, root } from '../scripts/films.mjs';
+import { loadFilm, outDir, root } from '../scripts/projects.mjs';
 import { Biquad, Bus, db, pingPong, reverb, SR, writeWav } from './dsp.mjs';
 import { createKit } from './kit.mjs';
 import { createSfx } from './sfx.mjs';
@@ -116,7 +116,7 @@ export async function renderSoundtrack(film) {
   out.mix(wet, db(-7));
   const stats = master(out, film.duration);
 
-  const file = filmOut(film.id, 'soundtrack.wav');
+  const file = outDir(film.id, 'soundtrack.wav');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   writeWav(file, out, fs);
   console.log(
