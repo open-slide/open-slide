@@ -6,6 +6,7 @@ import { Hero } from '@/components/landing/hero';
 import { HowItWorks } from '@/components/landing/how-it-works';
 import { Nav } from '@/components/landing/nav';
 import { ScrollReveal } from '@/components/landing/scroll-reveal';
+import { Support } from '@/components/landing/support';
 import { UsedBy } from '@/components/landing/used-by';
 import { fetchGitHubStars, formatStarCount } from '@/lib/github';
 import { appName, gitConfig, siteUrl } from '@/lib/shared';
@@ -122,6 +123,7 @@ export default async function HomePage() {
         <Features />
         <UsedBy />
         <FAQ />
+        <Support />
         <GetStarted />
       </main>
       <Footer />
