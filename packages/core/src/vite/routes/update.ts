@@ -17,7 +17,7 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = 300_000;
 
 type CheckResult = { current: string; latest: string | null; outdated: boolean };
-type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
+export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 type CommandSpec = { cmd: string; args: string[] };
 type UpdateResult = {
   packageManager: PackageManager;
