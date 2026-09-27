@@ -100,7 +100,7 @@ function isAncestorOrSelf(ancestor: string, dir: string): boolean {
 // `installRoot` may sit below cwd (pnpm's .pnpm store), so it only bounds the
 // walk when it is an ancestor; otherwise the project root does.
 export function findViteDeclaration(cwd: string, installRoot?: string): ViteDeclaration | null {
-  if (installRoot) {
+  if (installRoot && (isAncestorOrSelf(installRoot, cwd) || isAncestorOrSelf(cwd, installRoot))) {
     const owner = declarationIn(installRoot);
     if (owner) return owner;
   }

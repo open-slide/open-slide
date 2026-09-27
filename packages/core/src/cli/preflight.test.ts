@@ -133,6 +133,14 @@ describe('findViteDeclaration', () => {
     expect(findViteDeclaration(dir, store)?.file).toBe(path.join(dir, 'package.json'));
   });
 
+  it('ignores an install root outside the project', () => {
+    writeManifest('linked-core', { devDependencies: { vite: '^5.0.0' } });
+    const dir = writeManifest('project', { private: true });
+    writeFileSync(path.join(dir, 'bun.lock'), '');
+
+    expect(findViteDeclaration(dir, path.join(root, 'linked-core'))).toBeNull();
+  });
+
   it('returns null when nothing lists vite', () => {
     const dir = writeManifest('app', { dependencies: { '@open-slide/core': '2.0.0' } });
     expect(findViteDeclaration(dir)).toBeNull();
