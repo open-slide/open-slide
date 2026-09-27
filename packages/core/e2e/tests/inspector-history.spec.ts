@@ -111,6 +111,125 @@ export default [Only] satisfies Page[];
     return paragraphs;
   }
 
+  async function openPagedHistoryFixture(
+    page: Page,
+    request: APIRequestContext,
+    slideId: string,
+    withTransition: boolean,
+  ) {
+    createdSlides.push(slideId);
+    await duplicateSlide(request, 'edit-target', slideId);
+    await writeFile(
+      slideSourcePath(slideId),
+      `import { type RefObject, useRef } from 'react';
+import { type Page, type SlideMeta, useIsActivePage } from '@open-slide/core';
+import { readEditableText, useInspector } from '@/components/inspector/inspector-provider';
+export const meta: SlideMeta = { title: 'Paged history', createdAt: '2026-01-01T00:00:00.000Z' };
+function Title({ value, nodeRef }: { value: string; nodeRef: RefObject<HTMLHeadingElement | null> }) {
+  return <h2 data-testid="paged-title" ref={nodeRef}>{value}</h2>;
+}
+function Controls({ value, titleRef }: { value: string; titleRef: RefObject<HTMLHeadingElement | null> }) {
+  const { bufferOps, selected } = useInspector();
+  const rename = () => {
+    const node = titleRef.current;
+    if (!node?.dataset.slideLoc) throw new Error('Missing paged fixture target');
+    const [line, column] = node.dataset.slideLoc.split(':').map(Number);
+    bufferOps(line, column, node, [{ kind: 'set-text', value: \`\${value} edited\`, prevText: readEditableText(node) }]);
+  };
+  return (
+    <div data-inspector-ui>
+      <button type="button" onClick={rename}>Rename title</button>
+      <output data-testid="paged-selection">{selected?.anchor === titleRef.current ? 'title' : 'none'}</output>
+    </div>
+  );
+}
+function Harness({ value }: { value: string }) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  return (
+    <div style={{ padding: 80, fontFamily: 'system-ui', fontSize: 32 }}>
+      <Title nodeRef={titleRef} value={value} />
+      {useIsActivePage() && <Controls value={value} titleRef={titleRef} />}
+    </div>
+  );
+}
+const One: Page = () => <Harness value="Page one" />;
+const Two: Page = () => <Harness value="Page two" />;
+export default [One, Two] satisfies Page[];
+${
+  withTransition
+    ? `export const transition = {
+  duration: 2000,
+  exit: { duration: 2000, keyframes: [{ opacity: 1 }, { opacity: 0 }] },
+  enter: { duration: 2000, keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+};
+`
+    : ''
+}`,
+    );
+    // The suite runs with reduced motion, which skips page transitions.
+    if (withTransition) await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await openSlide(page, slideId);
+    await expect(page.locator('[data-inspector-ready]')).toBeVisible();
+    // During a transition the outgoing page still renders its title first.
+    const title = editorCanvas(page).getByTestId('paged-title').last();
+    await expect(title).toHaveText('Page one');
+    await page.waitForLoadState('networkidle');
+    return title;
+  }
+
+  for (const withTransition of [false, true]) {
+    test(`undo and redo bring the edited page back into view and select the edit${withTransition ? ' mid-transition' : ''}`, async ({
+      page,
+      request,
+    }) => {
+      const title = await openPagedHistoryFixture(
+        page,
+        request,
+        withTransition ? 'history-cross-page-transition' : 'history-cross-page',
+        withTransition,
+      );
+      const rename = editorCanvas(page).getByRole('button', { name: 'Rename title', exact: true });
+      const selection = editorCanvas(page).getByTestId('paged-selection');
+      const releaseFocus = () =>
+        page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const expectRevealed = async (url: RegExp, text: string) => {
+        await expect(page).toHaveURL(url);
+        await expect(title).toHaveText(text);
+        await expect(selection).toHaveText('title');
+        await expect(page.locator('[data-selection-frame]')).toHaveCount(1);
+      };
+      // Read once, without retrying: the reveal must land while the page we
+      // left is still animating out, not after it unmounts.
+      const expectMidTransition = async () => {
+        if (withTransition)
+          expect(await editorCanvas(page).getByTestId('paged-title').count()).toBe(2);
+      };
+
+      await rename.click();
+      await expect(title).toHaveText('Page one edited');
+      await releaseFocus();
+      await page.keyboard.press('ArrowRight');
+      await expect(page).toHaveURL(/[?&]p=2/);
+      await expect(title).toHaveText('Page two');
+      await rename.click();
+      await expect(title).toHaveText('Page two edited');
+      await expect(selection).toHaveText('none');
+      await releaseFocus();
+
+      await page.keyboard.press('ControlOrMeta+z');
+      await expectRevealed(/[?&]p=2/, 'Page two');
+      await page.keyboard.press('ControlOrMeta+z');
+      await expectRevealed(/[?&]p=1/, 'Page one');
+      await expectMidTransition();
+
+      await page.keyboard.press('ControlOrMeta+Shift+z');
+      await expectRevealed(/[?&]p=1/, 'Page one edited');
+      await page.keyboard.press('ControlOrMeta+Shift+z');
+      await expectRevealed(/[?&]p=2/, 'Page two edited');
+      await expectMidTransition();
+    });
+  }
+
   test('text redo uses the resolved parent when buffering from an untagged child', async ({
     page,
     request,

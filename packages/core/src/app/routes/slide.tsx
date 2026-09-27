@@ -608,7 +608,7 @@ export function Slide() {
   );
 
   return (
-    <HistoryProvider>
+    <HistoryProvider pageIndex={index} onPageChange={goTo}>
       <InspectorProvider
         slideId={slideId}
         pageIndex={index}

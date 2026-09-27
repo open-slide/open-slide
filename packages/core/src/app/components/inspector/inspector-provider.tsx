@@ -37,23 +37,78 @@ export type SelectedTarget = {
   canvasPath?: number[];
 };
 
+const INSTANCE_ID_ATTR = 'data-slide-instance-id';
+
+function elementPath(root: Element, el: Element): number[] | null {
+  const path: number[] = [];
+  for (let node = el; node !== root; ) {
+    const parent = node.parentElement;
+    if (!parent) return null;
+    path.unshift(Array.from(parent.children).indexOf(node));
+    node = parent;
+  }
+  return path;
+}
+
+function elementAtPath(root: Element | null, path: number[]): HTMLElement | null {
+  let node = root;
+  for (const index of path) node = node?.children[index] ?? null;
+  return node instanceof HTMLElement ? node : null;
+}
+
 function rememberTarget(target: SelectedTarget): SelectedTarget {
   const root = target.anchor.closest('[data-osd-canvas]');
-  if (!root) return target;
-  const path: number[] = [];
-  for (let node: Element | null = target.anchor; node && node !== root; node = node.parentElement) {
-    const parent: Element | null = node.parentElement;
-    if (!parent) return target;
-    path.unshift(Array.from(parent.children).indexOf(node));
-  }
-  return { ...target, canvasPath: path };
+  const path = root && elementPath(root, target.anchor);
+  return path ? { ...target, canvasPath: path } : target;
 }
 
 function findRememberedTarget(root: HTMLElement, path?: number[]): HTMLElement | null {
-  let node = root.querySelector('[data-osd-canvas]');
   if (!path) return null;
-  for (const index of path) node = node?.children[index] ?? null;
-  return node instanceof HTMLElement ? node : null;
+  return elementAtPath(root.querySelector('[data-osd-canvas]'), path);
+}
+
+// Enough to find an edited element again after its page remounts. The path is
+// relative to the page layer, since an outgoing page shifts canvas-level paths.
+type RevealTarget = {
+  line: number;
+  column: number;
+  anchor: HTMLElement;
+  tagName: string;
+  pagePath: number[] | null;
+  instanceId: string | null;
+};
+
+// Only the incoming layer carries it: an interrupted transition relabels and
+// remounts the outgoing one, so anything found there goes stale.
+const PAGE_LAYER_ATTR = 'data-osd-current-page';
+
+function captureRevealTarget(target: SelectedTarget): RevealTarget {
+  const layer = target.anchor.closest(`[${PAGE_LAYER_ATTR}]`);
+  return {
+    line: target.line,
+    column: target.column,
+    anchor: target.anchor,
+    tagName: target.anchor.tagName,
+    pagePath: layer && elementPath(layer, target.anchor),
+    instanceId: target.anchor.getAttribute(INSTANCE_ID_ATTR),
+  };
+}
+
+function locateRevealTarget(layer: Element, target: RevealTarget): HTMLElement | null {
+  if (target.anchor.isConnected && layer.contains(target.anchor)) return target.anchor;
+  if (target.instanceId) {
+    const stamped = layer.querySelector<HTMLElement>(
+      `[${INSTANCE_ID_ATTR}="${target.instanceId}"]`,
+    );
+    if (stamped) return stamped;
+  }
+  const byPath = target.pagePath && elementAtPath(layer, target.pagePath);
+  if (byPath?.tagName === target.tagName) return byPath;
+  return layer.querySelector<HTMLElement>(`[data-slide-loc="${target.line}:${target.column}"]`);
+}
+
+function sameAnchors(a: SelectedTarget[], b: SelectedTarget[]): boolean {
+  return a.length === b.length && a.every((target, index) => target.anchor === b[index].anchor);
 }
 
 export type InlineEditTarget = SelectedTarget & {
@@ -106,8 +161,6 @@ function createBucket(line: number, column: number): Bucket {
     origAttrs: new Map(),
   };
 }
-
-const INSTANCE_ID_ATTR = 'data-slide-instance-id';
 
 export type DomTextPart = {
   node: Text | HTMLBRElement;
@@ -382,10 +435,14 @@ export function InspectorProvider({
   );
   const [selection, setSelectionState] = useState<SelectedTarget[]>([]);
   const selected = selection.at(-1) ?? null;
+  // Targets an undo/redo should select once their page is on screen.
+  const pendingRevealRef = useRef<{ pageIndex: number; targets: RevealTarget[] } | null>(null);
   const setSelection = useCallback((targets: SelectedTarget[]) => {
+    pendingRevealRef.current = null;
     setSelectionState(targets.map(rememberTarget));
   }, []);
   const setSelected = useCallback((target: SelectedTarget | null) => {
+    pendingRevealRef.current = null;
     setSelectionState((previous) => {
       if (!target) return [];
       const primary = previous.at(-1);
@@ -480,6 +537,61 @@ export function InspectorProvider({
     }
     return root.querySelector<HTMLElement>(`[data-slide-loc="${line}:${column}"]`);
   }, []);
+
+  const pageIndexRef = useRef(pageIndex);
+  pageIndexRef.current = pageIndex;
+  const findTextAnchor = useCallback(
+    (instanceId: string, target?: SelectedTarget & { pageIndex: number }) => {
+      const root = document.querySelector<HTMLElement>('[data-inspector-root]');
+      if (!root) return null;
+      const stamped = root.querySelector<HTMLElement>(`[${INSTANCE_ID_ATTR}="${instanceId}"]`);
+      if (stamped) return stamped;
+      // Off-page instances must not fall back to the loc: a reused component on
+      // the visible page shares it, and replaying this instance's HTML there
+      // would clobber that page's text. Their page's remount replays the buffer.
+      if (!target || target.pageIndex !== pageIndexRef.current) return null;
+      const anchor =
+        findRememberedTarget(root, target.canvasPath) ??
+        root.querySelector<HTMLElement>(`[data-slide-loc="${target.line}:${target.column}"]`);
+      if (!anchor || anchor.tagName !== target.anchor.tagName) return null;
+      anchor.setAttribute(INSTANCE_ID_ATTR, instanceId);
+      return anchor;
+    },
+    [],
+  );
+
+  const flushReveal = useCallback((): boolean => {
+    const pending = pendingRevealRef.current;
+    if (!pending) return true;
+    const layer = document.querySelector(
+      `[data-inspector-root] [${PAGE_LAYER_ATTR}="${pending.pageIndex}"]`,
+    );
+    if (!layer) return false;
+    const resolved: SelectedTarget[] = [];
+    for (const target of pending.targets) {
+      const anchor = locateRevealTarget(layer, target);
+      const hit = anchor && findSlideSource(anchor, slideId, { hostOnly: true });
+      if (hit && hit.anchor === anchor && !resolved.some((t) => t.anchor === anchor)) {
+        resolved.push(hit);
+      }
+    }
+    if (resolved.length === 0) return false;
+    pendingRevealRef.current = null;
+    setSelectionState((previous) =>
+      sameAnchors(previous, resolved) ? previous : resolved.map(rememberTarget),
+    );
+    return true;
+  }, [slideId]);
+
+  // Undo/redo selects what it changed. Off-page targets wait for the page
+  // effect below, since the page mounts a render after `pageIndex` changes.
+  const revealTargets = useCallback(
+    (targets: RevealTarget[], targetPage: number) => {
+      pendingRevealRef.current = { pageIndex: targetPage, targets };
+      if (targetPage === pageIndexRef.current && !flushReveal()) pendingRevealRef.current = null;
+    },
+    [flushReveal],
+  );
 
   // Mutate bucket + DOM without recording history. Shared by `bufferOps`
   // (the public, history-recording entry point) and by `redo` closures.
@@ -671,8 +783,11 @@ export function InspectorProvider({
             if (sharedAnchor?.isConnected) sharedStyle[snap.key] = orig ?? '';
           }
         } else if (snap.kind === 'text') {
-          const textAnchor = findAnchor(line, column, snap.instanceId);
           if (snap.target) bucket.textTargets.set(snap.instanceId, snap.target);
+          const textAnchor = findTextAnchor(
+            snap.instanceId,
+            bucket.textTargets.get(snap.instanceId),
+          );
           if (snap.html !== undefined) bucket.origHtmls.set(snap.instanceId, snap.html);
           if (snap.text !== undefined) bucket.origTexts.set(snap.instanceId, { value: snap.text });
           if (snap.steps.length) bucket.textEdits.set(snap.instanceId, snap.steps);
@@ -701,7 +816,7 @@ export function InspectorProvider({
       }
       refreshCount();
     },
-    [findAnchor, refreshCount],
+    [findAnchor, findTextAnchor, refreshCount],
   );
 
   const bufferOps = useCallback(
@@ -733,9 +848,14 @@ export function InspectorProvider({
             : 'text'
         : 'noop';
       const coalesceKey = `inspector:${target.line}:${target.column}:${first?.kind ?? 'noop'}:${opKey}`;
+      const reveal = [captureRevealTarget(target)];
       history.record({
         coalesceKey,
-        undo: () => restoreSnapshot(target.line, target.column, snaps),
+        pageIndex,
+        undo: () => {
+          restoreSnapshot(target.line, target.column, snaps);
+          revealTargets(reveal, pageIndex);
+        },
         redo: () => {
           if (sharedOps.length) {
             applyOpsRaw(
@@ -746,10 +866,21 @@ export function InspectorProvider({
             );
           }
           if (textAfter.length) restoreSnapshot(target.line, target.column, textAfter, true);
+          revealTargets(reveal, pageIndex);
         },
       });
     },
-    [applyOpsRaw, snapshotForOps, restoreSnapshot, findAnchor, history, ensureInstanceId, slideId],
+    [
+      applyOpsRaw,
+      snapshotForOps,
+      restoreSnapshot,
+      findAnchor,
+      history,
+      ensureInstanceId,
+      slideId,
+      pageIndex,
+      revealTargets,
+    ],
   );
 
   const bufferBatch = useCallback(
@@ -763,21 +894,35 @@ export function InspectorProvider({
         snapshotForOps(edit.line, edit.column, edit.anchor, edit.ops),
       );
       for (const edit of edits) applyOpsRaw(edit.line, edit.column, edit.anchor, edit.ops);
+      const reveal = edits.map(captureRevealTarget);
       history.record({
         coalesceKey,
+        pageIndex,
         undo: () => {
           for (let index = edits.length - 1; index >= 0; index--) {
             const edit = edits[index];
             restoreSnapshot(edit.line, edit.column, snapshots[index]);
           }
+          revealTargets(reveal, pageIndex);
         },
         redo: () => {
           for (const edit of edits)
             applyOpsRaw(edit.line, edit.column, findAnchor(edit.line, edit.column), edit.ops);
+          revealTargets(reveal, pageIndex);
         },
       });
     },
-    [applyOpsRaw, snapshotForOps, restoreSnapshot, findAnchor, history, committing, slideId],
+    [
+      applyOpsRaw,
+      snapshotForOps,
+      restoreSnapshot,
+      findAnchor,
+      history,
+      committing,
+      slideId,
+      pageIndex,
+      revealTargets,
+    ],
   );
 
   const visual = useVisualEditor({
@@ -1056,9 +1201,22 @@ export function InspectorProvider({
   }, [pageIndex, slideId]);
 
   useEffect(() => {
-    void pageIndex;
-    setSelected(null);
-  }, [pageIndex, setSelected]);
+    setSelectionState([]);
+    const pending = pendingRevealRef.current;
+    if (!pending) return;
+    if (pending.pageIndex !== pageIndex) {
+      pendingRevealRef.current = null;
+      return;
+    }
+    if (flushReveal()) return;
+    const root = document.querySelector<HTMLElement>('[data-inspector-root]');
+    if (!root) return;
+    const observer = new MutationObserver(() => {
+      if (flushReveal()) observer.disconnect();
+    });
+    observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [pageIndex, flushReveal]);
 
   useEffect(() => {
     if (!selection.length) return;
