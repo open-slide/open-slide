@@ -1,5 +1,11 @@
 # @open-slide/core
 
+## 2.0.1
+
+### Patch Changes
+
+- [#514](https://github.com/open-slide/open-slide/pull/514) [`8377406`](https://github.com/open-slide/open-slide/commit/83774067d179166829b66c5af223c943861f677c) Thanks [@1weiho](https://github.com/1weiho)! - Make the vite version conflict error point at the leftover `vite` entry and print the exact remove command for your package manager.
+
 ## 2.0.0
 
 ### Major Changes
