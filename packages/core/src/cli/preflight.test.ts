@@ -120,6 +120,19 @@ describe('findViteDeclaration', () => {
     expect(findViteDeclaration(dir, installRoot)).toBeNull();
   });
 
+  it('stops at the project root when the install root is not an ancestor', () => {
+    writeManifest('.', { devDependencies: { vite: '^5.0.0' } });
+    const dir = writeManifest('project', { private: true });
+    writeFileSync(path.join(dir, 'pnpm-lock.yaml'), '');
+    const store = path.join(dir, 'node_modules', '.pnpm', '@vitejs+plugin-react@6.1.1');
+    mkdirSync(store, { recursive: true });
+
+    expect(findViteDeclaration(dir, store)).toBeNull();
+
+    writeManifest('project', { devDependencies: { vite: '^5.0.0' } });
+    expect(findViteDeclaration(dir, store)?.file).toBe(path.join(dir, 'package.json'));
+  });
+
   it('returns null when nothing lists vite', () => {
     const dir = writeManifest('app', { dependencies: { '@open-slide/core': '2.0.0' } });
     expect(findViteDeclaration(dir)).toBeNull();

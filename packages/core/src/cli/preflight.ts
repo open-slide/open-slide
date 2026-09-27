@@ -18,6 +18,16 @@ const DEPENDENCY_FIELDS = [
   'peerDependencies',
 ] as const;
 
+const PROJECT_ROOT_MARKERS = [
+  'pnpm-workspace.yaml',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  'bun.lock',
+  'bun.lockb',
+  'package-lock.json',
+  '.git',
+];
+
 // `root` is the directory whose node_modules held the package; `dir` is its
 // realpath, which under pnpm points into the .pnpm store.
 type ResolvedPackage = { dir: string; root: string; version: string };
@@ -75,20 +85,32 @@ function declarationIn(dir: string): ViteDeclaration | null {
   return null;
 }
 
+function isProjectRoot(dir: string): boolean {
+  return PROJECT_ROOT_MARKERS.some((marker) => existsSync(path.join(dir, marker)));
+}
+
+function isAncestorOrSelf(ancestor: string, dir: string): boolean {
+  const rel = path.relative(ancestor, dir);
+  return !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
 // A direct dependency of the package that owns `installRoot/node_modules`
 // always wins that slot, so check it first. Otherwise the shadowing copy was
 // hoisted from a nested workspace package: take the nearest one above cwd.
+// `installRoot` may sit below cwd (pnpm's .pnpm store), so it only bounds the
+// walk when it is an ancestor; otherwise the project root does.
 export function findViteDeclaration(cwd: string, installRoot?: string): ViteDeclaration | null {
   if (installRoot) {
     const owner = declarationIn(installRoot);
     if (owner) return owner;
   }
+  const stopAt = installRoot && isAncestorOrSelf(installRoot, cwd) ? installRoot : null;
   let dir = cwd;
-  while (dir !== installRoot) {
+  while (dir !== stopAt) {
     const found = declarationIn(dir);
     if (found) return found;
     const parent = path.dirname(dir);
-    if (parent === dir) return null;
+    if (parent === dir || (!stopAt && isProjectRoot(dir))) return null;
     dir = parent;
   }
   return null;
