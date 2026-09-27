@@ -1,11 +1,11 @@
 ---
-name: launch-video
-description: Build a new open-slide launch film in apps/marketing from just a feature name. Researches the feature in the repo, scaffolds films/<id>, storyboards it, writes the scenes, score, and sound cues, and verifies with rendered stills. Use when asked for a launch video, launch film, trailer, teaser, or promo clip for an open-slide feature or release.
+name: create-video
+description: Build a new open-slide marketing video (a launch film) in apps/marketing from just a feature name. Researches the feature in the repo, scaffolds films/<id>, storyboards it, writes the scenes, score, and sound cues, and verifies with rendered stills. Use when asked for a video, launch video, launch film, trailer, teaser, or promo clip for an open-slide feature or release. For still images (OG cards, social posts, banners), use create-image.
 ---
 
-# Launch video
+# Create video
 
-The user names a feature ("make a launch video for comments"). You deliver a finished film in `apps/marketing/films/<id>/` that previews in the studio and renders to MP4, with its soundtrack. Work autonomously. Ask only if the repo has no trace of the feature.
+The user names a feature ("make a launch video for comments"). You deliver a finished film in `apps/marketing/films/<id>/` that previews in the marketing workspace and renders to MP4, with its soundtrack. Work autonomously. Ask only if the repo has no trace of the feature.
 
 Read [reference.md](reference.md) before writing scenes. It lists every helper, UI mock, sound effect, and instrument. For craft, `films/open-slide-2/scenes/` is the reference film: `hook.js` (cursor + selection on a dark stage), `editor.js` (full editor walkthrough), `pptx.js` (export flow), `ui.js` (home + command menu), `finale.js` (feature wall + lockup).
 
@@ -38,7 +38,7 @@ Put big moments (hits, reveals, clicks that matter) on beats. Put the biggest on
 pnpm marketing new:film <id> --feature "<Feature Name>" --tagline "<value prop>"
 ```
 
-`<id>` is short kebab-case (`comments`, `live-reload`). This copies `templates/film`, a working 20 s intro → feature → outro, into `films/<id>/`. Nothing needs registering: the studio, `render`, and `stills` discover `films/*/film.js`.
+`<id>` is short kebab-case (`comments`, `live-reload`). This copies `templates/film`, a working 20 s intro → feature → outro, into `films/<id>/`. Nothing needs registering: the workspace, `render`, and `stills` discover `films/*/film.js`.
 
 **Before editing anything under `src/` or `audio/`** (shared by every film), record the other films' key frames:
 
@@ -99,7 +99,7 @@ pnpm marketing snapshot
 
 Every other film must report `unchanged`. If one changed, make your change opt-in instead.
 
-Last, confirm it encodes. This is fast, and the draft lands in the studio:
+Last, confirm it encodes. This is fast, and the draft lands in the workspace:
 
 ```bash
 pnpm marketing render:draft <id>
@@ -108,7 +108,7 @@ pnpm marketing render:draft <id>
 ## 6. Finish
 
 - Run `pnpm check` from the repo root (Biome). No changeset: `apps/*` doesn't need one.
-- Don't start the studio or run the full master render yourself. Tell the user:
+- Don't start the workspace or run the full master render yourself. Tell the user:
   - Preview: `pnpm dev:marketing` → `http://127.0.0.1:5180/#/<id>/preview`
   - Master: `pnpm marketing render <id>` (`--scale 2` for 4K)
 - Report the storyboard as built (chapter, time, beat), and anything about the feature you had to guess.

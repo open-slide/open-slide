@@ -53,12 +53,14 @@ for (const [i, o] of outputs.entries()) {
   // Pages that build themselves asynchronously set `window.__ready = false`
   // up front and `true` once they're done.
   await page.waitForFunction(
-    () =>
-      window.__ready !== false &&
-      [...document.images].every((img) => img.complete && img.naturalWidth > 0),
+    () => window.__ready !== false && [...document.images].every((img) => img.complete),
     null,
     { timeout: 180_000 },
   );
+  const broken = await page.evaluate(() => [
+    ...new Set([...document.images].filter((img) => !img.naturalWidth).map((img) => img.src)),
+  ]);
+  if (broken.length) throw new Error(`images failed to load: ${broken.join(', ')}`);
   await page.evaluate(() => document.fonts.ready);
   const file = outDir(image.id, 'renders', name);
   await page.screenshot({ path: file });

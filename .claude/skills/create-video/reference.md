@@ -1,4 +1,4 @@
-# launch-video reference
+# create-video reference
 
 Paths are relative to `apps/marketing/`. Film code imports shared modules through `#lib/…`, `#ui/…`, and `#theme`. The same specifiers work in the browser (import map in `film.html` and `studio.html`) and in Node (`imports` in `package.json`). Read the source for full return shapes. This is a map, not a spec.
 

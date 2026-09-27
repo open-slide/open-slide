@@ -17,7 +17,7 @@ pnpm marketing new:film comments-launch --feature "Comments" --tagline "Feedback
 pnpm marketing new:image comments-og --title "Comments are here"
 ```
 
-`new:film` copies `templates/film`: a 20-second intro, feature demo, and outro that renders as-is. The `launch-video` skill (`.claude/skills/launch-video`) walks an agent through a whole film from just a feature name. `new:image` copies `templates/image`: a manifest and a page. Films and images share one id space, since both render to `out/<id>/`.
+`new:film` copies `templates/film`: a 20-second intro, feature demo, and outro that renders as-is. `new:image` copies `templates/image`: a manifest and a page. The `create-video` and `create-image` skills (`.claude/skills/`) walk an agent through a whole film or image from just a feature name. Films and images share one id space, since both render to `out/<id>/`.
 
 ## Render
 
