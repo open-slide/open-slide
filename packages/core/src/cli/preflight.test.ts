@@ -101,6 +101,25 @@ describe('findViteDeclaration', () => {
     expect(findViteDeclaration(dir)?.file).toBe(path.join(root, 'package.json'));
   });
 
+  it('prefers the install root over a nearer declaration', () => {
+    writeManifest('.', { devDependencies: { vite: '^5.0.0' } });
+    const dir = writeManifest('packages/deck', { devDependencies: { vite: '^8.0.0' } });
+    expect(findViteDeclaration(dir, root)?.file).toBe(path.join(root, 'package.json'));
+  });
+
+  it('falls back to a nested declaration hoisted into the install root', () => {
+    writeManifest('.', { private: true });
+    const dir = writeManifest('packages/deck', { devDependencies: { vite: '^5.0.0' } });
+    expect(findViteDeclaration(dir, root)?.file).toBe(path.join(dir, 'package.json'));
+  });
+
+  it('does not look above the install root', () => {
+    writeManifest('.', { devDependencies: { vite: '^5.0.0' } });
+    const installRoot = writeManifest('project', { private: true });
+    const dir = writeManifest('project/deck', { private: true });
+    expect(findViteDeclaration(dir, installRoot)).toBeNull();
+  });
+
   it('returns null when nothing lists vite', () => {
     const dir = writeManifest('app', { dependencies: { '@open-slide/core': '2.0.0' } });
     expect(findViteDeclaration(dir)).toBeNull();

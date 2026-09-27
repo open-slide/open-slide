@@ -18,7 +18,9 @@ const DEPENDENCY_FIELDS = [
   'peerDependencies',
 ] as const;
 
-type ResolvedPackage = { dir: string; version: string };
+// `root` is the directory whose node_modules held the package; `dir` is its
+// realpath, which under pnpm points into the .pnpm store.
+type ResolvedPackage = { dir: string; root: string; version: string };
 
 export type ViteMismatch = {
   consumer: string;
@@ -39,7 +41,7 @@ function locatePackage(name: string, fromDir: string): ResolvedPackage | null {
         version =
           (JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string }).version ?? version;
       } catch {}
-      return { dir: realpathSync(candidate), version };
+      return { dir: realpathSync(candidate), root: dir, version };
     }
     const parent = path.dirname(dir);
     if (parent === dir) return null;
@@ -60,24 +62,36 @@ export function findViteMismatch(coreDir: string): ViteMismatch | null {
   return null;
 }
 
-// Walks up so a `vite` left in a workspace root is found from a nested package.
-export function findViteDeclaration(cwd: string): ViteDeclaration | null {
-  let dir = cwd;
-  while (true) {
-    const file = path.join(dir, 'package.json');
-    if (existsSync(file)) {
-      try {
-        const pkg = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-        for (const field of DEPENDENCY_FIELDS) {
-          const deps = pkg[field] as Record<string, unknown> | undefined;
-          if (deps && Object.hasOwn(deps, 'vite')) return { file, field };
-        }
-      } catch {}
+function declarationIn(dir: string): ViteDeclaration | null {
+  const file = path.join(dir, 'package.json');
+  if (!existsSync(file)) return null;
+  try {
+    const pkg = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+    for (const field of DEPENDENCY_FIELDS) {
+      const deps = pkg[field] as Record<string, unknown> | undefined;
+      if (deps && Object.hasOwn(deps, 'vite')) return { file, field };
     }
+  } catch {}
+  return null;
+}
+
+// A direct dependency of the package that owns `installRoot/node_modules`
+// always wins that slot, so check it first. Otherwise the shadowing copy was
+// hoisted from a nested workspace package: take the nearest one above cwd.
+export function findViteDeclaration(cwd: string, installRoot?: string): ViteDeclaration | null {
+  if (installRoot) {
+    const owner = declarationIn(installRoot);
+    if (owner) return owner;
+  }
+  let dir = cwd;
+  while (dir !== installRoot) {
+    const found = declarationIn(dir);
+    if (found) return found;
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
   }
+  return null;
 }
 
 function removeCommand(pm: PackageManager): string {
@@ -129,7 +143,7 @@ export async function assertViteResolvesToCore(cwd = process.cwd()): Promise<voi
   const coreDir = realpathSync(path.dirname(fileURLToPath(import.meta.url)));
   const mismatch = findViteMismatch(coreDir);
   if (!mismatch) return;
-  const declaration = findViteDeclaration(cwd);
+  const declaration = findViteDeclaration(cwd, mismatch.consumerVite.root);
   const packageManager = await detectPackageManager(
     declaration ? path.dirname(declaration.file) : cwd,
   );
