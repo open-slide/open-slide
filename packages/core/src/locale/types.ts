@@ -1,7 +1,7 @@
 export type Plural = { one: string; other: string };
 
 export type Locale = {
-  id: 'en' | 'zh-TW' | 'zh-CN' | 'ja';
+  id: 'en' | 'zh-TW' | 'zh-CN' | 'ja' | 'es';
 
   common: {
     cancel: string;
