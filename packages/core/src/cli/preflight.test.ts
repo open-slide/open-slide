@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { findViteMismatch, formatViteMismatch } from './preflight.ts';
+import { findViteDeclaration, findViteMismatch, formatViteMismatch } from './preflight.ts';
 
 let root: string;
 
@@ -78,19 +79,121 @@ describe('findViteMismatch', () => {
   });
 });
 
+describe('findViteDeclaration', () => {
+  function writeManifest(rel: string, manifest: object): string {
+    const dir = path.join(root, rel);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, 'package.json'), JSON.stringify(manifest));
+    return dir;
+  }
+
+  it('finds vite in the current package', () => {
+    const dir = writeManifest('app', { devDependencies: { vite: '^5.0.0' } });
+    expect(findViteDeclaration(dir)).toEqual({
+      file: path.join(dir, 'package.json'),
+      field: 'devDependencies',
+    });
+  });
+
+  it('finds vite in a parent workspace root', () => {
+    writeManifest('.', { dependencies: { vite: '^5.0.0' } });
+    const dir = writeManifest('packages/deck', { dependencies: { '@open-slide/core': '2.0.0' } });
+    expect(findViteDeclaration(dir)?.file).toBe(path.join(root, 'package.json'));
+  });
+
+  it('prefers the install root over a nearer declaration', () => {
+    writeManifest('.', { devDependencies: { vite: '^5.0.0' } });
+    const dir = writeManifest('packages/deck', { devDependencies: { vite: '^8.0.0' } });
+    expect(findViteDeclaration(dir, root)?.file).toBe(path.join(root, 'package.json'));
+  });
+
+  it('falls back to a nested declaration hoisted into the install root', () => {
+    writeManifest('.', { private: true });
+    const dir = writeManifest('packages/deck', { devDependencies: { vite: '^5.0.0' } });
+    expect(findViteDeclaration(dir, root)?.file).toBe(path.join(dir, 'package.json'));
+  });
+
+  it('does not look above the install root', () => {
+    writeManifest('.', { devDependencies: { vite: '^5.0.0' } });
+    const installRoot = writeManifest('project', { private: true });
+    const dir = writeManifest('project/deck', { private: true });
+    expect(findViteDeclaration(dir, installRoot)).toBeNull();
+  });
+
+  it('stops at the project root when the install root is not an ancestor', () => {
+    writeManifest('.', { devDependencies: { vite: '^5.0.0' } });
+    const dir = writeManifest('project', { private: true });
+    writeFileSync(path.join(dir, 'pnpm-lock.yaml'), '');
+    const store = path.join(dir, 'node_modules', '.pnpm', '@vitejs+plugin-react@6.1.1');
+    mkdirSync(store, { recursive: true });
+
+    expect(findViteDeclaration(dir, store)).toBeNull();
+
+    writeManifest('project', { devDependencies: { vite: '^5.0.0' } });
+    expect(findViteDeclaration(dir, store)?.file).toBe(path.join(dir, 'package.json'));
+  });
+
+  it('ignores an install root outside the project', () => {
+    writeManifest('linked-core', { devDependencies: { vite: '^5.0.0' } });
+    const dir = writeManifest('project', { private: true });
+    writeFileSync(path.join(dir, 'bun.lock'), '');
+
+    expect(findViteDeclaration(dir, path.join(root, 'linked-core'))).toBeNull();
+  });
+
+  it('returns null when nothing lists vite', () => {
+    const dir = writeManifest('app', { dependencies: { '@open-slide/core': '2.0.0' } });
+    expect(findViteDeclaration(dir)).toBeNull();
+  });
+});
+
 describe('formatViteMismatch', () => {
-  it('names both copies relative to the workspace and links the guide', () => {
+  function mismatch() {
     addPackage('vite', '5.4.21');
     addPackage('@vitejs/plugin-react', '6.1.1');
     addPackage('@open-slide/core/node_modules/vite', '8.2.2');
+    const found = findViteMismatch(coreDir());
+    if (!found) throw new Error('expected a mismatch');
+    return found;
+  }
 
-    const mismatch = findViteMismatch(coreDir());
-    if (!mismatch) throw new Error('expected a mismatch');
-    const message = formatViteMismatch(mismatch, root);
+  it('tells the user to remove the declared vite with their package manager', () => {
+    const message = stripVTControlCharacters(
+      formatViteMismatch(mismatch(), {
+        cwd: root,
+        packageManager: 'bun',
+        declaration: { file: path.join(root, 'package.json'), field: 'devDependencies' },
+      }),
+    );
 
-    expect(message).toContain('@vitejs/plugin-react resolves vite@5.4.21');
+    expect(message).toContain('Remove vite from your package.json');
+    expect(message).toContain('devDependencies in package.json still lists vite');
+    expect(message).toContain('shadows the vite@8.2.2 bundled with open-slide');
+    expect(message).toContain('is loading vite@5.4.21');
     expect(message).toContain(path.join('node_modules', 'vite'));
-    expect(message).toContain('@open-slide/core ships vite@8.2.2');
+    expect(message).toContain('$ bun remove vite');
     expect(message).toContain('migrate-to-v2');
+  });
+
+  it('cds into the workspace root when vite is declared there', () => {
+    const cwd = path.join(root, 'packages', 'deck');
+    const message = stripVTControlCharacters(
+      formatViteMismatch(mismatch(), {
+        cwd,
+        packageManager: 'npm',
+        declaration: { file: path.join(root, 'package.json'), field: 'dependencies' },
+      }),
+    );
+
+    expect(message).toContain(`$ cd ${path.join('..', '..')} && npm uninstall vite`);
+  });
+
+  it('falls back to a reinstall when no package.json lists vite', () => {
+    const message = stripVTControlCharacters(
+      formatViteMismatch(mismatch(), { cwd: root, packageManager: 'pnpm' }),
+    );
+
+    expect(message).toContain('Conflicting vite versions');
+    expect(message).toContain('$ pnpm install');
   });
 });

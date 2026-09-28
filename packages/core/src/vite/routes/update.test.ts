@@ -43,6 +43,16 @@ describe('update routes helpers', () => {
     await expect(detectPackageManager(cwd)).resolves.toBe('npm');
   });
 
+  it('finds the lockfile in an ancestor workspace root', async () => {
+    const root = await tempProject();
+    delete process.env.npm_config_user_agent;
+    const cwd = path.join(root, 'packages', 'deck');
+    await fs.mkdir(cwd, { recursive: true });
+    await fs.writeFile(path.join(root, 'bun.lock'), '');
+
+    await expect(detectPackageManager(cwd)).resolves.toBe('bun');
+  });
+
   it('uses fixed update commands for each package manager', () => {
     expect(updateCommandFor('pnpm')).toEqual({
       cmd: 'pnpm',

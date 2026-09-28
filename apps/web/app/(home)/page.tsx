@@ -1,16 +1,12 @@
-import { Agents } from '@/components/landing/agents';
-import { Anatomy } from '@/components/landing/anatomy';
-import { Assets } from '@/components/landing/assets';
 import { FAQ, faqs } from '@/components/landing/faq';
+import { Features } from '@/components/landing/features';
 import { Footer } from '@/components/landing/footer';
 import { GetStarted } from '@/components/landing/get-started';
 import { Hero } from '@/components/landing/hero';
 import { HowItWorks } from '@/components/landing/how-it-works';
-import { Inspector } from '@/components/landing/inspector';
-import { LiveDemo } from '@/components/landing/live-demo';
 import { Nav } from '@/components/landing/nav';
-import { PromptComposer } from '@/components/landing/prompt-composer';
 import { ScrollReveal } from '@/components/landing/scroll-reveal';
+import { Support } from '@/components/landing/support';
 import { UsedBy } from '@/components/landing/used-by';
 import { fetchGitHubStars, formatStarCount } from '@/lib/github';
 import { appName, gitConfig, siteUrl } from '@/lib/shared';
@@ -124,15 +120,11 @@ export default async function HomePage() {
       <ScrollReveal />
       <main className="relative flex-1">
         <Hero />
-        <LiveDemo />
-        <PromptComposer />
         <HowItWorks />
-        <Anatomy />
-        <Inspector />
-        <Assets />
-        <Agents />
+        <Features />
         <UsedBy />
         <FAQ />
+        <Support />
         <GetStarted />
       </main>
       <Footer />

@@ -1,6 +1,6 @@
 {
   "name": "@open-slide/core",
-  "version": "2.0.0-beta.5",
+  "version": "2.0.1",
   "description": "Runtime and CLI for open-slide — write slides in slides/, we handle the rest.",
   "type": "module",
   "exports": {
@@ -71,7 +71,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource-variable/geist": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "chalk": "^6.0.0",
@@ -95,10 +95,10 @@
     "tailwindcss": "^4.3.3",
     "tw-animate-css": "^1.4.0",
     "use-sync-external-store": "^1.6.0",
-    "vite": "^8.2.2"
+    "vite": "^8.3.0"
   },
   "devDependencies": {
-    "@playwright/test": "~1.62.1",
+    "@playwright/test": "~1.63.0",
     "@types/node": "^26.6.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",

@@ -80,7 +80,9 @@ export function printShortcutsHint(): void {
 }
 
 export function formatError(message: string): string {
-  return `\n  ${chalk.red(glyph.cross)} ${message}\n`;
+  const [first, ...rest] = message.split('\n');
+  const body = rest.map((line) => (line ? `\n    ${line}` : '\n')).join('');
+  return `\n  ${chalk.red(glyph.cross)} ${first}${body}\n\n`;
 }
 
 const DROPPED = [/^vite v\d+\.\d+\.\d+ building /];

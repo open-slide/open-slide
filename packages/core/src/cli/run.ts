@@ -100,7 +100,7 @@ export async function run(argv: string[]): Promise<void> {
       if (flags.skillsCheck !== false) {
         await runSkillsDriftCheck(resolveBuiltinSkillsDir());
       }
-      assertViteResolvesToCore();
+      await assertViteResolvesToCore();
       const { dev } = await import('./dev.ts');
       await dev(flags);
     });
@@ -110,7 +110,7 @@ export async function run(argv: string[]): Promise<void> {
     .description('Build a static site')
     .option('--out-dir <dir>', 'output directory (defaults to `dist`)')
     .action(async (flags: BuildFlags) => {
-      assertViteResolvesToCore();
+      await assertViteResolvesToCore();
       const { build } = await import('./build.ts');
       await build(flags);
     });
@@ -122,7 +122,7 @@ export async function run(argv: string[]): Promise<void> {
     .addOption(new Option('--host [host]', 'expose on the network (optional host)'))
     .option('--open', 'open the browser on start')
     .action(async (flags: ServerFlags) => {
-      assertViteResolvesToCore();
+      await assertViteResolvesToCore();
       const { preview } = await import('./preview.ts');
       await preview(flags);
     });

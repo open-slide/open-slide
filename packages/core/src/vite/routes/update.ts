@@ -17,7 +17,7 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = 300_000;
 
 type CheckResult = { current: string; latest: string | null; outdated: boolean };
-type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
+export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 type CommandSpec = { cmd: string; args: string[] };
 type UpdateResult = {
   packageManager: PackageManager;
@@ -72,6 +72,14 @@ async function fileExists(file: string): Promise<boolean> {
   }
 }
 
+const LOCKFILES: ReadonlyArray<readonly [string, PackageManager]> = [
+  ['pnpm-lock.yaml', 'pnpm'],
+  ['yarn.lock', 'yarn'],
+  ['bun.lockb', 'bun'],
+  ['bun.lock', 'bun'],
+  ['package-lock.json', 'npm'],
+];
+
 export async function detectPackageManager(cwd: string): Promise<PackageManager> {
   const ua = process.env.npm_config_user_agent ?? '';
   if (ua.startsWith('pnpm')) return 'pnpm';
@@ -79,12 +87,16 @@ export async function detectPackageManager(cwd: string): Promise<PackageManager>
   if (ua.startsWith('bun')) return 'bun';
   if (ua.startsWith('npm')) return 'npm';
 
-  if (await fileExists(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm';
-  if (await fileExists(path.join(cwd, 'yarn.lock'))) return 'yarn';
-  if (await fileExists(path.join(cwd, 'bun.lockb'))) return 'bun';
-  if (await fileExists(path.join(cwd, 'bun.lock'))) return 'bun';
-  if (await fileExists(path.join(cwd, 'package-lock.json'))) return 'npm';
-  return 'npm';
+  // Workspace members have no lockfile of their own; it lives at the root.
+  let dir = cwd;
+  while (true) {
+    for (const [lockfile, pm] of LOCKFILES) {
+      if (await fileExists(path.join(dir, lockfile))) return pm;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return 'npm';
+    dir = parent;
+  }
 }
 
 export function updateCommandFor(packageManager: PackageManager): CommandSpec {
