@@ -13,7 +13,7 @@ function linkify(text: string) {
     idx % 2 === 1 ? (
       <a
         key={idx}
-        href={part.startsWith('http') ? part : `https://${part}`}
+        href={/^https?:\/\//i.test(part) ? part : `https://${part}`}
         target="_blank"
         rel="noopener noreferrer"
         className="text-[color:var(--color-accent-soft)] underline-offset-4 hover:underline"
