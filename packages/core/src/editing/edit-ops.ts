@@ -1,6 +1,7 @@
 import * as t from '@babel/types';
 import { textDiff } from '../app/lib/text-diff.ts';
 import { findJsxAncestors, parseSource, walkAll, walkJsx } from './babel-walk.ts';
+import { removableStarts, sourceRevision } from './remove-element.ts';
 
 export type EditOp =
   | { kind: 'set-style'; key: string; value: string | null; prevText?: string }
@@ -14,7 +15,8 @@ export type EditOp =
       prevText?: string;
     }
   | { kind: 'set-attr-asset'; attr: string; assetPath: string }
-  | { kind: 'replace-placeholder-with-image'; assetPath: string };
+  | { kind: 'replace-placeholder-with-image'; assetPath: string }
+  | { kind: 'remove-element'; revision: string };
 
 export type ApplyEditResult =
   | { ok: true; source: string }
@@ -214,6 +216,7 @@ export function findElementForEdit(
   column: number,
   ops: EditOp[],
 ): t.JSXElement | null {
+  if (ops.some((op) => op.kind === 'remove-element')) return findJsxByStart(ast, line, column);
   const element = findInnermostJsxElement(ast, line, column);
   const prevText = fallbackTextForOps(ops);
   if (prevText === null) return element;
@@ -1143,15 +1146,29 @@ export function planEdit(
   column: number,
   ops: EditOp[],
   exactLocation = false,
+  originalRevision = sourceRevision(source),
 ): { ok: true; splices: Splice[] } | { ok: false; status: number; error: string } {
   if (ops.length === 0) return { ok: true, splices: [] };
 
   const ast = parseSource(source);
   if (!ast) return { ok: false, status: 422, error: 'could not parse source' };
-  const element = exactLocation
-    ? findJsxByStart(ast, line, column)
-    : findElementForEdit(ast, line, column, ops);
+  const removing = ops.some((op) => op.kind === 'remove-element');
+  const element =
+    exactLocation || removing
+      ? findJsxByStart(ast, line, column)
+      : findElementForEdit(ast, line, column, ops);
   if (!element) return { ok: false, status: 422, error: 'no JSX element at location' };
+  if (removing) {
+    if (ops.length !== 1)
+      return { ok: false, status: 422, error: 'remove must be a separate edit' };
+    if (ops[0].kind !== 'remove-element' || ops[0].revision !== originalRevision) {
+      return { ok: false, status: 422, error: 'slide source changed since selection' };
+    }
+    if (element.start == null || !removableStarts(source).has(element.start)) {
+      return { ok: false, status: 422, error: 'element is not a removable page child' };
+    }
+    return { ok: true, splices: [spliceRange(element, '')] };
+  }
 
   const splices: Splice[] = [];
 
