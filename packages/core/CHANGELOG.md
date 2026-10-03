@@ -1,5 +1,11 @@
 # @open-slide/core
 
+## 2.0.2
+
+### Patch Changes
+
+- [#522](https://github.com/open-slide/open-slide/pull/522) [`abafe9e`](https://github.com/open-slide/open-slide/commit/abafe9ead0807fcd2149a4e70f734eeb41734fa9) Thanks [@1weiho](https://github.com/1weiho)! - Undo and redo now jump back to the page where the edit was made and select the changed element, and the undo/redo buttons show their keyboard shortcuts.
+
 ## 2.0.1
 
 ### Patch Changes
