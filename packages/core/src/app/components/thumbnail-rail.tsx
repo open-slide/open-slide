@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/context-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { hasModifier } from '@/lib/keys';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
 import type { DesignSystem } from '../lib/design';
@@ -45,6 +46,7 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../lib/sdk';
 import type { SlideTransition } from '../lib/transition';
 import { prefersReducedMotion } from '../lib/use-prefers-reduced-motion';
 import { SlideCanvas } from './slide-canvas';
+import { getThumbnailKeyTarget } from './thumbnail-rail-keys';
 import {
   getCenteredThumbnailScrollTop,
   getThumbnailOffscreenDirection,
@@ -103,6 +105,7 @@ export function ThumbnailRail({
   const virtualListRef = useRef<HTMLDivElement | null>(null);
   const verticalViewportRef = useRef<HTMLElement | null>(null);
   const focusCurrentAfterScrollRef = useRef(false);
+  const focusActiveAfterKeyRef = useRef(false);
   const [currentPosition, setCurrentPosition] = useState<ThumbnailOffscreenDirection>(null);
   const t = useLocale();
 
@@ -172,6 +175,41 @@ export function ThumbnailRail({
     return () => cancelAnimationFrame(frame);
   }, [currentPosition]);
 
+  const handleThumbKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+      if (hasModifier(event.nativeEvent) || event.shiftKey) return;
+      const target = getThumbnailKeyTarget(event.key, index, pages.length);
+      if (target === null) return;
+      event.preventDefault();
+      focusActiveAfterKeyRef.current = true;
+      onSelect(target);
+    },
+    [onSelect, pages.length],
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run when the active page changes so focus follows keyboard navigation.
+  useEffect(() => {
+    if (!focusActiveAfterKeyRef.current) return;
+    let frame = 0;
+    let attempts = 0;
+    const focusActive = () => {
+      const active = activeRef.current;
+      if (active) {
+        active.focus();
+        focusActiveAfterKeyRef.current = false;
+        return;
+      }
+      attempts += 1;
+      if (attempts < 4) {
+        frame = requestAnimationFrame(focusActive);
+      } else {
+        focusActiveAfterKeyRef.current = false;
+      }
+    };
+    frame = requestAnimationFrame(focusActive);
+    return () => cancelAnimationFrame(frame);
+  }, [current]);
+
   const renderThumb = useCallback(
     (PageComp: Page, i: number) => {
       const active = i === current;
@@ -195,6 +233,7 @@ export function ThumbnailRail({
           active={active}
           activeRef={active ? activeRef : undefined}
           onSelect={() => onSelect(i)}
+          onNavigateKey={(event) => handleThumbKeyDown(event, i)}
           ariaLabel={format(t.thumbnailRail.goToPageAria, { n: i + 1 })}
         >
           {inner}
@@ -204,6 +243,7 @@ export function ThumbnailRail({
           type="button"
           ref={active ? activeRef : undefined}
           onClick={() => onSelect(i)}
+          onKeyDown={(event) => handleThumbKeyDown(event, i)}
           aria-label={format(t.thumbnailRail.goToPageAria, { n: i + 1 })}
           aria-current={active ? 'page' : undefined}
           className={thumbButtonClass(active)}
@@ -231,6 +271,7 @@ export function ThumbnailRail({
       actions,
       current,
       design,
+      handleThumbKeyDown,
       height,
       moduleTransition,
       onReorder,
@@ -256,6 +297,7 @@ export function ThumbnailRail({
             actions={actions}
             activeRef={activeRef}
             onSelect={onSelect}
+            onThumbKeyDown={handleThumbKeyDown}
             scale={scale}
             thumbWidth={horizontalWidth}
           />
@@ -411,6 +453,7 @@ function HorizontalVirtualThumbList({
   actions,
   activeRef,
   onSelect,
+  onThumbKeyDown,
   scale,
   thumbWidth,
 }: {
@@ -420,6 +463,7 @@ function HorizontalVirtualThumbList({
   actions?: ThumbnailActions;
   activeRef: React.MutableRefObject<HTMLButtonElement | null>;
   onSelect: (index: number) => void;
+  onThumbKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => void;
   scale: number;
   thumbWidth: number;
 }) {
@@ -498,6 +542,7 @@ function HorizontalVirtualThumbList({
         type="button"
         ref={active ? activeRef : undefined}
         onClick={() => onSelect(i)}
+        onKeyDown={(event) => onThumbKeyDown(event, i)}
         aria-label={format(t.thumbnailRail.goToPageAria, { n: i + 1 })}
         aria-current={active ? 'page' : undefined}
         className={cn(
@@ -921,6 +966,7 @@ function SortableThumb({
   active,
   activeRef,
   onSelect,
+  onNavigateKey,
   ariaLabel,
   children,
   ...rest
@@ -929,6 +975,7 @@ function SortableThumb({
   active: boolean;
   activeRef: React.MutableRefObject<HTMLButtonElement | null> | undefined;
   onSelect: () => void;
+  onNavigateKey: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
   ariaLabel: string;
   children: React.ReactNode;
 } & Omit<
@@ -966,6 +1013,11 @@ function SortableThumb({
       )}
       {...attributes}
       {...listeners}
+      onKeyDown={(event) => {
+        listeners?.onKeyDown?.(event);
+        // While a keyboard drag is active, arrow keys belong to dnd-kit's reorder sensor.
+        if (!isDragging && !event.defaultPrevented) onNavigateKey(event);
+      }}
     >
       {children}
     </button>
