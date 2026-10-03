@@ -1,6 +1,7 @@
 import config from 'virtual:open-slide/config';
 import { useSyncExternalStore } from 'react';
 import { en } from '../../locale/en';
+import { es } from '../../locale/es';
 import { ja } from '../../locale/ja';
 import type { Locale } from '../../locale/types';
 import { zhCN } from '../../locale/zh-cn';
@@ -13,6 +14,7 @@ const LOCALES: Record<LocaleId, Locale> = {
   'zh-TW': zhTW,
   'zh-CN': zhCN,
   ja,
+  es,
 };
 
 export const LOCALE_OPTIONS: ReadonlyArray<{ id: LocaleId; label: string }> = [
@@ -20,13 +22,16 @@ export const LOCALE_OPTIONS: ReadonlyArray<{ id: LocaleId; label: string }> = [
   { id: 'zh-TW', label: '繁體中文' },
   { id: 'zh-CN', label: '简体中文' },
   { id: 'ja', label: '日本語' },
+  { id: 'es', label: 'Español' },
 ];
 
 const STORAGE_KEY = 'open-slide:locale';
 const configLocale = config.locale as Locale | undefined;
 
 function isLocaleId(value: string | null): value is LocaleId {
-  return value === 'en' || value === 'zh-TW' || value === 'zh-CN' || value === 'ja';
+  return (
+    value === 'en' || value === 'zh-TW' || value === 'zh-CN' || value === 'ja' || value === 'es'
+  );
 }
 
 function readStored(): Locale {
