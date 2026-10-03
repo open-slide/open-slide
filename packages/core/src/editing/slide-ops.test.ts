@@ -68,6 +68,33 @@ describe('duplicateSlideDir', () => {
     });
   });
 
+  it('rejects a desired id that differs only by case', async () => {
+    await withSlidesRoot(async (root) => {
+      await writeSlide(root, 'cover');
+
+      expect(await duplicateSlideDir(root, 'cover', 'Cover')).toMatchObject({
+        ok: false,
+        status: 409,
+      });
+      expect(await fs.readdir(root)).toEqual(['cover']);
+    });
+  });
+
+  it('skips an automatic copy id that differs only by case', async () => {
+    await withSlidesRoot(async (root) => {
+      await writeSlide(root, 'Cover');
+      await writeSlide(root, 'cover-copy');
+
+      expect(await duplicateSlideDir(root, 'Cover')).toEqual({
+        ok: true,
+        slideId: 'Cover-copy-2',
+      });
+      const names = await fs.readdir(root);
+      expect(names.filter((name) => name.toLowerCase() === 'cover-copy')).toEqual(['cover-copy']);
+      expect(names).toContain('Cover-copy-2');
+    });
+  });
+
   it('rejects an existing desired id', async () => {
     await withSlidesRoot(async (root) => {
       await writeSlide(root, 'cover');
