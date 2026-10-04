@@ -79,6 +79,18 @@ Pause for questions before moving on.`,
 - When you add, remove, or reorder pages, re-align `notes` in the same edit — a shifted index silently attaches the wrong script to every page after it.
 - Write notes as something to *say*, not a summary of what's on screen: openers, transitions, numbers to cite, timing cues.
 
+## Time budget (`durations` export)
+
+An optional `durations` export budgets seconds per page, index-aligned with the default page array like `notes`. The presenter view times each page against it and turns red when a page runs over.
+
+```tsx
+export const durations: (number | undefined)[] = [30, undefined, 120];
+```
+
+- Plain numbers in **seconds**. Use `undefined` for a page with no budget; trailing `undefined` entries can be dropped.
+- Only add it when the user asks for timing / pacing, or gives a total talk length to split across pages.
+- Re-align it together with `notes` whenever pages are added, removed, or reordered.
+
 ## Editing an existing slide
 
 A finished slide commonly runs 1000–1800 lines. When you only need to touch one page, **don't read the whole file** — locate the page first, then read just that range:

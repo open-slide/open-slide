@@ -23,8 +23,16 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/
 import { hasModifier, isBackwardKey, isForwardKey, isTypingTarget } from '@/lib/keys';
 import { useDocumentTitle } from '@/lib/use-document-title';
 import { format, useLocale } from '@/lib/use-locale';
-import { cn, pad2 } from '@/lib/utils';
+import { useNow } from '@/lib/use-now';
+import { cn, formatClock, pad2 } from '@/lib/utils';
 import { NoteMarkdown } from '../components/note-markdown';
+import {
+  createPageTimes,
+  type PageTimes,
+  pageBudget,
+  pageElapsedMs,
+  scheduleDeltaMs,
+} from '../components/present/page-timer';
 import {
   type PresenterState,
   usePresenterChannel,
@@ -48,7 +56,8 @@ export function Presenter() {
   const [state, setState] = useState<PresenterState | null>(null);
   // Local timer fallback — counts up from when the presenter window opened
   // until the projection window publishes its actual `startedAt`.
-  const [localStart] = useState(() => Date.now());
+  const [localStart, setLocalStart] = useState(() => Date.now());
+  const [localPageTimes, setLocalPageTimes] = useState(() => createPageTimes(localStart));
   const [hasProjection, setHasProjection] = useState(false);
   const requestedRef = useRef(false);
   const t = useLocale();
@@ -68,9 +77,13 @@ export function Presenter() {
   // A deck switch reuses this route instance, so the handshake state from
   // the previous deck must be dropped before rejoining on the new channel.
   // Render-phase reset so the new deck never renders with the old state.
+  // Until the projection answers, the fallbacks mirror what it does on a
+  // switch: the talk clock keeps running and the page timers start over.
   const prevSlideIdRef = useRef(slideId);
   if (prevSlideIdRef.current !== slideId) {
     prevSlideIdRef.current = slideId;
+    if (state) setLocalStart(state.startedAt);
+    setLocalPageTimes(createPageTimes(Date.now()));
     setState(null);
     setHasProjection(false);
     requestedRef.current = false;
@@ -99,6 +112,15 @@ export function Presenter() {
   const goTo = useCallback((i: number) => send({ type: 'goto', index: i }), [send]);
   const toggleBlack = useCallback(() => send({ type: 'toggle-blackout', mode: 'black' }), [send]);
   const toggleWhite = useCallback(() => send({ type: 'toggle-blackout', mode: 'white' }), [send]);
+  // Also re-requests state so Reset doubles as a way to rejoin a projection
+  // whose initial reply this window missed.
+  const resetTimer = useCallback(() => {
+    const now = Date.now();
+    setLocalStart(now);
+    setLocalPageTimes(createPageTimes(now));
+    send({ type: 'reset-timer' });
+    send({ type: 'request-state' });
+  }, [send]);
 
   // Local-window key bindings mirror the projection's main shortcuts so the
   // presenter can drive without the mouse.
@@ -162,6 +184,7 @@ export function Presenter() {
   const note = slide.notes?.[index];
   const blackout = state?.blackout ?? null;
   const startedAt = state?.startedAt ?? localStart;
+  const pageTimes = state?.pageTimes ?? localPageTimes;
   const stepIndex = Math.max(0, state?.stepIndex ?? 0);
   const stepCount = Math.max(0, state?.stepCount ?? 0);
 
@@ -205,6 +228,8 @@ export function Presenter() {
         index={index}
         total={total}
         startedAt={startedAt}
+        pageTimes={pageTimes}
+        durations={slide.durations}
         slideId={slideId}
         slideTitle={slide.meta?.title ?? slideId}
         connected={hasProjection}
@@ -212,31 +237,32 @@ export function Presenter() {
       />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 px-6 pb-4 lg:grid-cols-[2fr_1fr]">
-        {/* Now-showing */}
-        <section className="flex min-h-0 flex-col gap-3">
-          <SectionLabel>{t.presenter.nowShowing}</SectionLabel>
-          <div className="relative min-h-0 flex-1 overflow-hidden rounded-[8px] bg-black ring-1 ring-border">
-            <SlideCanvas flat design={slide.design}>
-              <SlidePageProvider index={index} total={total}>
-                <PreviewStepHost revealed={stepIndex}>
-                  <CurrentPage />
-                </PreviewStepHost>
-              </SlidePageProvider>
-            </SlideCanvas>
-            {blackout && (
-              <div
-                aria-hidden
-                className={cn(
-                  'pointer-events-none absolute inset-0 grid place-items-center text-[11px] tracking-[0.08em] uppercase',
-                  'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150',
-                  blackout === 'black' ? 'bg-black text-white/35' : 'bg-white text-black/35',
-                )}
-              >
-                {blackout === 'black' ? t.presenter.blackScreen : t.presenter.whiteScreen}
-              </div>
-            )}
-          </div>
-        </section>
+        <NowShowing
+          pageTimes={pageTimes}
+          index={index}
+          budget={pageBudget(slide.durations, index)}
+          showBudget={slide.durations !== undefined}
+        >
+          <SlideCanvas flat design={slide.design}>
+            <SlidePageProvider index={index} total={total}>
+              <PreviewStepHost revealed={stepIndex}>
+                <CurrentPage />
+              </PreviewStepHost>
+            </SlidePageProvider>
+          </SlideCanvas>
+          {blackout && (
+            <div
+              aria-hidden
+              className={cn(
+                'pointer-events-none absolute inset-0 grid place-items-center text-[11px] tracking-[0.08em] uppercase',
+                'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150',
+                blackout === 'black' ? 'bg-black text-white/35' : 'bg-white text-black/35',
+              )}
+            >
+              {blackout === 'black' ? t.presenter.blackScreen : t.presenter.whiteScreen}
+            </div>
+          )}
+        </NowShowing>
 
         {/* Next + notes */}
         <aside className="flex min-h-0 flex-col gap-4">
@@ -276,8 +302,85 @@ export function Presenter() {
         onNext={goNext}
         onBlackout={toggleBlack}
         onWhiteout={toggleWhite}
+        onReset={resetTimer}
       />
     </div>
+  );
+}
+
+// The canvas arrives as `children` so the once-a-second tick re-renders only
+// this frame's chrome, not the slide preview inside it.
+function NowShowing({
+  pageTimes,
+  index,
+  budget,
+  showBudget,
+  children,
+}: {
+  pageTimes: PageTimes;
+  index: number;
+  budget: number | undefined;
+  showBudget: boolean;
+  children: ReactNode;
+}) {
+  const t = useLocale();
+  const now = useNow(showBudget);
+  const elapsed = Math.floor(pageElapsedMs(pageTimes, index, now) / 1000);
+  const over = budget !== undefined && elapsed > budget;
+  const pct = budget ? Math.min(1, elapsed / budget) : 0;
+  return (
+    <section className="flex min-h-0 flex-col gap-3">
+      <SectionLabel>{t.presenter.nowShowing}</SectionLabel>
+      <div
+        className={cn(
+          'relative min-h-0 flex-1 overflow-hidden rounded-[8px] bg-black',
+          over ? 'ring-2 ring-destructive' : 'ring-1 ring-border',
+        )}
+      >
+        {children}
+      </div>
+      {showBudget && (
+        <div className="flex h-5 items-center gap-3">
+          <SectionLabel>{t.presenter.slideTime}</SectionLabel>
+          {budget !== undefined && (
+            <div
+              role="progressbar"
+              aria-label={t.presenter.slideTime}
+              aria-valuemin={0}
+              aria-valuemax={budget}
+              aria-valuenow={Math.min(budget, elapsed)}
+              className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/10"
+            >
+              <div
+                key={index}
+                className={cn(
+                  'h-full w-full origin-left motion-safe:transition-transform motion-safe:duration-1000 motion-safe:ease-linear',
+                  over ? 'bg-destructive' : 'bg-foreground/60',
+                )}
+                style={{ transform: `scaleX(${pct})` }}
+              />
+            </div>
+          )}
+          <span
+            className={cn(
+              'ml-auto font-mono text-[12px] tabular-nums',
+              over ? 'text-destructive' : 'text-muted-foreground',
+            )}
+          >
+            {formatClock(elapsed)}
+            {budget !== undefined && ` / ${formatClock(budget)}`}
+          </span>
+          {over && budget !== undefined && (
+            <span
+              title={format(t.presenter.overBudget, { time: formatClock(elapsed - budget) })}
+              className="rounded-[3px] border border-destructive/40 bg-destructive/15 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-destructive"
+            >
+              +{formatClock(elapsed - budget)}
+            </span>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -285,6 +388,8 @@ function PresenterTopBar({
   index,
   total,
   startedAt,
+  pageTimes,
+  durations,
   slideId,
   slideTitle,
   connected,
@@ -293,6 +398,8 @@ function PresenterTopBar({
   index: number;
   total: number;
   startedAt: number;
+  pageTimes: PageTimes;
+  durations: (number | undefined)[] | undefined;
   slideId: string;
   slideTitle: string;
   connected: boolean;
@@ -318,6 +425,7 @@ function PresenterTopBar({
       </div>
       <div className="flex items-center gap-6">
         <Clock />
+        {durations && <ScheduleDelta pageTimes={pageTimes} durations={durations} index={index} />}
         <ElapsedClock startedAt={startedAt} />
         <div className="font-mono text-[18px] tabular-nums">
           <span className="text-foreground">{pad2(index + 1)}</span>
@@ -491,6 +599,41 @@ function DeckSwitcher({
   );
 }
 
+function ScheduleDelta({
+  pageTimes,
+  durations,
+  index,
+}: {
+  pageTimes: PageTimes;
+  durations: (number | undefined)[];
+  index: number;
+}) {
+  const t = useLocale();
+  const now = useNow();
+  // Truncate like the page timer's whole seconds so an overrun reads the same
+  // here as in the slide's `+mm:ss` badge.
+  const delta = Math.trunc(scheduleDeltaMs(pageTimes, durations, index, now) / 1000);
+  const time = formatClock(Math.abs(delta));
+  const label =
+    delta > 0
+      ? format(t.presenter.ahead, { time })
+      : delta < 0
+        ? format(t.presenter.behind, { time })
+        : t.presenter.onSchedule;
+  return (
+    <span
+      className={cn(
+        'rounded-[3px] border px-1.5 py-0.5 font-mono text-[11px] tabular-nums',
+        delta < 0 && 'border-destructive/40 bg-destructive/15 text-destructive',
+        delta > 0 && 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200/90',
+        delta === 0 && 'border-border bg-card text-muted-foreground',
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
 function PresenterBottomBar({
   index,
   total,
@@ -499,6 +642,7 @@ function PresenterBottomBar({
   onNext,
   onBlackout,
   onWhiteout,
+  onReset,
 }: {
   index: number;
   total: number;
@@ -507,6 +651,7 @@ function PresenterBottomBar({
   onNext: () => void;
   onBlackout: () => void;
   onWhiteout: () => void;
+  onReset: () => void;
 }) {
   const t = useLocale();
   return (
@@ -534,11 +679,7 @@ function PresenterBottomBar({
         >
           <Sun className="size-4" /> {t.presenter.white}
         </Button>
-        <Button
-          variant="ghost"
-          onClick={() => window.location.reload()}
-          title={t.presenter.resetTimer}
-        >
+        <Button variant="ghost" onClick={onReset} title={t.presenter.resetTimer}>
           <RotateCcw className="size-4" /> {t.presenter.reset}
         </Button>
       </div>
@@ -668,40 +809,27 @@ function PreviewStepHost({ revealed, children }: { revealed: number; children: R
 }
 
 function Clock() {
-  const [now, setNow] = useState(() => new Date());
+  const now = useNow();
   const t = useLocale();
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
   return (
     <time
       title={t.presenter.currentTime}
       className="font-mono text-[12px] tabular-nums text-muted-foreground"
     >
-      {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      {new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
     </time>
   );
 }
 
 function ElapsedClock({ startedAt }: { startedAt: number }) {
-  const [now, setNow] = useState(() => Date.now());
+  const now = useNow();
   const t = useLocale();
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
-  const h = Math.floor(elapsed / 3600);
-  const m = Math.floor((elapsed % 3600) / 60);
-  const s = elapsed % 60;
-  const text = h > 0 ? `${h}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
   return (
     <time
       title={t.presenter.elapsed}
       className="font-mono text-[18px] tabular-nums text-foreground"
     >
-      {text}
+      {formatClock((now - startedAt) / 1000)}
     </time>
   );
 }
