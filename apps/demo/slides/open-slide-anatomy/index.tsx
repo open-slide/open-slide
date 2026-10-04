@@ -1767,25 +1767,6 @@ const Closing: Page = () => {
 
 export const meta: SlideMeta = { title: 'Inside open-slide', createdAt: '2026-05-05T17:45:52Z' };
 
-export const durations: (number | undefined)[] = [
-  30, // Cover
-  45, // Agenda
-  90, // MentalModel
-  120, // FileContract
-  90, // Discovery
-  120, // VirtualModules
-  120, // VitePluginHooks
-  120, // RenderPipeline
-  90, // CanvasScaling
-  90, // HotReload
-  90, // DesignSystemPage
-  90, // DesignPanelWrite
-  120, // Inspector
-  90, // PresentMode
-  60, // Cli
-  30, // Closing
-];
-
 export default [
   Cover,
   Agenda,
