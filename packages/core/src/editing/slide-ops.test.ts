@@ -320,26 +320,69 @@ describe('reorderPageAlignedArrayInSource', () => {
     expect(out).toContain('export const durations: (number | undefined)[] = [\n  60,\n  30,\n];');
   });
 
-  it('keeps same-line comments with their entry', () => {
+  it('moves same-line and own-line comments with their entry', () => {
     const source = [
       'export const durations = [',
+      '  // Part 1',
       '  30, // Cover',
       '  undefined, // Agenda',
-      '  // section break',
+      '  // Part 2',
+      '  /* wrap-up */',
       '  90 /* mid */, // Closing',
+      '  // end of talk',
       '];',
       'export default [Cover, Agenda, Closing];',
       '',
     ].join('\n');
     const out = reorderPageAlignedArrayInSource(source, 'durations', [2, 0, 1]);
     expect(out).toContain(
-      'export const durations = [\n  90, /* mid */ // Closing\n  30, // Cover\n  undefined, // Agenda\n];',
+      [
+        'export const durations = [',
+        '  // Part 2',
+        '  /* wrap-up */',
+        '  90, /* mid */ // Closing',
+        '  // Part 1',
+        '  30, // Cover',
+        '  undefined, // Agenda',
+        '  // end of talk',
+        '];',
+      ].join('\n'),
+    );
+  });
+
+  it('keeps comments inside an entry as part of its text', () => {
+    const source = [
+      'export const notes = [',
+      '  `first`,',
+      '  t(/* inline */ "second"),',
+      '];',
+      'export default [A, B];',
+      '',
+    ].join('\n');
+    const out = reorderPageAlignedArrayInSource(source, 'notes', [1, 0]);
+    expect(out).toContain('export const notes = [\n  t(/* inline */ "second"),\n  `first`,\n];');
+  });
+
+  it('keeps a commented trailing undefined', () => {
+    const source = [
+      'export const durations = [',
+      '  30,',
+      '  // TODO: budget the demo',
+      '  undefined,',
+      '];',
+      'export default [A, B];',
+      '',
+    ].join('\n');
+    const out = reorderPageAlignedArrayInSource(source, 'durations', [1, 0]);
+    expect(out).toContain(
+      'export const durations = [\n  // TODO: budget the demo\n  undefined,\n  30,\n];',
     );
   });
 
   it('is a no-op for an identity reorder of a commented array', () => {
     const source = [
       'export const durations = [',
+      '  // Part 1',
       '  30, // Cover',
       '  45, // Agenda',
       '];',
@@ -512,6 +555,37 @@ describe('removePageAlignedElementInSource', () => {
     const out = removePageAlignedElementInSource(source, 'durations', 1);
     expect(out).toContain('export const durations = [\n  30, // Cover\n  90, // Demo\n];');
   });
+
+  it('hands own-line comments of the removed entry to the next one', () => {
+    const source = [
+      'export const durations = [',
+      '  30, // Cover',
+      '  // Part 2',
+      '  45, // Agenda',
+      '  90, // Demo',
+      '];',
+      'export default [Cover, Agenda, Demo];',
+      '',
+    ].join('\n');
+    const out = removePageAlignedElementInSource(source, 'durations', 1);
+    expect(out).toContain(
+      'export const durations = [\n  30, // Cover\n  // Part 2\n  90, // Demo\n];',
+    );
+  });
+
+  it('keeps own-line comments of a removed last entry at the end', () => {
+    const source = [
+      'export const durations = [',
+      '  30,',
+      '  // Closing',
+      '  90,',
+      '];',
+      'export default [A, B];',
+      '',
+    ].join('\n');
+    const out = removePageAlignedElementInSource(source, 'durations', 1);
+    expect(out).toContain('export const durations = [\n  30,\n  // Closing\n];');
+  });
 });
 
 describe('duplicatePageAlignedElementInSource', () => {
@@ -581,6 +655,21 @@ describe('duplicatePageAlignedElementInSource', () => {
     const out = duplicatePageAlignedElementInSource(source, 'durations', 1);
     expect(out).toContain(
       'export const durations = [\n  30, // Cover\n  90, // Demo\n  90, // Demo\n];',
+    );
+  });
+
+  it('does not copy own-line comments onto the duplicate', () => {
+    const source = [
+      'export const durations = [',
+      '  // Part 1',
+      '  30, // Cover',
+      '];',
+      'export default [Cover];',
+      '',
+    ].join('\n');
+    const out = duplicatePageAlignedElementInSource(source, 'durations', 0);
+    expect(out).toContain(
+      'export const durations = [\n  // Part 1\n  30, // Cover\n  30, // Cover\n];',
     );
   });
 });
