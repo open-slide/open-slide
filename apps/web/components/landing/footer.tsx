@@ -36,7 +36,7 @@ export function Footer() {
         <FooterCol
           title="Packages"
           links={[
-            ['@open-slide/core', 'https://www.npmjs.com/package/@open-slide/core'],
+            ['@open-slide/react', 'https://www.npmjs.com/package/@open-slide/react'],
             ['@open-slide/cli', 'https://www.npmjs.com/package/@open-slide/cli'],
           ]}
         />
@@ -44,7 +44,7 @@ export function Footer() {
           title="Elsewhere"
           links={[
             ['GitHub', 'https://github.com/open-slide/open-slide'],
-            ['npm', 'https://www.npmjs.com/package/@open-slide/core'],
+            ['npm', 'https://www.npmjs.com/package/@open-slide/react'],
             ['Issues', 'https://github.com/open-slide/open-slide/issues'],
             ['Buy me a coffee', 'https://buymeacoffee.com/1weiho'],
           ]}
