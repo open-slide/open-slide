@@ -20,7 +20,6 @@ export function serverInfoUrl(address: AddressInfo, https: boolean, base: string
 export function serverInfoPlugin(opts: ServerInfoPluginOptions): Plugin {
   const outDir = path.join(opts.userCwd, 'node_modules', '.open-slide');
   const outFile = path.join(outDir, 'server.json');
-  const tmpFile = `${outFile}.tmp`;
 
   return {
     name: 'open-slide:server-info',
@@ -42,6 +41,7 @@ export function serverInfoPlugin(opts: ServerInfoPluginOptions): Plugin {
           startedAt: new Date().toISOString(),
           token,
         };
+        const tmpFile = `${outFile}.${token}.tmp`;
         publication = (async () => {
           try {
             await fs.mkdir(outDir, { recursive: true });
@@ -50,6 +50,7 @@ export function serverInfoPlugin(opts: ServerInfoPluginOptions): Plugin {
             return token;
           } catch {
             // Best-effort: a transient FS error here shouldn't crash the dev server.
+            await fs.rm(tmpFile, { force: true }).catch(() => {});
             return null;
           }
         })();

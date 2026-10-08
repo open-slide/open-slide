@@ -19,12 +19,13 @@ function parseIntParam(raw: string | null): number | null {
   return Number.isInteger(n) ? n : Number.NaN;
 }
 
-async function waitForImages(root: HTMLElement, deadline: number): Promise<void> {
+function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  return Promise.race([promise.then(() => true), sleep(ms).then(() => false)]);
+}
+
+function decodeImages(root: HTMLElement): Promise<unknown> {
   const images = Array.from(root.querySelectorAll('img'));
-  await Promise.race([
-    Promise.all(images.map((img) => img.decode().catch(() => {}))),
-    sleep(Math.max(0, deadline - performance.now())),
-  ]);
+  return Promise.all(images.map((img) => img.decode().catch(() => {})));
 }
 
 type PageErrorBoundaryProps = {
@@ -92,25 +93,26 @@ export function Preview() {
       if (!frame) return;
       const deadline = performance.now() + SETTLE_TIMEOUT_MS;
       const remaining = () => Math.max(0, deadline - performance.now());
-      await waitForFonts();
+      const fontsLoaded = await settlesWithin(waitForFonts(), remaining());
       const targetsFound = await waitForDataWaitfor(frame, remaining());
-      await waitForImages(frame, deadline);
+      const imagesDecoded = await settlesWithin(decodeImages(frame), remaining());
       while (!cancelled && !isFrameAnimationSettled(frame) && remaining() > 0) {
         await sleep(POLL_INTERVAL_MS);
       }
       const animationsSettled = isFrameAnimationSettled(frame);
       await nextPaint();
       if (cancelled) return;
-      if (!targetsFound) {
-        setSettle({
-          status: 'error',
-          message: 'Timed out waiting for a [data-waitfor] target to appear.',
-        });
-      } else if (!animationsSettled) {
-        setSettle({ status: 'error', message: 'Timed out waiting for animations to finish.' });
-      } else {
-        setSettle({ status: 'ready' });
-      }
+      const pending = [
+        !fontsLoaded && 'fonts to load',
+        !targetsFound && 'a [data-waitfor] target to appear',
+        !imagesDecoded && 'images to decode',
+        !animationsSettled && 'animations to finish',
+      ].filter(Boolean);
+      setSettle(
+        pending.length > 0
+          ? { status: 'error', message: `Timed out waiting for ${pending.join(', ')}.` }
+          : { status: 'ready' },
+      );
     })();
     return () => {
       cancelled = true;

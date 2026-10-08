@@ -351,7 +351,7 @@ After writing or editing a page, look at it — the vertical-budget math catches
 
 2. **Open** `<url>s/<slideId>/preview?p=<pageNumber>` — `p` is 1-based. Add `&step=<n>` to show only the first `n` `<Step>`s of a stepped page (default: fully revealed).
 
-3. **Wait** for `[data-osd-preview="ready"]` — set once fonts, `data-waitfor` targets, images, and entry animations have settled. It becomes `[data-osd-preview="error"]` instead when the slide id is unknown, the page is out of range, the page throws while rendering, or something hasn't settled within 10 s (a `data-waitfor` target never appeared, an animation is still running); `[data-osd-preview-error]` holds the message. Fix the cause rather than screenshotting anyway.
+3. **Wait** for `[data-osd-preview="ready"]` — set once fonts, `data-waitfor` targets, images, and entry animations have settled. It becomes `[data-osd-preview="error"]` instead when the slide id is unknown, the page is out of range, the page throws while rendering, or something hasn't settled within 10 s (a font or image never loaded, a `data-waitfor` target never appeared, an animation is still running); `[data-osd-preview-error]` holds the message. Fix the cause rather than screenshotting anyway.
 
 4. **Screenshot** with a **1920×1080 viewport** so the page renders at native size (smaller viewports scale it down to fit). Use whatever browser tool you have (Playwright / Chrome MCP, a browser-automation tool). If the project already has Playwright installed, the CLI works too — `--no` stops `npx` from downloading it:
 
