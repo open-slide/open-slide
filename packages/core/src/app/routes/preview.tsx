@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Component, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '@/lib/use-document-title';
 import { PreviewStepHost } from '../components/preview-step-host';
@@ -11,7 +11,7 @@ import { useSlideModule } from '../lib/use-slide-module';
 const SETTLE_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 50;
 
-type PreviewState = 'loading' | 'ready' | 'error';
+type Settle = { status: 'loading' } | { status: 'ready' } | { status: 'error'; message: string };
 
 function parseIntParam(raw: string | null): number | null {
   if (raw === null || raw.trim() === '') return null;
@@ -27,12 +27,41 @@ async function waitForImages(root: HTMLElement, deadline: number): Promise<void>
   ]);
 }
 
+type PageErrorBoundaryProps = {
+  resetKey: unknown;
+  onError: (error: unknown) => void;
+  children: ReactNode;
+};
+
+class PageErrorBoundary extends Component<PageErrorBoundaryProps, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    this.props.onError(error);
+  }
+
+  componentDidUpdate(prev: PageErrorBoundaryProps) {
+    if (this.state.failed && prev.resetKey !== this.props.resetKey) {
+      this.setState({ failed: false });
+    }
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 export function Preview() {
   const { slideId = '' } = useParams();
   const [searchParams] = useSearchParams();
   const { slide, error: loadError } = useSlideModule(slideId);
   const frameRef = useRef<HTMLDivElement>(null);
-  const [ready, setReady] = useState(false);
+  const [settle, setSettle] = useState<Settle>({ status: 'loading' });
+  const [renderError, setRenderError] = useState<{ page: unknown; message: string } | null>(null);
 
   const pageParam = parseIntParam(searchParams.get('p'));
   const stepParam = parseIntParam(searchParams.get('step'));
@@ -40,41 +69,57 @@ export function Preview() {
   const pageNumber = pageParam ?? 1;
   const Page = pages[pageNumber - 1];
 
-  let error = loadError;
-  if (!error && slide) {
-    if (pages.length === 0) error = `Slide "${slideId}" has no pages.`;
-    else if (!Page) error = `Page ${searchParams.get('p')} is out of range (1–${pages.length}).`;
-    else if (stepParam !== null && (Number.isNaN(stepParam) || stepParam < 0)) {
-      error = `Invalid step "${searchParams.get('step')}" — expected a non-negative integer.`;
+  let inputError = loadError;
+  if (!inputError && slide) {
+    if (pages.length === 0) inputError = `Slide "${slideId}" has no pages.`;
+    else if (!Page) {
+      inputError = `Page ${searchParams.get('p')} is out of range (1–${pages.length}).`;
+    } else if (stepParam !== null && (Number.isNaN(stepParam) || stepParam < 0)) {
+      inputError = `Invalid step "${searchParams.get('step')}" — expected a non-negative integer.`;
     }
   }
 
   useDocumentTitle(slide ? `${slide.meta?.title ?? slideId} · ${pageNumber}` : undefined);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new step reveals content that has to settle again
   useEffect(() => {
-    setReady(false);
-    if (!Page || error) return;
+    setSettle({ status: 'loading' });
+    if (!Page || inputError) return;
     let cancelled = false;
     (async () => {
       await nextPaint();
       const frame = frameRef.current;
       if (!frame) return;
       const deadline = performance.now() + SETTLE_TIMEOUT_MS;
+      const remaining = () => Math.max(0, deadline - performance.now());
       await waitForFonts();
+      const targetsFound = await waitForDataWaitfor(frame, remaining());
       await waitForImages(frame, deadline);
-      await waitForDataWaitfor(frame, Math.max(0, deadline - performance.now()));
-      while (!cancelled && !isFrameAnimationSettled(frame) && performance.now() < deadline) {
+      while (!cancelled && !isFrameAnimationSettled(frame) && remaining() > 0) {
         await sleep(POLL_INTERVAL_MS);
       }
+      const animationsSettled = isFrameAnimationSettled(frame);
       await nextPaint();
-      if (!cancelled) setReady(true);
+      if (cancelled) return;
+      if (!targetsFound) {
+        setSettle({
+          status: 'error',
+          message: 'Timed out waiting for a [data-waitfor] target to appear.',
+        });
+      } else if (!animationsSettled) {
+        setSettle({ status: 'error', message: 'Timed out waiting for animations to finish.' });
+      } else {
+        setSettle({ status: 'ready' });
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [Page, error]);
+  }, [Page, inputError, stepParam]);
 
-  const state: PreviewState = error ? 'error' : ready ? 'ready' : 'loading';
+  const pageError = renderError && renderError.page === Page ? renderError.message : null;
+  const error = inputError ?? pageError ?? (settle.status === 'error' ? settle.message : null);
+  const state = error ? 'error' : settle.status;
 
   return (
     <div
@@ -96,13 +141,23 @@ export function Preview() {
         Page && (
           <SlideCanvas flat freezeMotion design={slide.design}>
             <SlidePageProvider index={pageNumber - 1} total={pages.length}>
-              {stepParam === null ? (
-                <Page />
-              ) : (
-                <PreviewStepHost revealed={stepParam}>
+              <PageErrorBoundary
+                resetKey={Page}
+                onError={(e) =>
+                  setRenderError({
+                    page: Page,
+                    message: `Page ${pageNumber} threw while rendering:\n${e instanceof Error ? (e.stack ?? e.message) : String(e)}`,
+                  })
+                }
+              >
+                {stepParam === null ? (
                   <Page />
-                </PreviewStepHost>
-              )}
+                ) : (
+                  <PreviewStepHost revealed={stepParam}>
+                    <Page />
+                  </PreviewStepHost>
+                )}
+              </PageErrorBoundary>
             </SlidePageProvider>
           </SlideCanvas>
         )

@@ -2,7 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
 import { DEV_SERVER_PORT } from '../../playwright.config.ts';
-import { devScratchDir } from './helpers.ts';
+import {
+  deleteSlide,
+  devScratchDir,
+  duplicateSlide,
+  readSlideSource,
+  slideSourcePath,
+} from './helpers.ts';
 
 const preview = (page: Page) => page.locator('[data-osd-preview]');
 
@@ -39,6 +45,34 @@ test.describe('page preview route', () => {
 
     await page.goto('/s/does-not-exist/preview?p=1');
     await expect(preview(page)).toHaveAttribute('data-osd-preview', 'error');
+  });
+
+  test('reports a page that throws while rendering', async ({ page, request }) => {
+    const slideId = 'preview-throw';
+    try {
+      await duplicateSlide(request, 'alpha', slideId);
+      const source = await readSlideSource(slideId);
+      await fs.writeFile(
+        slideSourcePath(slideId),
+        source.replace(
+          'const Two: Page = () => (',
+          "const Two: Page = () => {\n  throw new Error('preview boom');\n};\nconst Unused: Page = () => (",
+        ),
+      );
+      await expect
+        .poll(async () => {
+          await page.goto(`/s/${slideId}/preview?p=2`);
+          await expect(preview(page)).not.toHaveAttribute('data-osd-preview', 'loading');
+          return preview(page).getAttribute('data-osd-preview');
+        })
+        .toBe('error');
+      await expect(page.locator('[data-osd-preview-error]')).toContainText('preview boom');
+
+      await page.goto(`/s/${slideId}/preview?p=1`);
+      await expect(preview(page)).toHaveAttribute('data-osd-preview', 'ready');
+    } finally {
+      await deleteSlide(request, slideId);
+    }
   });
 
   test('dev server publishes its url for agents', async () => {
