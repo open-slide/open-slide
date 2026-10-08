@@ -1,6 +1,6 @@
 ---
 name: slide-authoring
-description: Technical reference for writing or editing open-slide pages — file contract, 1920×1080 canvas, type scale, layout, palette/visual direction, assets, speaker notes, stepped reveals, page transitions, and morph transitions. Consult this whenever you are about to write or modify any file under `slides/<id>/`, including from inside the `create-slide` or `apply-comments` workflows, or for any ad-hoc slide edit. Triggers on phrases like "edit slide", "tweak this page", "fix the layout", "change the palette", "reveal one by one", "add a transition", "morph transition", "write the speaker notes", "generate the script / talk track", "investigate the slide framework", "how do slides work here".
+description: Technical reference for writing or editing open-slide pages — file contract, 1920×1080 canvas, type scale, layout, palette/visual direction, assets, speaker notes, stepped reveals, page transitions, and morph transitions. Consult this whenever you are about to write or modify any file under `slides/<id>/`, including from inside the `create-slide` or `apply-comments` workflows, or for any ad-hoc slide edit. Triggers on phrases like "edit slide", "tweak this page", "fix the layout", "change the palette", "reveal one by one", "add a transition", "morph transition", "write the speaker notes", "generate the script / talk track", "preview / screenshot a page", "check how it looks", "investigate the slide framework", "how do slides work here".
 ---
 
 # Authoring open-slide pages
@@ -335,6 +335,35 @@ This applies whenever the *visual element* repeats, not whenever the *data* does
 - Arrow keys / PageUp / PageDown navigate. `F` enters fullscreen play mode.
 - In play mode: Space/→ next, ← prev, Esc exit.
 - Hot reload: edit `index.tsx` and the browser updates live.
+- Dev-only preview route `/s/<id>/preview?p=N` renders one page with no editor chrome — see **Previewing a page visually**.
+
+## Previewing a page visually
+
+After writing or editing a page, look at it — the vertical-budget math catches overflow, but not clashing colors, awkward wraps, or a broken image. While the dev server runs, every page has a chrome-less preview URL; don't drive the full editor UI (home → deck → thumbnail) to get there.
+
+1. **Find the dev server.** Read `node_modules/.open-slide/server.json` (written on startup, removed on shutdown):
+
+   ```json
+   { "url": "http://localhost:5173/", "port": 5173, "pid": 41234, "startedAt": "…" }
+   ```
+
+   Missing file = the dev server isn't running. Don't start it yourself unless the user asked; skip the visual check and mention it in your hand-off.
+
+2. **Open** `<url>s/<slideId>/preview?p=<pageNumber>` — `p` is 1-based. Add `&step=<n>` to show only the first `n` `<Step>`s of a stepped page (default: fully revealed).
+
+3. **Wait** for `[data-osd-preview="ready"]` — set once fonts, images, `data-waitfor` targets, and entry animations have settled. On an unknown slide id or out-of-range page it becomes `[data-osd-preview="error"]` and `[data-osd-preview-error]` holds the message.
+
+4. **Screenshot** with a **1920×1080 viewport** so the page renders at native size (smaller viewports scale it down to fit). Use whatever browser tool you have (Playwright / Chrome MCP, a browser-automation tool). With Playwright on the command line:
+
+   ```bash
+   npx playwright screenshot --viewport-size "1920,1080" \
+     --wait-for-selector '[data-osd-preview="ready"]' \
+     "http://localhost:5173/s/<slideId>/preview?p=3" /tmp/<slideId>-p3.png
+   ```
+
+   If no browser tool is available, don't install one without asking — skip the visual check.
+
+Then view the image and fix what you see. The preview hot-reloads like the editor, and it never moves the user's cursor in `current.json`.
 
 ## Self-review before finishing
 
@@ -353,6 +382,7 @@ This applies whenever the *visual element* repeats, not whenever the *data* does
 - [ ] If a `SlideTransition` is declared, every page sits in one family — same duration band (200–280 ms), same easing pair, same hold-then-fade-in shape (no enter delay, no `throughBackground` outside a deliberate section break), magnitude under 12 px / 3%. No six-different-vocabularies decks. When in doubt, omit transitions entirely. (Pages that opt into `morph` may exceed the band to match the morph — see `references/morph.md`.)
 - [ ] If a transition opts into `morph`: every morph `id` is unique per page and stable across the pair, morph geometry is pixel-constant (never measured after mount), no `transform` sits on the morph node, and entrance animations are gated behind `useIsActivePage()`.
 - [ ] If the user asked for a speech script / speaker notes, it lives in `export const notes` (index-aligned with the page array) — not in a markdown or text file.
+- [ ] If the dev server is running, you previewed every page you touched (see **Previewing a page visually**) and fixed what looked off.
 - [ ] Nothing outside `slides/<id>/` was edited.
 
 ## Anti-patterns

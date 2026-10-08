@@ -53,6 +53,7 @@ Your job: read those markers, perform the described edits, and delete the marker
 6. **Verify.**
    - After all edits, re-read the file and confirm the only remaining markers are ones you reported as skipped.
    - Confirm the edited JSX is well-formed (balanced tags, no dangling attributes). If the project's `package.json` has typecheck/lint scripts, run them with the project's package manager; scaffolded projects ship neither TypeScript nor a linter — there, rely on the running dev server (or the `build` script) to surface compile errors. Fix any errors you introduced.
+   - If the dev server is running, screenshot each edited page via `/s/<id>/preview?p=N` to confirm the change looks right — see **Previewing a page visually** in `slide-authoring`.
 
 7. **Report.**
    - Summarise: `N applied, M skipped` plus a one-line description of each change (including the slide id).

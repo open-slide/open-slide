@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import {
   type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
   useCallback,
   useEffect,
   useRef,
@@ -29,12 +28,12 @@ import {
   type PresenterState,
   usePresenterChannel,
 } from '../components/present/use-presenter-channel';
+import { PreviewStepHost } from '../components/preview-step-host';
 import { SlideCanvas } from '../components/slide-canvas';
 import { isDeckWarmed, markDeckWarmed, SlidePreloadLayer } from '../components/slide-preload-layer';
 import { SlidePageProvider } from '../lib/page-context';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, type SlideModule } from '../lib/sdk';
 import { loadSlide, slideIds } from '../lib/slides';
-import { type StepController, StepHost } from '../lib/step-context';
 import { useSlideModule } from '../lib/use-slide-module';
 
 export function Presenter() {
@@ -651,20 +650,6 @@ function PresenterJumpControl({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <span className="eyebrow">{children}</span>;
-}
-
-function PreviewStepHost({ revealed, children }: { revealed: number; children: ReactNode }) {
-  const noopControllerRef = useRef<StepController | null>(null);
-  return (
-    <StepHost
-      isActivePage={false}
-      entryDirection="jump"
-      controllerRef={noopControllerRef}
-      controlledRevealed={revealed}
-    >
-      {children}
-    </StepHost>
-  );
 }
 
 function Clock() {
