@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import type { ElementOp, RemovedSource } from '../../../editing/remove-element';
 
 export type EditOp =
   | { kind: 'set-style'; key: string; value: string | null; prevText?: string }
@@ -24,6 +25,16 @@ export class NoOpEditError extends Error {
       'Edit completed but the source file did not change — the target JSX may already match, or the target element may not be directly editable here.',
     );
     this.name = 'NoOpEditError';
+  }
+}
+
+export class ElementEditError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = 'ElementEditError';
   }
 }
 
@@ -69,5 +80,55 @@ export function useEditor(slideId: string) {
     [slideId],
   );
 
-  return { applyEdit, applyEdits };
+  // Removing and restoring land immediately, outside the buffered edits. The
+  // returned revision lets undo and redo refuse a source that changed since.
+  const postElementEdit = useCallback(
+    async (line: number, column: number, op: ElementOp, revision?: string) => {
+      const res = await fetch('/__edit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slideId, line, column, ops: [op], revision }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+        revision?: string;
+        removed?: RemovedSource;
+      };
+      if (!res.ok || !body.revision) {
+        throw new ElementEditError(body.error ?? `POST /__edit → ${res.status}`, body.code);
+      }
+      return { revision: body.revision, removed: body.removed };
+    },
+    [slideId],
+  );
+
+  const removeElement = useCallback(
+    async (line: number, column: number, instanceCount: number, revision?: string) => {
+      const result = await postElementEdit(
+        line,
+        column,
+        { kind: 'remove-element', instanceCount },
+        revision,
+      );
+      if (!result.removed) throw new ElementEditError('the server did not report the removal');
+      return { revision: result.revision, removed: result.removed };
+    },
+    [postElementEdit],
+  );
+
+  const restoreElement = useCallback(
+    async (line: number, column: number, removed: RemovedSource, revision: string) => {
+      const result = await postElementEdit(
+        line,
+        column,
+        { kind: 'restore-element', ...removed },
+        revision,
+      );
+      return result.revision;
+    },
+    [postElementEdit],
+  );
+
+  return { applyEdit, applyEdits, removeElement, restoreElement };
 }

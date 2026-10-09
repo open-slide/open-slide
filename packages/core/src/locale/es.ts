@@ -311,6 +311,25 @@ export const es: Locale = {
     commentsApplyHintSuffix: ' en tu agente para aplicarlos.',
     commentDeleteAria: 'Eliminar',
     saveFailed: 'No se pudo guardar:',
+    deleteElement: 'Eliminar elemento',
+    elementDeleted: 'Se eliminó {label}',
+    deleteFailed: 'No se pudo eliminar:',
+    undoDeleteFailed: 'No se pudo restaurar el elemento eliminado:',
+    deleteSaveFirst: 'Guarda o descarta los cambios pendientes antes de eliminar.',
+    deleteOneAtATime: 'Selecciona un solo elemento para eliminarlo.',
+    deleteRefusals: {
+      notFound: 'El elemento ya no está en esta ubicación del código.',
+      root: 'No se puede eliminar la raíz de la página o del componente. Selecciona un elemento dentro de ella.',
+      expression: 'El elemento está dentro de una expresión JSX. Edita el código para quitarlo.',
+      conditional:
+        'El elemento se renderiza de forma condicional. Edita la condición en el código para quitarlo.',
+      map: 'El elemento se renderiza en un callback de .map(), así que eliminarlo quitaría todos los elementos.',
+      shared:
+        'El elemento se renderiza más de una vez desde una misma definición, así que eliminarlo quitaría todas las copias.',
+      comment: 'El elemento contiene un comentario. Resuelve o elimina el comentario primero.',
+      stale:
+        'El código de la diapositiva cambió desde entonces, así que este paso ya no se puede aplicar.',
+    },
     decreaseFontSize: 'Reducir tamaño de fuente',
     increaseFontSize: 'Aumentar tamaño de fuente',
   },

@@ -16,6 +16,8 @@ export type EditOp =
   | { kind: 'set-attr-asset'; attr: string; assetPath: string }
   | { kind: 'replace-placeholder-with-image'; assetPath: string };
 
+export const ELEMENT_OP_KINDS: ReadonlySet<string> = new Set(['remove-element', 'restore-element']);
+
 export type ApplyEditResult =
   | { ok: true; source: string }
   | { ok: false; status: number; error: string };
@@ -142,7 +144,7 @@ export function safeAssetIdentifier(filename: string, taken: Set<string>): strin
   return candidate;
 }
 
-function findJsxByStart(ast: t.Node, line: number, column: number): t.JSXElement | null {
+export function findJsxByStart(ast: t.Node, line: number, column: number): t.JSXElement | null {
   let hit: t.JSXElement | null = null;
   walkJsx(ast, (n) => {
     if (!t.isJSXElement(n) || !n.loc) return;
@@ -765,7 +767,7 @@ type EnclosingComponent = {
 };
 
 // Smallest top-level capitalized function whose body covers `target`.
-function findEnclosingComponent(ast: t.File, target: t.Node): EnclosingComponent | null {
+export function findEnclosingComponent(ast: t.File, target: t.Node): EnclosingComponent | null {
   let best: EnclosingComponent | null = null;
   let bestSize = Number.POSITIVE_INFINITY;
   const targetStart = target.start ?? 0;
@@ -864,7 +866,7 @@ function collectPropCallSiteCandidates(
 
 // Smallest enclosing `arr.map((p) => …)` callback (or `.flatMap`) that
 // covers `target`. Returns the callback fn plus the array argument node.
-function findEnclosingMapCallback(
+export function findEnclosingMapCallback(
   ast: t.Node,
   target: t.Node,
 ): { fn: t.ArrowFunctionExpression | t.FunctionExpression; arrayArg: t.Expression } | null {
@@ -1145,6 +1147,9 @@ export function planEdit(
   exactLocation = false,
 ): { ok: true; splices: Splice[] } | { ok: false; status: number; error: string } {
   if (ops.length === 0) return { ok: true, splices: [] };
+  if (ops.some((op) => ELEMENT_OP_KINDS.has(op.kind))) {
+    return { ok: false, status: 400, error: 'element ops must be sent alone to /__edit' };
+  }
 
   const ast = parseSource(source);
   if (!ast) return { ok: false, status: 422, error: 'could not parse source' };

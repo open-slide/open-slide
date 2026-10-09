@@ -21,11 +21,11 @@ import {
   type TextEditStep,
 } from '@/lib/inspector/text-edit-timeline';
 import { type SlideComment, useComments } from '@/lib/inspector/use-comments';
-import { type Edit, type EditOp, useEditor } from '@/lib/inspector/use-editor';
+import { type Edit, type EditOp, ElementEditError, useEditor } from '@/lib/inspector/use-editor';
 import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-editor';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
-import { useLocale } from '@/lib/use-locale';
+import { format, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { ImageCropDialog, type ImageCropRect } from './image-crop-dialog';
@@ -367,6 +367,12 @@ function replayDomTextEdits(el: HTMLElement, snapshot: TextDomSnapshot, steps: T
   if (el.innerHTML !== next) el.innerHTML = next;
 }
 
+function elementLabel(el: HTMLElement): string {
+  const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) return `<${el.tagName.toLowerCase()}>`;
+  return `“${text.length > 40 ? `${text.slice(0, 39)}…` : text}”`;
+}
+
 type InspectorCtx = {
   slideId: string;
   active: boolean;
@@ -382,6 +388,7 @@ type InspectorCtx = {
   selection: SelectedTarget[];
   setSelection: (targets: SelectedTarget[]) => void;
   bufferBatch: (edits: VisualEdit[], coalesceKey?: string) => void;
+  deleteSelection: () => void;
   visual: ReturnType<typeof useVisualEditor>;
   selected: SelectedTarget | null;
   setSelected: (s: SelectedTarget | null) => void;
@@ -476,7 +483,7 @@ export function InspectorProvider({
   );
   const [opsVersion, setOpsVersion] = useState(0);
   const { comments, error, add, remove } = useComments(slideId);
-  const { applyEdit, applyEdits } = useEditor(slideId);
+  const { applyEdit, applyEdits, removeElement, restoreElement } = useEditor(slideId);
   const history = useHistory();
 
   const pendingRef = useRef<Map<string, Bucket>>(new Map());
@@ -487,6 +494,9 @@ export function InspectorProvider({
   const pendingSeqRef = useRef(0);
   const [pendingCount, setPendingCount] = useState(0);
   const [committing, setCommitting] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const removingRef = useRef(false);
+  const busy = committing || removing;
   const [cropTarget, setCropTarget] = useState<{
     line: number;
     column: number;
@@ -885,7 +895,7 @@ export function InspectorProvider({
 
   const bufferBatch = useCallback(
     (input: VisualEdit[], coalesceKey?: string) => {
-      if (input.length === 0 || committing) return;
+      if (input.length === 0 || committing || removingRef.current) return;
       const edits = input.map((edit) => ({
         ...edit,
         ...findSlideSource(edit.anchor, slideId, { hostOnly: true }),
@@ -925,14 +935,101 @@ export function InspectorProvider({
     ],
   );
 
+  // Element removals write to disk immediately and shift the source lines
+  // that buffered edits are addressed by, so while one is in flight every
+  // other edit waits, and each undo/redo names the revision it expects.
+  const runElementEdit = useCallback(
+    async (run: () => Promise<void>, failure: string) => {
+      removingRef.current = true;
+      setRemoving(true);
+      try {
+        await run();
+        return true;
+      } catch (err) {
+        const code = err instanceof ElementEditError ? err.code : undefined;
+        const key = code?.replace(/-(\w)/g, (_, c: string) => c.toUpperCase());
+        const refusals = t.inspector.deleteRefusals;
+        const message =
+          key && key in refusals
+            ? refusals[key as keyof typeof refusals]
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        toast.error(`${failure} ${message}`);
+        return false;
+      } finally {
+        removingRef.current = false;
+        setRemoving(false);
+      }
+    },
+    [t],
+  );
+
+  const deleteSelection = useCallback(() => {
+    if (busy || removingRef.current || selection.length === 0) return;
+    if (selection.length > 1) {
+      toast.error(t.inspector.deleteOneAtATime);
+      return;
+    }
+    if (pendingCount > 0) {
+      toast.error(t.inspector.deleteSaveFirst);
+      return;
+    }
+    const { line, column, anchor } = selection[0];
+    const canvas = anchor.closest('[data-osd-canvas]') ?? document;
+    const instanceCount = Math.max(
+      1,
+      canvas.querySelectorAll(`[data-slide-loc="${line}:${column}"]`).length,
+    );
+    const label = elementLabel(anchor);
+    const page = pageIndex;
+    void runElementEdit(async () => {
+      let step = await removeElement(line, column, instanceCount);
+      setSelection([]);
+      toast.success(format(t.inspector.elementDeleted, { label }));
+      // A refused undo/redo means the file changed underneath; the remaining
+      // entries no longer describe it.
+      const replay = (run: () => Promise<void>, failure: string) => {
+        void runElementEdit(run, failure).then((ok) => {
+          if (!ok) history.clear();
+        });
+      };
+      history.record({
+        pageIndex: page,
+        undo: () =>
+          replay(async () => {
+            const revision = await restoreElement(line, column, step.removed, step.revision);
+            step = { ...step, revision };
+          }, t.inspector.undoDeleteFailed),
+        redo: () =>
+          replay(async () => {
+            step = await removeElement(line, column, instanceCount, step.revision);
+            setSelection([]);
+          }, t.inspector.deleteFailed),
+      });
+    }, t.inspector.deleteFailed);
+  }, [
+    busy,
+    selection,
+    pendingCount,
+    pageIndex,
+    runElementEdit,
+    removeElement,
+    restoreElement,
+    setSelection,
+    history,
+    t,
+  ]);
+
   const visual = useVisualEditor({
     active,
     inlineEditing: !!inlineEdit,
-    committing,
+    committing: busy,
     slideId,
     selection,
     setSelection,
     bufferBatch,
+    deleteSelection,
   });
 
   const commitEdits = useCallback(async () => {
@@ -1365,6 +1462,7 @@ export function InspectorProvider({
       selection,
       setSelection,
       bufferBatch,
+      deleteSelection,
       visual,
       selected,
       setSelected,
@@ -1381,7 +1479,7 @@ export function InspectorProvider({
       pendingCount,
       commitEdits,
       cancelEdits,
-      committing,
+      committing: busy,
       openCrop,
       openReplace,
     }),
@@ -1401,6 +1499,7 @@ export function InspectorProvider({
       setSelection,
       setSelected,
       bufferBatch,
+      deleteSelection,
       visual,
       selected,
       inlineEdit,
@@ -1415,7 +1514,7 @@ export function InspectorProvider({
       pendingCount,
       commitEdits,
       cancelEdits,
-      committing,
+      busy,
       openCrop,
       openReplace,
     ],

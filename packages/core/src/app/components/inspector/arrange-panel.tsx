@@ -16,6 +16,7 @@ import {
   Magnet,
   RotateCw,
   SendToBack,
+  Trash2,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NumberInput, NumberShell, Section } from '@/components/panel/panel-fields';
@@ -39,7 +40,7 @@ type Frame = {
 };
 
 export function ArrangePanel() {
-  const { selection, opsVersion, visual, committing } = useInspector();
+  const { selection, opsVersion, visual, committing, deleteSelection } = useInspector();
   const { inspector: t } = useLocale();
   const [frame, setFrame] = useState<Frame | null>(null);
   const [toSlide, setToSlide] = useState(false);
@@ -98,6 +99,12 @@ export function ArrangePanel() {
               icon={CornerLeftUp}
               disabled={multiple || committing}
               onClick={visual.selectParent}
+            />
+            <HeaderButton
+              label={t.deleteElement}
+              icon={Trash2}
+              disabled={multiple || committing}
+              onClick={deleteSelection}
             />
             <Tooltip>
               <TooltipTrigger

@@ -303,6 +303,22 @@ export type Locale = {
     commentDeleteAria: string;
     /** Prefix for the toast shown when one or more buffered edits fail to write to disk. */
     saveFailed: string;
+    deleteElement: string;
+    elementDeleted: string;
+    deleteFailed: string;
+    undoDeleteFailed: string;
+    deleteSaveFirst: string;
+    deleteOneAtATime: string;
+    deleteRefusals: {
+      notFound: string;
+      root: string;
+      expression: string;
+      conditional: string;
+      map: string;
+      shared: string;
+      comment: string;
+      stale: string;
+    };
     decreaseFontSize: string;
     increaseFontSize: string;
   };

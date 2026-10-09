@@ -782,6 +782,27 @@ export default [Only] satisfies Page[];
     await expectGeometry(headline, { x: before.x + 10, y: before.y });
   });
 
+  test('Delete removes the selected element from the source and undo restores it', async ({
+    page,
+    request,
+  }) => {
+    const { first, second } = await openBlocks(page, request, 'visual-delete');
+    const source = await readSlideSource('visual-delete');
+    const without = source.replace(/ {4}<div[^\n]*>Second block<\/div>\n/, '');
+    expect(without).not.toBe(source);
+    await second.click();
+    await page.keyboard.press('Delete');
+    await expect.poll(() => readSlideSource('visual-delete')).toBe(without);
+    await expect(second).toHaveCount(0);
+    await expect(first).toBeVisible();
+    await page.keyboard.press('ControlOrMeta+z');
+    await expect.poll(() => readSlideSource('visual-delete')).toBe(source);
+    await expect(second).toBeVisible();
+    await page.keyboard.press('ControlOrMeta+Shift+z');
+    await expect.poll(() => readSlideSource('visual-delete')).toBe(without);
+    await expect(second).toHaveCount(0);
+  });
+
   test('pointer cancellation restores the preview and allows a new keyboard move', async ({
     page,
     request,

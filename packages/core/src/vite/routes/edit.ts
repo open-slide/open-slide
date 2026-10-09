@@ -1,7 +1,14 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import type { ViteDevServer } from 'vite';
 import { applyEditBatch, type BatchEdit } from '../../editing/batch-edit.ts';
 import { applyEdit, type EditOp } from '../../editing/edit-ops.ts';
+import {
+  applyElementOp,
+  type ElementOp,
+  isElementOp,
+  staleElementEdit,
+} from '../../editing/remove-element.ts';
 import { applyRevertAsset } from '../../editing/revert-asset.ts';
 import { validateMutationRequest } from '../../http/request-guard.ts';
 import {
@@ -13,6 +20,7 @@ import {
 } from './context.ts';
 
 // POST /__edit                applyEdit({ slideId, line, column, ops })
+//                             or one remove/restore-element op, applied alone
 // POST /__edit/revert-asset   applyRevertAsset({ slideId, assetPath })
 // POST /__edit/batch          applyEdit × N — single FS write per request
 
@@ -20,7 +28,8 @@ type EditBody = {
   slideId?: string;
   line?: number;
   column?: number;
-  ops?: EditOp[];
+  ops?: (EditOp | ElementOp)[];
+  revision?: string;
 };
 
 type EditBatchBody = {
@@ -48,7 +57,33 @@ export function registerEditRoutes(server: ViteDevServer, ctx: ApiContext): void
         const source = await readSlideSource(file);
         if (source === null) return json(res, 404, { error: 'slide not found' });
 
-        const result = applyEdit(source, body.line, body.column ?? 0, body.ops);
+        if (body.ops.some(isElementOp)) {
+          const [op] = body.ops;
+          if (body.ops.length !== 1 || !isElementOp(op)) {
+            return json(res, 400, { error: 'element ops must be sent alone' });
+          }
+          // Undo and redo name the revision they expect, so they never land on
+          // a source that changed underneath them.
+          const elementResult =
+            body.revision !== undefined && body.revision !== sourceRevision(source)
+              ? staleElementEdit()
+              : applyElementOp(source, body.line, body.column ?? 0, op);
+          if (!elementResult.ok) {
+            return json(res, elementResult.status, {
+              error: elementResult.error,
+              code: elementResult.code,
+            });
+          }
+          await fs.writeFile(file, elementResult.source, 'utf8');
+          return json(res, 200, {
+            ok: true,
+            changed: true,
+            revision: sourceRevision(elementResult.source),
+            removed: elementResult.removed,
+          });
+        }
+
+        const result = applyEdit(source, body.line, body.column ?? 0, body.ops as EditOp[]);
         if (!result.ok) return json(res, result.status, { error: result.error });
         const changed = result.source !== source;
         if (changed) await fs.writeFile(file, result.source, 'utf8');
@@ -102,4 +137,8 @@ export function registerEditRoutes(server: ViteDevServer, ctx: ApiContext): void
       json(res, 500, { error: String((err as Error).message ?? err) });
     }
   });
+}
+
+function sourceRevision(source: string): string {
+  return createHash('sha1').update(source).digest('hex');
 }
