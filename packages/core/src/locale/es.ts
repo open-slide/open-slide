@@ -240,6 +240,9 @@ export const es: Locale = {
     sendBackward: 'Enviar atrás',
     sendToBack: 'Enviar al fondo',
     smartGuides: 'Guías inteligentes',
+    snapThirds: 'Tercios',
+    snapGrid: 'Cuadrícula',
+    gridSize: 'Tamaño de la cuadrícula',
     selectParent: 'Seleccionar contenedor',
     visualEditorHint:
       'Mayús+clic para seleccionar más. ⌘A selecciona todo. Las flechas mueven 1 px; con Mayús, 10 px. Alt ignora las guías. Mayús restringe el arrastre o mantiene las proporciones.',
