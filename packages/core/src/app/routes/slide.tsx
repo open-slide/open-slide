@@ -873,6 +873,7 @@ export function Slide() {
                     />
                   </div>
                   <EditorSidebar
+                    design={slide.design}
                     designOpen={designOpen}
                     onCloseDesign={() => setDesignOpen(false)}
                   />
