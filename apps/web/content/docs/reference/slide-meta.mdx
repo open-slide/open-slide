@@ -15,6 +15,8 @@ export const meta: SlideMeta = {
 
 export const notes = ['Open with the analyst quote.'];
 
+export const durations = [30];
+
 export default [Cover] satisfies Page[];
 ```
 
@@ -59,6 +61,20 @@ export const notes: (string | undefined)[] = [
   'Open with a smile.',
   undefined,
   'Pause for questions.',
+];
+```
+
+## `durations` (optional)
+
+Seconds budgeted for each page, index-aligned with the page array. The
+presenter view times each page against its budget and flags overruns — see
+[Present mode](/docs/core-feature/present-mode#time-budget).
+
+```ts
+export const durations: (number | undefined)[] = [
+  30, // cover
+  undefined,
+  120,
 ];
 ```
 

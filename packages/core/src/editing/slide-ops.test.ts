@@ -3,13 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  duplicateNotesElementInSource,
+  duplicatePageAlignedElementInSource,
   duplicatePageInDefaultExportInSource,
   duplicateSlideDir,
-  removeNotesElementInSource,
+  removePageAlignedElementInSource,
   removePageFromDefaultExportInSource,
   reorderDefaultExportPagesInSource,
-  reorderNotesArrayInSource,
+  reorderPageAlignedArrayInSource,
   updateMetaTitleInSource,
   validateSlideName,
 } from './slide-ops.ts';
@@ -251,10 +251,10 @@ export default [A, B, C];
   });
 });
 
-describe('reorderNotesArrayInSource', () => {
+describe('reorderPageAlignedArrayInSource', () => {
   it('returns the source unchanged when there is no notes export', () => {
     const source = `export default [];\n`;
-    expect(reorderNotesArrayInSource(source, [])).toBe(source);
+    expect(reorderPageAlignedArrayInSource(source, 'notes', [])).toBe(source);
   });
 
   it('reorders notes alongside pages', () => {
@@ -267,7 +267,7 @@ describe('reorderNotesArrayInSource', () => {
       'export default [A, B, C];',
       '',
     ].join('\n');
-    const out = reorderNotesArrayInSource(source, [2, 0, 1]);
+    const out = reorderPageAlignedArrayInSource(source, 'notes', [2, 0, 1]);
     expect(out).not.toBeNull();
     expect(out).toContain(
       'export const notes: (string | undefined)[] = [\n  "third",\n  "first",\n  "second",\n];',
@@ -284,14 +284,14 @@ describe('reorderNotesArrayInSource', () => {
       'export default [A, B];',
       '',
     ].join('\n');
-    const out = reorderNotesArrayInSource(source, [1, 0]);
+    const out = reorderPageAlignedArrayInSource(source, 'notes', [1, 0]);
     expect(out).not.toBeNull();
     expect(out).toContain('export const notes = [\n  "second",\n  `multi\nline`,\n];');
   });
 
   it('pads with undefined when notes is shorter than pages', () => {
     const source = ['export const notes = ["only"];', 'export default [A, B, C];', ''].join('\n');
-    const out = reorderNotesArrayInSource(source, [2, 0, 1]);
+    const out = reorderPageAlignedArrayInSource(source, 'notes', [2, 0, 1]);
     expect(out).not.toBeNull();
     expect(out).toContain('export const notes = [\n  undefined,\n  "only",\n];');
   });
@@ -306,7 +306,7 @@ describe('reorderNotesArrayInSource', () => {
       'export default [A, B, C];',
       '',
     ].join('\n');
-    const out = reorderNotesArrayInSource(source, [2, 0, 1]);
+    const out = reorderPageAlignedArrayInSource(source, 'notes', [2, 0, 1]);
     expect(out).not.toBeNull();
     expect(out).toContain('export const notes = [\n  undefined,\n  undefined,\n  "kept",\n];');
   });
@@ -315,24 +315,108 @@ describe('reorderNotesArrayInSource', () => {
     const source = ['export const notes = [', '  "x",', '];', 'export default [A, B];', ''].join(
       '\n',
     );
-    const out = reorderNotesArrayInSource(source, [1, 1]);
+    const out = reorderPageAlignedArrayInSource(source, 'notes', [1, 1]);
     expect(out).not.toBeNull();
     expect(out).toContain('export const notes = [];');
   });
 
   it('returns the source unchanged for an identity-like reorder of an empty notes array', () => {
     const source = `export const notes = [];\nexport default [A, B];\n`;
-    expect(reorderNotesArrayInSource(source, [0, 1])).toBe(source);
+    expect(reorderPageAlignedArrayInSource(source, 'notes', [0, 1])).toBe(source);
   });
 
   it('returns null on out-of-range indices', () => {
     const source = `export const notes = ["a", "b"];\nexport default [A, B];\n`;
-    expect(reorderNotesArrayInSource(source, [-1, 0])).toBeNull();
+    expect(reorderPageAlignedArrayInSource(source, 'notes', [-1, 0])).toBeNull();
   });
 
   it('returns null when notes is not an array literal', () => {
     const source = `export const notes = "oops";\nexport default [A];\n`;
-    expect(reorderNotesArrayInSource(source, [0])).toBeNull();
+    expect(reorderPageAlignedArrayInSource(source, 'notes', [0])).toBeNull();
+  });
+
+  it('reorders durations and leaves notes to its own pass', () => {
+    const source = [
+      'export const notes = ["a", "b"];',
+      'export const durations: (number | undefined)[] = [30, 60];',
+      'export default [A, B];',
+      '',
+    ].join('\n');
+    const out = reorderPageAlignedArrayInSource(source, 'durations', [1, 0]);
+    expect(out).toContain('export const notes = ["a", "b"];');
+    expect(out).toContain('export const durations: (number | undefined)[] = [\n  60,\n  30,\n];');
+  });
+
+  it('moves same-line and own-line comments with their entry', () => {
+    const source = [
+      'export const durations = [',
+      '  // Part 1',
+      '  30, // Cover',
+      '  undefined, // Agenda',
+      '  // Part 2',
+      '  /* wrap-up */',
+      '  90 /* mid */, // Closing',
+      '  // end of talk',
+      '];',
+      'export default [Cover, Agenda, Closing];',
+      '',
+    ].join('\n');
+    const out = reorderPageAlignedArrayInSource(source, 'durations', [2, 0, 1]);
+    expect(out).toContain(
+      [
+        'export const durations = [',
+        '  // Part 2',
+        '  /* wrap-up */',
+        '  90, /* mid */ // Closing',
+        '  // Part 1',
+        '  30, // Cover',
+        '  undefined, // Agenda',
+        '  // end of talk',
+        '];',
+      ].join('\n'),
+    );
+  });
+
+  it('keeps comments inside an entry as part of its text', () => {
+    const source = [
+      'export const notes = [',
+      '  `first`,',
+      '  t(/* inline */ "second"),',
+      '];',
+      'export default [A, B];',
+      '',
+    ].join('\n');
+    const out = reorderPageAlignedArrayInSource(source, 'notes', [1, 0]);
+    expect(out).toContain('export const notes = [\n  t(/* inline */ "second"),\n  `first`,\n];');
+  });
+
+  it('keeps a commented trailing undefined', () => {
+    const source = [
+      'export const durations = [',
+      '  30,',
+      '  // TODO: budget the demo',
+      '  undefined,',
+      '];',
+      'export default [A, B];',
+      '',
+    ].join('\n');
+    const out = reorderPageAlignedArrayInSource(source, 'durations', [1, 0]);
+    expect(out).toContain(
+      'export const durations = [\n  // TODO: budget the demo\n  undefined,\n  30,\n];',
+    );
+  });
+
+  it('is a no-op for an identity reorder of a commented array', () => {
+    const source = [
+      'export const durations = [',
+      '  // Part 1',
+      '  30, // Cover',
+      '  45, // Agenda',
+      '];',
+      'export default [Cover, Agenda];',
+      '',
+    ].join('\n');
+    expect(reorderPageAlignedArrayInSource(source, 'durations', [0, 1])).toBe(source);
   });
 });
 
@@ -442,10 +526,10 @@ export default [
   });
 });
 
-describe('removeNotesElementInSource', () => {
+describe('removePageAlignedElementInSource', () => {
   it('returns the source unchanged when there is no notes export', () => {
     const source = `export default [A, B];\n`;
-    expect(removeNotesElementInSource(source, 0)).toBe(source);
+    expect(removePageAlignedElementInSource(source, 'notes', 0)).toBe(source);
   });
 
   it('removes the note aligned with the deleted page', () => {
@@ -458,38 +542,83 @@ describe('removeNotesElementInSource', () => {
       'export default [A, B, C];',
       '',
     ].join('\n');
-    const out = removeNotesElementInSource(source, 1);
+    const out = removePageAlignedElementInSource(source, 'notes', 1);
     expect(out).not.toBeNull();
     expect(out).toContain('export const notes = [\n  "first",\n  "third",\n];');
   });
 
   it('leaves notes untouched when the deleted page is past the recorded notes', () => {
     const source = ['export const notes = ["only"];', 'export default [A, B, C];', ''].join('\n');
-    expect(removeNotesElementInSource(source, 2)).toBe(source);
+    expect(removePageAlignedElementInSource(source, 'notes', 2)).toBe(source);
   });
 
   it('collapses to [] when the last remaining note is removed', () => {
     const source = ['export const notes = ["x"];', 'export default [A, B];', ''].join('\n');
-    const out = removeNotesElementInSource(source, 0);
+    const out = removePageAlignedElementInSource(source, 'notes', 0);
     expect(out).not.toBeNull();
     expect(out).toContain('export const notes = [];');
   });
 
   it('returns null on a negative index', () => {
     const source = `export const notes = ["a", "b"];\nexport default [A, B];\n`;
-    expect(removeNotesElementInSource(source, -1)).toBeNull();
+    expect(removePageAlignedElementInSource(source, 'notes', -1)).toBeNull();
   });
 
   it('returns null when notes is not an array literal', () => {
     const source = `export const notes = "oops";\nexport default [A];\n`;
-    expect(removeNotesElementInSource(source, 0)).toBeNull();
+    expect(removePageAlignedElementInSource(source, 'notes', 0)).toBeNull();
+  });
+
+  it('removes a duration and its comment', () => {
+    const source = [
+      'export const durations = [',
+      '  30, // Cover',
+      '  45, // Agenda',
+      '  90, // Demo',
+      '];',
+      'export default [Cover, Agenda, Demo];',
+      '',
+    ].join('\n');
+    const out = removePageAlignedElementInSource(source, 'durations', 1);
+    expect(out).toContain('export const durations = [\n  30, // Cover\n  90, // Demo\n];');
+  });
+
+  it('hands own-line comments of the removed entry to the next one', () => {
+    const source = [
+      'export const durations = [',
+      '  30, // Cover',
+      '  // Part 2',
+      '  45, // Agenda',
+      '  90, // Demo',
+      '];',
+      'export default [Cover, Agenda, Demo];',
+      '',
+    ].join('\n');
+    const out = removePageAlignedElementInSource(source, 'durations', 1);
+    expect(out).toContain(
+      'export const durations = [\n  30, // Cover\n  // Part 2\n  90, // Demo\n];',
+    );
+  });
+
+  it('keeps own-line comments of a removed last entry at the end', () => {
+    const source = [
+      'export const durations = [',
+      '  30,',
+      '  // Closing',
+      '  90,',
+      '];',
+      'export default [A, B];',
+      '',
+    ].join('\n');
+    const out = removePageAlignedElementInSource(source, 'durations', 1);
+    expect(out).toContain('export const durations = [\n  30,\n  // Closing\n];');
   });
 });
 
-describe('duplicateNotesElementInSource', () => {
+describe('duplicatePageAlignedElementInSource', () => {
   it('returns the source unchanged when there is no notes export', () => {
     const source = `export default [A, B];\n`;
-    expect(duplicateNotesElementInSource(source, 0)).toBe(source);
+    expect(duplicatePageAlignedElementInSource(source, 'notes', 0)).toBe(source);
   });
 
   it('inserts a copy of the duplicated page note right after it', () => {
@@ -502,7 +631,7 @@ describe('duplicateNotesElementInSource', () => {
       'export default [A, B, C];',
       '',
     ].join('\n');
-    const out = duplicateNotesElementInSource(source, 1);
+    const out = duplicatePageAlignedElementInSource(source, 'notes', 1);
     expect(out).not.toBeNull();
     expect(out).toContain(
       'export const notes = [\n  "first",\n  "second",\n  "second",\n  "third",\n];',
@@ -519,7 +648,7 @@ describe('duplicateNotesElementInSource', () => {
       'export default [A, B];',
       '',
     ].join('\n');
-    const out = duplicateNotesElementInSource(source, 0);
+    const out = duplicatePageAlignedElementInSource(source, 'notes', 0);
     expect(out).not.toBeNull();
     expect(out).toContain(
       'export const notes = [\n  `multi\nline`,\n  `multi\nline`,\n  "second",\n];',
@@ -528,16 +657,46 @@ describe('duplicateNotesElementInSource', () => {
 
   it('leaves notes untouched when the duplicated page is past the recorded notes', () => {
     const source = ['export const notes = ["only"];', 'export default [A, B, C];', ''].join('\n');
-    expect(duplicateNotesElementInSource(source, 2)).toBe(source);
+    expect(duplicatePageAlignedElementInSource(source, 'notes', 2)).toBe(source);
   });
 
   it('returns null on a negative index', () => {
     const source = `export const notes = ["a", "b"];\nexport default [A, B];\n`;
-    expect(duplicateNotesElementInSource(source, -1)).toBeNull();
+    expect(duplicatePageAlignedElementInSource(source, 'notes', -1)).toBeNull();
   });
 
   it('returns null when notes is not an array literal', () => {
     const source = `export const notes = "oops";\nexport default [A];\n`;
-    expect(duplicateNotesElementInSource(source, 0)).toBeNull();
+    expect(duplicatePageAlignedElementInSource(source, 'notes', 0)).toBeNull();
+  });
+
+  it('duplicates a duration along with its comment', () => {
+    const source = [
+      'export const durations = [',
+      '  30, // Cover',
+      '  90, // Demo',
+      '];',
+      'export default [Cover, Demo];',
+      '',
+    ].join('\n');
+    const out = duplicatePageAlignedElementInSource(source, 'durations', 1);
+    expect(out).toContain(
+      'export const durations = [\n  30, // Cover\n  90, // Demo\n  90, // Demo\n];',
+    );
+  });
+
+  it('does not copy own-line comments onto the duplicate', () => {
+    const source = [
+      'export const durations = [',
+      '  // Part 1',
+      '  30, // Cover',
+      '];',
+      'export default [Cover];',
+      '',
+    ].join('\n');
+    const out = duplicatePageAlignedElementInSource(source, 'durations', 0);
+    expect(out).toContain(
+      'export const durations = [\n  // Part 1\n  30, // Cover\n  30, // Cover\n];',
+    );
   });
 });

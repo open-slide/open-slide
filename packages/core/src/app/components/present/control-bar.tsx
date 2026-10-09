@@ -11,10 +11,11 @@ import {
   Square,
   Sun,
 } from 'lucide-react';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext } from 'react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useLocale } from '@/lib/use-locale';
-import { cn, pad2 } from '@/lib/utils';
+import { useNow } from '@/lib/use-now';
+import { cn, formatClock, pad2 } from '@/lib/utils';
 
 const TooltipContainerCtx = createContext<HTMLElement | null>(null);
 
@@ -299,28 +300,14 @@ function Divider() {
 }
 
 function ElapsedClock({ startedAt }: { startedAt: number }) {
-  const [now, setNow] = useState(() => Date.now());
+  const now = useNow();
   const t = useLocale();
-  useEffect(() => {
-    // Re-arm against the wall clock each tick; a plain setInterval drifts
-    // and visibly skips seconds over a long talk.
-    let id: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      setNow(Date.now());
-      id = setTimeout(tick, 1000 - (Date.now() % 1000));
-    };
-    id = setTimeout(tick, 1000 - (Date.now() % 1000));
-    return () => clearTimeout(id);
-  }, []);
-  const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
-  const m = Math.floor(elapsed / 60);
-  const s = elapsed % 60;
   return (
     <time
       title={t.present.elapsedTime}
       className="px-2 font-mono text-[11.5px] tracking-[0.08em] tabular-nums uppercase select-none text-white/70"
     >
-      {pad2(m)}:{pad2(s)}
+      {formatClock((now - startedAt) / 1000)}
     </time>
   );
 }
