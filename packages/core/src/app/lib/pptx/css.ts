@@ -264,7 +264,7 @@ function sideOrCornerAngle(spec: string, w: number, h: number): number | null {
     .split(/\s+/)
     .sort()
     .join(' ');
-  const corner = (Math.atan2(w, h) * 180) / Math.PI;
+  const corner = (Math.atan2(h, w) * 180) / Math.PI;
   switch (words) {
     case 'top':
       return 0;

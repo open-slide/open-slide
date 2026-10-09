@@ -103,6 +103,17 @@ describe('parseLinearGradient', () => {
     );
     expect(corner?.angleDeg).toBeCloseTo(135, 5);
   });
+  it('angles corner keywords so the 50% line joins the other two corners on wide boxes', () => {
+    const at = (spec: string) =>
+      parseLinearGradient(`linear-gradient(${spec}, rgb(0, 0, 0), rgb(255, 255, 255))`, 200, 100)
+        ?.angleDeg;
+    const corner = 26.56505;
+    expect(at('to top right')).toBeCloseTo(corner, 5);
+    expect(at('to bottom right')).toBeCloseTo(180 - corner, 5);
+    expect(at('to bottom left')).toBeCloseTo(180 + corner, 5);
+    expect(at('to top left')).toBeCloseTo(360 - corner, 5);
+    expect(gradientLineLength(corner, 200, 100)).toBeCloseTo(178.885, 2);
+  });
   it('converts px stop positions against the gradient line', () => {
     const g = parseLinearGradient(
       'linear-gradient(to right, rgb(0, 0, 0) 25px, rgb(255, 255, 255) 75px)',
