@@ -292,6 +292,7 @@ export const es: Locale = {
     trackingLabel: 'Espaciado',
     alignLabel: 'Alineación',
     clearAria: 'Borrar',
+    designTokenSwatchAria: 'Usar color de diseño: {name}',
     replace: 'Reemplazar…',
     replaceImageDialogTitle: 'Reemplazar imagen',
     replaceImageDescription: 'Elige un recurso de {path}.',
