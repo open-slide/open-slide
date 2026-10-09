@@ -1,5 +1,25 @@
 # @open-slide/core
 
+## 2.1.0
+
+### Minor Changes
+
+- [#546](https://github.com/open-slide/open-slide/pull/546) [`4ed1175`](https://github.com/open-slide/open-slide/commit/4ed11753107aa895eb4b480824194ef15ab5f52c) Thanks [@1weiho](https://github.com/1weiho)! - Add a dev-only `/s/<id>/preview?p=N` route that renders a single page without editor chrome, and teach the built-in skills to screenshot it for a quick visual check.
+
+- [#524](https://github.com/open-slide/open-slide/pull/524) [`65026ea`](https://github.com/open-slide/open-slide/commit/65026ea3c05e656c3ba84792dae474a7479051c2) Thanks [@diegoctal](https://github.com/diegoctal)! - Add a Spanish (Español) translation of the UI to the language switcher.
+
+### Patch Changes
+
+- [#512](https://github.com/open-slide/open-slide/pull/512) [`9195cbe`](https://github.com/open-slide/open-slide/commit/9195cbe15bf8dad17ff84a85c6f547ea4b7e4bae) Thanks [@gonzalovargas](https://github.com/gonzalovargas)! - Navigate between focused slide thumbnails with the arrow keys.
+
+- [#544](https://github.com/open-slide/open-slide/pull/544) [`b2bd016`](https://github.com/open-slide/open-slide/commit/b2bd016efe147d1dd518c2d40989a78b797c4062) Thanks [@1weiho](https://github.com/1weiho)! - Keep slide toolbar titles and actions accessible in narrow windows.
+
+- [#548](https://github.com/open-slide/open-slide/pull/548) [`92b7193`](https://github.com/open-slide/open-slide/commit/92b7193219273e1abce18e0cbd9402208a1e06ea) Thanks [@1weiho](https://github.com/1weiho)! - Refresh the favicon and sidebar logo with the new open-slide mark.
+
+- [#539](https://github.com/open-slide/open-slide/pull/539) [`ad82b89`](https://github.com/open-slide/open-slide/commit/ad82b8966793a90113e7d69988f6dc354bfec421) Thanks [@stantheman0128](https://github.com/stantheman0128)! - Duplicating a slide no longer creates a second folder whose name differs only by letter case.
+
+- [#522](https://github.com/open-slide/open-slide/pull/522) [`abafe9e`](https://github.com/open-slide/open-slide/commit/abafe9ead0807fcd2149a4e70f734eeb41734fa9) Thanks [@1weiho](https://github.com/1weiho)! - Undo and redo now jump back to the page where the edit was made and select the changed element, and the undo/redo buttons show their keyboard shortcuts.
+
 ## 2.0.1
 
 ### Patch Changes
