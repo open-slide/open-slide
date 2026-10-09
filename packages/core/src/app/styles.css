@@ -368,6 +368,11 @@
   view-transition-name: none !important;
 }
 
+[data-inspector-root] [data-slide-pending-remove] {
+  /* biome-ignore lint/complexity/noImportantStyles: Keep removed elements hidden across React style updates. */
+  display: none !important;
+}
+
 /*
  * Custom scrollbar — slim, ink-on-paper. Removes the chunky default that
  * fights the calm surfaces.

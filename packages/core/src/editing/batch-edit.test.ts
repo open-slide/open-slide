@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyEditBatch, type BatchEdit } from './batch-edit.ts';
 import type { EditOp } from './edit-ops.ts';
+import { sourceRevision } from './remove-element.ts';
 
 function edit(source: string, marker: string, ops: EditOp[]): BatchEdit {
   const offset = source.indexOf(marker);
@@ -16,6 +17,80 @@ function edit(source: string, marker: string, ops: EditOp[]): BatchEdit {
 const style = (key: string, value: string): EditOp => ({ kind: 'set-style', key, value });
 
 describe('applyEditBatch', () => {
+  it('removes a selected child after earlier edits and preserves later siblings', () => {
+    const source = 'export default [() => <section><h1>Title</h1><p>Body</p></section>];';
+    const result = applyEditBatch(source, [
+      edit(source, '<h1', [style('color', 'red')]),
+      edit(source, '<h1', [{ kind: 'remove-element', revision: sourceRevision(source) }]),
+      edit(source, '<p', [style('color', 'blue')]),
+      edit(source, '<h1', [style('fontSize', '20px')]),
+    ]);
+    expect(result.results).toEqual([
+      { ok: true },
+      { ok: true },
+      { ok: true },
+      { ok: false, error: 'target was removed by an earlier edit' },
+    ]);
+    expect(result.source).toBe(
+      "export default [() => <section><p style={{ color: 'blue' }}>Body</p></section>];",
+    );
+  });
+
+  it('removes two independent siblings with original locations and revisions', () => {
+    const source =
+      'export default [() => <section><h1>First</h1><p>Second</p><small>Third</small></section>];';
+    const revision = sourceRevision(source);
+    const result = applyEditBatch(source, [
+      edit(source, '<h1', [{ kind: 'remove-element', revision }]),
+      edit(source, '<p', [{ kind: 'remove-element', revision }]),
+    ]);
+    expect(result.results).toEqual([{ ok: true }, { ok: true }]);
+    expect(result.source).toBe('export default [() => <section><small>Third</small></section>];');
+  });
+
+  it('invalidates descendants of a removed parent without targeting surviving siblings', () => {
+    const source =
+      'export default [() => <section><div><h1>Child</h1></div><p>Sibling</p></section>];';
+    const result = applyEditBatch(source, [
+      edit(source, '<div', [{ kind: 'remove-element', revision: sourceRevision(source) }]),
+      edit(source, '<h1', [style('color', 'red')]),
+      edit(source, '<p', [style('color', 'blue')]),
+    ]);
+    expect(result.results).toEqual([
+      { ok: true },
+      { ok: false, error: 'target was removed by an earlier edit' },
+      { ok: true },
+    ]);
+    expect(result.source).toBe(
+      "export default [() => <section><p style={{ color: 'blue' }}>Sibling</p></section>];",
+    );
+  });
+
+  it('rejects stale revisions and dependent removals without changing source', () => {
+    const source = 'export default [() => <section><h1>Title</h1><p>Body</p></section>];';
+    const result = applyEditBatch(source, [
+      edit(source, '<h1', [{ kind: 'remove-element', revision: sourceRevision(`${source}\n`) }]),
+      {
+        ...edit(source, '<p', [{ kind: 'remove-element', revision: sourceRevision(source) }]),
+        dependsOn: 0,
+      },
+    ]);
+    expect(result.results).toEqual([
+      { ok: false, error: 'slide source changed since selection' },
+      { ok: false, error: 'remove must be a separate edit' },
+    ]);
+    expect(result.source).toBe(source);
+  });
+
+  it('rejects a removal whose source location is not exact', () => {
+    const source = 'export default [() => <section><h1>Title</h1></section>];';
+    const result = applyEditBatch(source, [
+      edit(source, 'Title', [{ kind: 'remove-element', revision: sourceRevision(source) }]),
+    ]);
+    expect(result.source).toBe(source);
+    expect(result.results).toEqual([{ ok: false, error: 'no JSX element at location' }]);
+  });
+
   it('keeps dependent formatting and typing on text that now matches a sibling', () => {
     const source = '<section><h1>Title</h1><p>Body</p></section>';
     const result = applyEditBatch(source, [

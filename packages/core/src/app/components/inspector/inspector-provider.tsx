@@ -38,6 +38,7 @@ export type SelectedTarget = {
 };
 
 const INSTANCE_ID_ATTR = 'data-slide-instance-id';
+const REMOVE_PREVIEW_ATTR = 'data-slide-pending-remove';
 
 function elementPath(root: Element, el: Element): number[] | null {
   const path: number[] = [];
@@ -139,6 +140,7 @@ type Bucket = {
   textEdits: Map<string, TextEditStep[]>;
   textTargets: Map<string, SelectedTarget & { pageIndex: number }>;
   attrOps: Map<string, Sequenced<AssetAttrOp>>;
+  deleted?: Sequenced<{ revision: string }>;
   // Pre-edit snapshot of the DOM, captured the first time we touch
   // each style key / text / attribute. Used by `cancelEdits` to revert.
   origStyle: Map<string, string>;
@@ -160,6 +162,32 @@ function createBucket(line: number, column: number): Bucket {
     origHtmls: new Map(),
     origAttrs: new Map(),
   };
+}
+
+const removalDisplays = new WeakMap<HTMLElement, { value: string; priority: string }>();
+
+function previewRemoval(anchor: HTMLElement): void {
+  if (anchor.hasAttribute(REMOVE_PREVIEW_ATTR)) return;
+  removalDisplays.set(anchor, {
+    value: anchor.style.getPropertyValue('display'),
+    priority: anchor.style.getPropertyPriority('display'),
+  });
+  anchor.style.setProperty('display', 'none', 'important');
+  anchor.setAttribute(REMOVE_PREVIEW_ATTR, '');
+}
+
+function restoreRemoval(anchor: HTMLElement): void {
+  if (!anchor.hasAttribute(REMOVE_PREVIEW_ATTR)) return;
+  if (
+    anchor.style.getPropertyValue('display') === 'none' &&
+    anchor.style.getPropertyPriority('display') === 'important'
+  ) {
+    const original = removalDisplays.get(anchor);
+    if (original?.value) anchor.style.setProperty('display', original.value, original.priority);
+    else anchor.style.removeProperty('display');
+  }
+  removalDisplays.delete(anchor);
+  anchor.removeAttribute(REMOVE_PREVIEW_ATTR);
 }
 
 export type DomTextPart = {
@@ -516,7 +544,7 @@ export function InspectorProvider({
   const refreshCount = useCallback(() => {
     let n = 0;
     for (const b of pendingRef.current.values()) {
-      if (b.styleOps.size > 0 || b.textEdits.size > 0 || b.attrOps.size > 0) {
+      if (b.styleOps.size > 0 || b.textEdits.size > 0 || b.attrOps.size > 0 || b.deleted) {
         n++;
       }
     }
@@ -662,6 +690,10 @@ export function InspectorProvider({
             seq,
           });
           if (anchor?.isConnected) anchor.setAttribute(op.attr, op.previewUrl);
+        } else if (op.kind === 'remove-element') {
+          bucket.deleted = { revision: op.revision, seq };
+          if (anchor?.isConnected && anchor.dataset.slideDelete === op.revision)
+            previewRemoval(anchor);
         }
       }
       refreshCount();
@@ -690,7 +722,8 @@ export function InspectorProvider({
     value: Sequenced<AssetAttrOp> | string | null;
     source: 'op' | 'orig' | 'dom-missing' | 'dom-present';
   };
-  type Snap = StyleSnap | TextSnap | AttrSnap;
+  type DeleteSnap = { kind: 'delete'; value?: Sequenced<{ revision: string }> };
+  type Snap = StyleSnap | TextSnap | AttrSnap | DeleteSnap;
 
   const snapshotForOps = useCallback(
     (line: number, column: number, anchor: HTMLElement, ops: EditOp[]): Snap[] => {
@@ -747,6 +780,8 @@ export function InspectorProvider({
           } else {
             snaps.push({ kind: 'attr', attr: op.attr, value: null, source: 'dom-missing' });
           }
+        } else if (op.kind === 'remove-element') {
+          snaps.push({ kind: 'delete', value: bucket?.deleted });
         }
       }
       return snaps;
@@ -809,9 +844,21 @@ export function InspectorProvider({
               else sharedAnchor.setAttribute(snap.attr, orig);
             }
           }
+        } else if (snap.kind === 'delete') {
+          bucket.deleted = snap.value;
+          if (sharedAnchor?.isConnected) {
+            if (snap.value && sharedAnchor.dataset.slideDelete === snap.value.revision)
+              previewRemoval(sharedAnchor);
+            else if (!snap.value) restoreRemoval(sharedAnchor);
+          }
         }
       }
-      if (bucket.styleOps.size === 0 && bucket.textEdits.size === 0 && bucket.attrOps.size === 0) {
+      if (
+        bucket.styleOps.size === 0 &&
+        bucket.textEdits.size === 0 &&
+        bucket.attrOps.size === 0 &&
+        !bucket.deleted
+      ) {
         pendingRef.current.delete(key);
       }
       refreshCount();
@@ -895,6 +942,7 @@ export function InspectorProvider({
       );
       for (const edit of edits) applyOpsRaw(edit.line, edit.column, edit.anchor, edit.ops);
       const reveal = edits.map(captureRevealTarget);
+      const removing = edits.some((edit) => edit.ops.some((op) => op.kind === 'remove-element'));
       history.record({
         coalesceKey,
         pageIndex,
@@ -908,7 +956,8 @@ export function InspectorProvider({
         redo: () => {
           for (const edit of edits)
             applyOpsRaw(edit.line, edit.column, findAnchor(edit.line, edit.column), edit.ops);
-          revealTargets(reveal, pageIndex);
+          if (removing) setSelection([]);
+          else revealTargets(reveal, pageIndex);
         },
       });
     },
@@ -922,6 +971,7 @@ export function InspectorProvider({
       slideId,
       pageIndex,
       revealTargets,
+      setSelection,
     ],
   );
 
@@ -985,6 +1035,17 @@ export function InspectorProvider({
           },
         });
       }
+      if (bucket.deleted) {
+        const { seq, revision } = bucket.deleted;
+        pending.push({
+          bucket,
+          seq,
+          edit: { line, column, ops: [{ kind: 'remove-element', revision }] },
+          onSuccess: (b) => {
+            b.deleted = undefined;
+          },
+        });
+      }
       for (const [instanceId, steps] of textEdits) {
         const target = bucket.textTargets.get(instanceId);
         for (const step of steps) {
@@ -1038,7 +1099,8 @@ export function InspectorProvider({
           if (
             bucket.styleOps.size === 0 &&
             bucket.textEdits.size === 0 &&
-            bucket.attrOps.size === 0
+            bucket.attrOps.size === 0 &&
+            !bucket.deleted
           ) {
             for (const [key, pendingBucket] of pendingRef.current) {
               if (pendingBucket === bucket) pendingRef.current.delete(key);
@@ -1069,6 +1131,7 @@ export function InspectorProvider({
     for (const b of pendingRef.current.values()) {
       const sharedEl = root?.querySelector<HTMLElement>(`[data-slide-loc="${b.line}:${b.column}"]`);
       if (sharedEl) {
+        if (b.deleted) restoreRemoval(sharedEl);
         const style = sharedEl.style as unknown as Record<string, string>;
         for (const [k, v] of b.origStyle) style[k] = v;
         for (const [attr, value] of b.origAttrs) {
@@ -1131,6 +1194,10 @@ export function InspectorProvider({
       for (const [attr, op] of bucket.attrOps) {
         if (el.getAttribute(attr) !== op.previewUrl) el.setAttribute(attr, op.previewUrl);
       }
+      if (bucket.deleted) {
+        if (el.dataset.slideDelete === bucket.deleted.revision) previewRemoval(el);
+        else restoreRemoval(el);
+      }
     };
 
     let observer: MutationObserver | null = null;
@@ -1185,7 +1252,7 @@ export function InspectorProvider({
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['data-slide-loc'],
+        attributeFilter: ['data-slide-loc', 'data-slide-delete'],
       });
     };
 
