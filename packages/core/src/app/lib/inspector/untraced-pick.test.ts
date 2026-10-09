@@ -25,6 +25,20 @@ describe('createUntracedPickStore', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it('drops a pick whose element was detached and keeps a connected one', () => {
+    const store = createUntracedPickStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+    const picked = element('DIV');
+    store.set({ slideId: 'a', element: picked });
+    store.clearDetached();
+    expect(store.get()?.element).toBe(picked);
+    picked.isConnected = false;
+    store.clearDetached();
+    expect(store.get()).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
   it('clears the pick', () => {
     const store = createUntracedPickStore();
     store.set({ slideId: 'a', element: element('DIV') });
