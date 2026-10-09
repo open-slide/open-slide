@@ -1,7 +1,7 @@
 import { Plus, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import logo from '@/assets/open-slide.png';
+import logo from '@/assets/open-slide.svg';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { Folder, FolderIcon } from '@/lib/sdk';
 import { format, useLocale } from '@/lib/use-locale';
@@ -135,7 +135,7 @@ export function Sidebar({
           alt=""
           aria-hidden
           draggable={false}
-          className="size-6 shrink-0 select-none rounded-[6px] ring-1 ring-foreground/10"
+          className="size-6 shrink-0 select-none"
         />
         <h1 className="font-heading text-[13.5px] font-semibold tracking-tight">
           {t.home.appTitle}

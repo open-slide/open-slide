@@ -9,12 +9,12 @@ export function Footer() {
         <div className="col-span-12 flex flex-col gap-4 lg:col-span-6">
           <div className="flex items-center gap-2.5 text-[14px] font-medium">
             <Image
-              src="/open-slide.png"
+              src="/open-slide.svg"
               alt=""
               aria-hidden
               width={24}
               height={24}
-              className="h-6 w-6 rounded-[4px]"
+              className="h-6 w-6"
             />
             <span className="tracking-[-0.01em]">open-slide</span>
           </div>

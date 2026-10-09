@@ -98,7 +98,7 @@ function Frame({
       {/* Eyebrow: logo mark + monospace caption */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         {/* biome-ignore lint/performance/noImgElement: next/og uses Satori; <img> is the only supported image tag */}
-        <img src={logoSrc} width={48} height={48} alt="" style={{ borderRadius: 8 }} />
+        <img src={logoSrc} width={48} height={48} alt="" />
         <div
           style={{
             fontFamily: 'Geist Mono',

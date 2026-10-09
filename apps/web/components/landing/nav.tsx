@@ -18,12 +18,12 @@ export function Nav({ githubStars }: { githubStars?: string | null }) {
           className="flex items-center gap-2.5 text-[14px] font-medium tracking-[-0.01em]"
         >
           <Image
-            src="/open-slide.png"
+            src="/open-slide.svg"
             alt="open-slide logo"
             width={24}
             height={24}
             priority
-            className="block h-6 w-6 rounded-[4px]"
+            className="block h-6 w-6"
           />
           <span className="text-[color:var(--color-text)]">open-slide</span>
         </Link>
