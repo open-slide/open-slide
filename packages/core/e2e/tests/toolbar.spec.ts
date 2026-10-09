@@ -165,6 +165,7 @@ test.describe('responsive slide toolbar', () => {
     await expect(commandInput).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(commandInput).toBeHidden();
+    await expect(page.getByRole('menu')).toHaveCount(0);
 
     for (let repeat = 0; repeat < 2; repeat++) {
       await page.getByRole('button', { name: 'Present options', exact: true }).click();
