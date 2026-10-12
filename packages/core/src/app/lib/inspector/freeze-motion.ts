@@ -20,6 +20,15 @@ export function useFreezeSlideMotion(mode: FreezeMode | null): void {
   }, [mode]);
 }
 
+// A speech-bubble pin with its tip at the bottom-left corner; the hotspot
+// sits on that tip so the pointer "stamps" where the comment will land.
+const COMMENT_CURSOR_SVG = [
+  "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'>",
+  "<path d='M12 3a9 9 0 0 1 9 9a9 9 0 0 1-9 9H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 9-9z' ",
+  "fill='#fff' stroke='#111' stroke-width='1.5' stroke-linejoin='round'/></svg>",
+].join('');
+const COMMENT_CURSOR = `url("data:image/svg+xml;utf8,${encodeURIComponent(COMMENT_CURSOR_SVG)}") 3 21, crosshair`;
+
 const FREEZE_CSS = `
 [data-inspector-editing] { touch-action: none; }
 [data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *),
@@ -47,6 +56,6 @@ const FREEZE_CSS = `
 [data-inspector-editing="comment"] *:not([data-inspector-ui], [data-inspector-ui] *),
 [data-inspector-editing="comment"] *:not([data-inspector-ui], [data-inspector-ui] *)::before,
 [data-inspector-editing="comment"] *:not([data-inspector-ui], [data-inspector-ui] *)::after {
-  cursor: crosshair !important;
+  cursor: ${COMMENT_CURSOR} !important;
 }
 `;
