@@ -1,5 +1,11 @@
 # @open-slide/core
 
+## 2.2.0
+
+### Minor Changes
+
+- [#556](https://github.com/open-slide/open-slide/pull/556) [`92d58d7`](https://github.com/open-slide/open-slide/commit/92d58d7a3b4a50476689af58240649e99bf83be6) Thanks [@1weiho](https://github.com/1weiho)! - Move comments into a toolbar comment mode: click an element or drag across a region, write the note in a floating composer, and see every pending comment as a numbered pin beside its target.
+
 ## 2.1.0
 
 ### Minor Changes
