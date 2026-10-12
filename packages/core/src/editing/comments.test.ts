@@ -7,6 +7,7 @@ import {
   parseMarkers,
   removeMarker,
   resolveTargets,
+  updateMarkerNote,
 } from './comments.ts';
 
 describe('b64url encoding', () => {
@@ -179,5 +180,24 @@ describe('marker insertion and removal', () => {
     const source = `  <h1>\n    {/* @slide-comment id="c-00000003" ts="${ts}" text="${encoded}" */}Hello</h1>`;
     expect(removeMarker(source, 'c-00000003')).toBe('  <h1>\n    Hello</h1>');
     expect(removeMarker(source, 'c-ffffffff')).toBeNull();
+  });
+});
+
+describe('updateMarkerNote', () => {
+  it('replaces the note while keeping the rest of the payload', () => {
+    const encoded = b64urlEncode(
+      JSON.stringify({ note: 'old', rect: { x: 1, y: 2, w: 3, h: 4 }, page: 1 }),
+    );
+    const source = `<div>\n  {/* @slide-comment id="c-00000009" ts="t" text="${encoded}" */}\n</div>`;
+    const next = updateMarkerNote(source, 'c-00000009', 'new');
+    expect(next).not.toBeNull();
+    const [c] = parseMarkers(next as string);
+    expect(c).toMatchObject({
+      id: 'c-00000009',
+      note: 'new',
+      rect: { x: 1, y: 2, w: 3, h: 4 },
+      page: 1,
+    });
+    expect(updateMarkerNote(source, 'c-ffffffff', 'new')).toBeNull();
   });
 });

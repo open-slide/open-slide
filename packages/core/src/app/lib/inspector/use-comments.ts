@@ -59,6 +59,22 @@ export function useComments(slideId: string) {
     [slideId, refetch],
   );
 
+  const update = useCallback(
+    async (id: string, text: string) => {
+      const res = await fetch(`/__comments/${id}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slideId, text }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `PUT /__comments/${id} → ${res.status}`);
+      }
+      await refetch();
+    },
+    [slideId, refetch],
+  );
+
   const remove = useCallback(
     async (id: string) => {
       const res = await fetch(`/__comments/${id}?slideId=${encodeURIComponent(slideId)}`, {
@@ -83,5 +99,5 @@ export function useComments(slideId: string) {
     };
   }, [refetch]);
 
-  return { comments, error, add, remove };
+  return { comments, error, add, update, remove };
 }

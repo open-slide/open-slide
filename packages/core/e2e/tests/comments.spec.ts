@@ -52,7 +52,8 @@ test.describe('comment mode', () => {
     await composer.fill('Make it pop');
     await page.keyboard.press('ControlOrMeta+Enter');
 
-    await expect(page.getByRole('button', { name: 'Comment 1', exact: true })).toBeVisible();
+    const elementPin = page.getByRole('button', { name: 'Make it pop', exact: true });
+    await expect(elementPin).toBeVisible();
     await expect(composer).toHaveCount(0);
     await expect(page.getByText('1 comment')).toBeVisible();
 
@@ -66,7 +67,10 @@ test.describe('comment mode', () => {
     await page.mouse.up();
     await composer.fill('Tighten this area');
     await page.getByRole('button', { name: 'Post', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Comment 2', exact: true })).toBeVisible();
+    const regionPin = page.getByRole('button', { name: 'Tighten this area', exact: true });
+    await expect(regionPin).toBeVisible();
+    // The hidden mobile rail renders a badge too, so scope to the first (desktop) one.
+    await expect(page.locator('[data-page-comments="2"]').first()).toBeVisible();
 
     // The region marker lands in the page wrapper, which precedes the
     // headline in source, so pins are numbered by file order.
@@ -75,26 +79,39 @@ test.describe('comment mode', () => {
       'Make it pop',
       'Tighten this area',
     ]);
-    const elementIndex = notes.findIndex((payload) => payload.note === 'Make it pop');
-    const element = notes[elementIndex];
+    const element = notes.find((payload) => payload.note === 'Make it pop');
     const region = notes.find((payload) => payload.note === 'Tighten this area');
-    expect(element.rect).toBeUndefined();
-    expect(element.page).toBe(0);
+    expect(element?.rect).toBeUndefined();
+    expect(element?.page).toBe(0);
     const rect = region?.rect as { x: number; y: number; w: number; h: number };
     expect(rect).toMatchObject({ x: expect.any(Number), w: expect.any(Number) });
     expect(rect.w).toBeGreaterThan(600);
 
-    const elementPin = page.getByRole('button', {
-      name: `Comment ${elementIndex + 1}`,
-      exact: true,
-    });
+    const layer = page.locator('[data-comment-layer]');
+    await elementPin.hover();
+    await expect(layer.locator('[data-comment-preview]')).toContainText('Make it pop');
+    await expect(layer.locator('[data-comment-editor]')).toHaveCount(0);
+
     await elementPin.click();
-    const card = page.locator('[data-comment-layer]').getByText('Make it pop');
-    await expect(card).toBeVisible();
-    await page.locator('[data-comment-layer]').getByRole('button', { name: 'Delete' }).click();
-    await expect(card).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Comment 1', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Comment 2', exact: true })).toHaveCount(0);
+    const editor = layer.locator('[data-comment-editor]');
+    await expect(editor.getByRole('textbox')).toHaveValue('Make it pop');
+    await editor.getByRole('textbox').fill('Make it pop more');
+    await page.keyboard.press('ControlOrMeta+Enter');
+    await expect(page.getByRole('button', { name: 'Make it pop more', exact: true })).toBeVisible();
+    expect(
+      payloads(await readSlideSource('cm-pins'))
+        .map((p) => p.note)
+        .sort(),
+    ).toEqual(['Make it pop more', 'Tighten this area']);
+
+    await page.getByRole('button', { name: 'Make it pop more', exact: true }).click();
+    await editor.getByRole('button', { name: 'Delete' }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Make it pop more', exact: true })).toHaveCount(
+      0,
+    );
+    await expect(regionPin).toBeVisible();
+    await expect(page.locator('[data-page-comments="1"]').first()).toBeVisible();
     const afterDelete = await readSlideSource('cm-pins');
     expect(payloads(afterDelete).map((p) => p.note)).toEqual(['Tighten this area']);
     expect(afterDelete).toContain('Editable headline</h1>');
@@ -136,12 +153,13 @@ export default [One, Two] satisfies Page[];
     await page.mouse.up();
     await page.getByPlaceholder('Describe a change for the agent…').fill('Only here');
     await page.getByRole('button', { name: 'Post', exact: true }).click();
-    const pin = page.getByRole('button', { name: 'Comment 1', exact: true });
+    const pin = page.getByRole('button', { name: 'Only here', exact: true });
     await expect(pin).toBeVisible();
 
     await page.keyboard.press('ArrowRight');
     await expect(editorCanvas(page).getByText('Second page')).toBeVisible();
     await expect(pin).toHaveCount(0);
+    await expect(page.locator('[data-page-comments="1"]').first()).toBeVisible();
 
     await page.keyboard.press('ArrowLeft');
     await expect(editorCanvas(page).getByText('First page')).toBeVisible();

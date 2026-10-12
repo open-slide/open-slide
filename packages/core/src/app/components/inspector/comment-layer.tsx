@@ -63,6 +63,12 @@ const EMPTY_LAYOUT: Layout = {
   draftFrame: null,
 };
 
+// A freshly written marker shifts source lines, so a comment's `target`
+// can point at a loc the canvas only picks up once HMR re-renders — and
+// that reload can remount this layer. Remember each pin's last frame
+// across mounts so it doesn't jump to the fallback corner in between.
+const rememberedFrames = new Map<string, PinLayout>();
+
 const PIN = 24;
 const GAP = 8;
 const MIN_REGION = 6;
@@ -110,7 +116,7 @@ function containerFor(rect: Rect, canvas: Canvas, slideId: string): SelectedTarg
 }
 
 export function CommentLayer() {
-  const { commentMode, exitCommentMode, slideId, pageIndex, comments, add, remove, error } =
+  const { commentMode, exitCommentMode, slideId, pageIndex, comments, add, update, remove, error } =
     useInspector();
   const t = useLocale();
   useFreezeSlideMotion(commentMode ? 'comment' : null);
@@ -122,10 +128,6 @@ export function CommentLayer() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [layout, setLayout] = useState<Layout>(EMPTY_LAYOUT);
-  // A freshly written marker shifts source lines, so `target` can point at a
-  // loc the canvas only picks up once HMR re-renders. Keep the last frame
-  // until then so pins don't jump to the fallback corner in between.
-  const lastPinsRef = useRef<Record<string, PinLayout>>({});
 
   useEffect(() => {
     if (commentMode) return;
@@ -170,8 +172,8 @@ export function CommentLayer() {
       const region = (rect: CommentRect): ScreenRect =>
         screen({ x: rect.x, y: rect.y, width: rect.w, height: rect.h });
       const pins: Record<string, PinLayout> = {};
-      const previous = lastPinsRef.current;
       for (const comment of comments) {
+        const memoryKey = `${slideId}:${comment.id}`;
         // Pages often share a wrapper component, so the target loc alone
         // would match on every page; the stored page index decides.
         if (comment.page !== undefined && comment.page !== pageIndex) continue;
@@ -185,13 +187,16 @@ export function CommentLayer() {
             frame: comment.rect ? region(comment.rect) : element(anchor),
             region: !!comment.rect,
           };
+          rememberedFrames.set(memoryKey, pins[comment.id]);
         } else if (comment.page === pageIndex) {
           pins[comment.id] = comment.rect
             ? { frame: region(comment.rect), region: true }
-            : (previous[comment.id] ?? { frame: screen(fallbackFrame(canvas)), region: false });
+            : (rememberedFrames.get(memoryKey) ?? {
+                frame: screen(fallbackFrame(canvas)),
+                region: false,
+              });
         }
       }
-      lastPinsRef.current = pins;
       const draftFrame = !draft
         ? null
         : draft.kind === 'region'
@@ -244,7 +249,7 @@ export function CommentLayer() {
       window.removeEventListener('resize', schedule);
       window.removeEventListener('scroll', schedule, true);
     };
-  }, [commentMode, comments, pageIndex, hover, draft]);
+  }, [commentMode, comments, pageIndex, hover, draft, slideId]);
 
   useEffect(() => {
     if (!commentMode) return;
@@ -398,6 +403,18 @@ export function CommentLayer() {
     [draft, add, pageIndex, t],
   );
 
+  const handleUpdate = useCallback(
+    async (id: string, text: string) => {
+      try {
+        await update(id, text);
+        setOpenId(null);
+      } catch (err) {
+        toast.error(`${t.inspector.commentUpdateFailed} ${String((err as Error).message ?? err)}`);
+      }
+    },
+    [update, t],
+  );
+
   const handleRemove = useCallback(
     async (id: string) => {
       try {
@@ -434,28 +451,26 @@ export function CommentLayer() {
       {marquee && (
         <div className="absolute border border-brand bg-brand/10" style={toScreen(marquee)} />
       )}
-      {comments.map((comment, index) => {
+      {comments.map((comment) => {
         const pin = layout.pins[comment.id];
         if (!pin) return null;
         const open = openId === comment.id;
-        const lit = open || hoverId === comment.id;
-        const anchor = pinRect(pin.frame);
         return (
           <CommentPin
             key={comment.id}
             comment={comment}
-            number={index + 1}
             frame={pin.frame}
             region={pin.region}
-            anchor={anchor}
+            anchor={pinRect(pin.frame)}
             bounds={bounds}
             open={open}
-            lit={lit}
+            hovered={hoverId === comment.id}
             onToggle={() => {
               setDraft(null);
               setOpenId(open ? null : comment.id);
             }}
             onHover={(hovering) => setHoverId(hovering ? comment.id : null)}
+            onSave={(text) => handleUpdate(comment.id, text)}
             onRemove={() => handleRemove(comment.id)}
           />
         );
@@ -547,32 +562,36 @@ function Pin({
 
 function CommentPin({
   comment,
-  number,
   frame,
   region,
   anchor,
   bounds,
   open,
-  lit,
+  hovered,
   onToggle,
   onHover,
+  onSave,
   onRemove,
 }: {
   comment: SlideComment;
-  number: number;
   frame: ScreenRect;
   region: boolean;
   anchor: ScreenRect;
   bounds: Size;
   open: boolean;
-  lit: boolean;
+  hovered: boolean;
   onToggle: () => void;
   onHover: (hovering: boolean) => void;
+  onSave: (text: string) => Promise<void>;
   onRemove: () => void;
 }) {
   const t = useLocale();
+  const lit = open || hovered;
   const [cardRef, cardSize] = useMeasuredSize({ width: 272, height: 120 });
   const card = placeBeside(anchor, cardSize, bounds);
+  const meta = `${format(t.inspector.commentLineLabel, { n: comment.line })}${
+    region ? ` · ${t.inspector.commentRegionLabel}` : ''
+  }`;
   return (
     <>
       {(lit || region) && (
@@ -587,7 +606,7 @@ function CommentPin({
       <Pin
         anchor={anchor}
         lit={lit}
-        aria-label={format(t.inspector.commentPinAria, { n: number })}
+        aria-label={comment.note}
         aria-expanded={open}
         onClick={onToggle}
         onPointerEnter={() => onHover(true)}
@@ -595,35 +614,120 @@ function CommentPin({
         onFocus={() => onHover(true)}
         onBlur={() => onHover(false)}
       >
-        {number}
+        <MessageSquare className="size-3" />
       </Pin>
-      {open && (
-        <div
-          ref={cardRef}
-          className="pointer-events-auto absolute w-68 rounded-[8px] border bg-card text-[12px] shadow-overlay"
+      {open ? (
+        <CommentEditor
+          key={comment.id}
+          cardRef={cardRef}
           style={card}
-        >
-          <div className="flex items-center justify-between gap-2 px-3 pt-2">
-            <span className="truncate font-mono text-[10px] text-muted-foreground">
-              #{number} · {format(t.inspector.commentLineLabel, { n: comment.line })}
-              {region && ` · ${t.inspector.commentRegionLabel}`}
-            </span>
-            <button
-              type="button"
-              onClick={onRemove}
-              className="-mr-1 shrink-0 rounded-[5px] p-1 text-muted-foreground transition-[color,background-color,scale] duration-150 hover:bg-muted hover:text-destructive active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              aria-label={t.inspector.commentDeleteAria}
-              title={t.inspector.commentDeleteAria}
-            >
-              <Trash2 className="size-3.5" />
-            </button>
+          meta={meta}
+          note={comment.note}
+          onSave={onSave}
+          onRemove={onRemove}
+        />
+      ) : (
+        hovered && (
+          <div
+            ref={cardRef}
+            data-comment-preview
+            className="pointer-events-none absolute w-68 rounded-[8px] border bg-card text-[12px] shadow-overlay"
+            style={card}
+          >
+            <div className="truncate px-3 pt-2 font-mono text-[10px] text-muted-foreground">
+              {meta}
+            </div>
+            <p className="px-3 pt-1 pb-3 leading-relaxed break-words whitespace-pre-wrap">
+              {comment.note}
+            </p>
           </div>
-          <p className="px-3 pt-1 pb-3 leading-relaxed break-words whitespace-pre-wrap">
-            {comment.note}
-          </p>
-        </div>
+        )
       )}
     </>
+  );
+}
+
+function CommentEditor({
+  cardRef,
+  style,
+  meta,
+  note,
+  onSave,
+  onRemove,
+}: {
+  cardRef: RefObject<HTMLDivElement | null>;
+  style: { left: number; top: number };
+  meta: string;
+  note: string;
+  onSave: (text: string) => Promise<void>;
+  onRemove: () => void;
+}) {
+  const t = useLocale();
+  const [text, setText] = useState(note);
+  const [saving, setSaving] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dirty = text.trim() !== note && text.trim() !== '';
+
+  useEffect(() => {
+    const node = textareaRef.current;
+    if (!node) return;
+    node.focus({ preventScroll: true });
+    node.setSelectionRange(node.value.length, node.value.length);
+  }, []);
+
+  const save = async () => {
+    if (!dirty || saving) return;
+    setSaving(true);
+    try {
+      await onSave(text.trim());
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      ref={cardRef}
+      data-comment-editor
+      className="pointer-events-auto absolute w-72 rounded-[8px] border bg-card p-2 shadow-overlay"
+      style={style}
+    >
+      <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
+        <span className="truncate font-mono text-[10px] text-muted-foreground">{meta}</span>
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={saving}
+          className="-mr-1 shrink-0 rounded-[5px] p-1 text-muted-foreground transition-[color,background-color,scale] duration-150 hover:bg-muted hover:text-destructive active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          aria-label={t.inspector.commentDeleteAria}
+          title={t.inspector.commentDeleteAria}
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      </div>
+      <Textarea
+        ref={textareaRef}
+        value={text}
+        disabled={saving}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) return;
+          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            save();
+          }
+        }}
+        className="min-h-14 resize-none text-[12px]"
+      />
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span className="truncate font-mono text-[10.5px] text-muted-foreground/70">
+          {t.inspector.commentEditorHint}
+        </span>
+        <Button size="sm" variant="brand" onClick={save} disabled={saving || !dirty}>
+          {t.common.save}
+        </Button>
+      </div>
+    </div>
   );
 }
 

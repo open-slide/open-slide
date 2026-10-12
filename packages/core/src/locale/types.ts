@@ -302,8 +302,9 @@ export type Locale = {
     commentsApplyHintPrefix: string;
     commentsApplyHintSuffix: string;
     commentDeleteAria: string;
-    /** template: "Comment {n}" */
-    commentPinAria: string;
+    commentEditorHint: string;
+    /** Prefix for the toast shown when a comment edit fails to write to disk. */
+    commentUpdateFailed: string;
     /** Prefix for the toast shown when a comment fails to write to disk. */
     commentAddFailed: string;
     commentRegionNoTarget: string;

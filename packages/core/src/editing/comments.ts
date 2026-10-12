@@ -151,6 +151,22 @@ export function buildMarker(
   return plan.breakAfter ? `${marker}\n${plan.indent}` : marker;
 }
 
+export function updateMarkerNote(source: string, id: string, note: string): string | null {
+  const re = new RegExp(
+    `(\\{\\/\\*\\s*@slide-comment\\s+id="${id}"\\s+ts="[^"]+"\\s+text=")([A-Za-z0-9_\\-]+={0,2})("\\s*\\*\\/\\})`,
+  );
+  const m = source.match(re);
+  if (!m) return null;
+  let payload: CommentPayload;
+  try {
+    payload = JSON.parse(b64urlDecode(m[2])) as CommentPayload;
+  } catch {
+    return null;
+  }
+  const encoded = b64urlEncode(JSON.stringify({ ...payload, note }));
+  return source.replace(re, `$1${encoded}$3`);
+}
+
 // Strips just the marker token; the line only goes away when nothing
 // else was on it, so content that shares the line survives.
 export function removeMarker(source: string, id: string): string | null {

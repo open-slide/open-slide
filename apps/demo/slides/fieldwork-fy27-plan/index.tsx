@@ -305,6 +305,9 @@ const Footer = () => {
 
 const Frame = ({ children }: { children: ReactNode }) => (
   <div style={root}>
+    {/* @slide-comment id="c-dcaec2ab" ts="2026-10-12T15:43:47.706Z" text="eyJub3RlIjoicXFxIiwicmVjdCI6eyJ4Ijo0OCwieSI6NDcxLCJ3IjoyMjAsImgiOjEyNH0sInBhZ2UiOjR9" */}
+    {/* @slide-comment id="c-f962908f" ts="2026-10-12T15:43:33.156Z" text="eyJub3RlIjoiaGFoYSIsInJlY3QiOnsieCI6NjUwLCJ5Ijo3NywidyI6OTk0LCJoIjo2Mzl9LCJwYWdlIjoyfQ" */}
+    {/* @slide-comment id="c-350e3cf7" ts="2026-10-12T15:36:24.196Z" text="eyJub3RlIjoidGVzdCIsInJlY3QiOnsieCI6NTE0LCJ5IjoxODQsInciOjU1NywiaCI6MzQyfSwicGFnZSI6MH0" */}
     {children}
     <Footer />
   </div>
@@ -384,6 +387,7 @@ const Cover: Page = () => {
         <span style={{ fontSize: 30, fontWeight: 760, letterSpacing: '-0.03em' }}>Fieldwork</span>
       </div>
       <h1 style={{ ...abs(X0, 262), ...headline(150), fontSize: 'var(--osd-size-hero)' }}>
+        {/* @slide-comment id="c-efbcb037" ts="2026-10-12T15:44:18.323Z" text="eyJub3RlIjoicXEiLCJwYWdlIjowfQ" */}
         The FY27
         <br />
         operating
@@ -776,7 +780,11 @@ const BetCard = ({
   return (
     <div style={abs(x, 330, 536, 610)}>
       {morphId ? <MorphElement id={morphId}>{bg}</MorphElement> : bg}
-      <div style={abs(36, 34)}>{art}</div>
+      <div style={abs(36, 34)}>
+        {/* @slide-comment id="c-03ef1365" ts="2026-10-12T15:54:13.009Z" text="eyJub3RlIjoiMzMiLCJwYWdlIjo0fQ" */}
+        {/* @slide-comment id="c-3408397a" ts="2026-10-12T15:54:11.053Z" text="eyJub3RlIjoiMjIyIiwicGFnZSI6NH0" */}
+        {art}
+      </div>
       <div style={{ ...abs(44, 262), fontSize: 22, fontWeight: 700, color: SOFT }}>{index}</div>
       <div style={{ ...abs(44, 296), ...headline(54) }}>{title}</div>
       <p
@@ -912,6 +920,7 @@ const BranchesDeep: Page = () => {
       </div>
       <Eyebrow>Bet 01 · Branches</Eyebrow>
       <h2 style={{ ...abs(X0, 160), ...headline(112), lineHeight: 0.98 }}>
+        {/* @slide-comment id="c-89f58b9d" ts="2026-10-12T15:54:30.669Z" text="eyJub3RlIjoiZGRkIiwicGFnZSI6NX0" */}
         One board
         <br />
         for every
@@ -927,6 +936,7 @@ const BranchesDeep: Page = () => {
           color: BODY,
         }}
       >
+        {/* @slide-comment id="c-6bfea46f" ts="2026-10-12T15:54:27.156Z" text="eyJub3RlIjoicXFxIiwicGFnZSI6NX0" */}
         Larger crews run one Fieldwork account per branch today. Branches puts them on one board,
         with technicians shared across locations.
       </p>
@@ -938,7 +948,10 @@ const BranchesDeep: Page = () => {
           </div>
         </div>
         <div style={{ width: 330 }}>
-          <div style={{ ...headline(84), letterSpacing: '-0.045em', color: RED }}>61%</div>
+          <div style={{ ...headline(84), letterSpacing: '-0.045em', color: RED }}>
+            {/* @slide-comment id="c-82162c6e" ts="2026-10-12T15:54:24.282Z" text="eyJub3RlIjoicXFxIiwicGFnZSI6NX0" */}
+            61%
+          </div>
           <div style={{ marginTop: 14, fontSize: 25, lineHeight: 1.4, color: BODY }}>
             of the ARR we lost in FY26 came from them
           </div>
@@ -1575,7 +1588,10 @@ const RiskCard = ({
   call: string;
 }) => (
   <div style={{ ...abs(X0, top, W, 188), borderRadius: 24, background: tint }}>
-    <div style={abs(44, 34)}>{art}</div>
+    <div style={abs(44, 34)}>
+      {/* @slide-comment id="c-328bc553" ts="2026-10-12T15:54:35.415Z" text="eyJub3RlIjoiY2NjIiwicGFnZSI6MTB9" */}
+      {art}
+    </div>
     <div style={{ ...abs(210, 30), fontSize: 22, fontWeight: 700, color: levelColor }}>{level}</div>
     <div style={{ ...abs(210, 64), ...headline(42), whiteSpace: 'nowrap' }}>{title}</div>
     <div style={{ ...abs(210, 122, 940), fontSize: 27, lineHeight: 1.4, color: BODY }}>{body}</div>

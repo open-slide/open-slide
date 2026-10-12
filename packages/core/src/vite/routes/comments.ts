@@ -12,6 +12,7 @@ import {
   parseMarkers,
   removeMarker,
   resolveTargets,
+  updateMarkerNote,
 } from '../../editing/comments.ts';
 import { validateMutationRequest } from '../../http/request-guard.ts';
 import {
@@ -24,6 +25,7 @@ import {
 
 // GET    /__comments        list markers for ?slideId=…
 // POST   /__comments/add    add marker { slideId, line, column?, text, hint?, rect?, page? }
+// PUT    /__comments/:id    replace note { slideId, text }
 // DELETE /__comments/:id    remove marker
 
 type AddCommentBody = {
@@ -92,6 +94,27 @@ export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): v
         await fs.writeFile(file, next, 'utf8');
         const markerLine = offsetToLine(next, plan.offset + 1);
         return json(res, 200, { id, line: markerLine });
+      }
+
+      if (method === 'PUT' && url.pathname.startsWith('/')) {
+        const requestCheck = validateMutationRequest(req, { requireJsonBody: true });
+        if (!requestCheck.ok) {
+          return json(res, requestCheck.status, { error: requestCheck.error });
+        }
+        const id = url.pathname.slice(1);
+        if (!/^c-[a-f0-9]+$/.test(id)) return json(res, 400, { error: 'invalid id' });
+        const body = (await readBody(req)) as { slideId?: string; text?: string };
+        const file = resolveSlideEntryPath(ctx, body.slideId ?? '');
+        if (!file) return json(res, 400, { error: 'invalid slideId' });
+        if (!body.text || typeof body.text !== 'string') {
+          return json(res, 400, { error: 'missing text' });
+        }
+        const source = await readSlideSource(file);
+        if (source === null) return json(res, 404, { error: 'slide not found' });
+        const next = updateMarkerNote(source, id, body.text);
+        if (next === null) return json(res, 404, { error: 'marker not found' });
+        await fs.writeFile(file, next, 'utf8');
+        return json(res, 200, { ok: true });
       }
 
       if (method === 'DELETE' && url.pathname.startsWith('/')) {

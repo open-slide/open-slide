@@ -386,6 +386,7 @@ type InspectorCtx = {
   comments: SlideComment[];
   error: string | null;
   add: (input: AddCommentInput) => Promise<void>;
+  update: (id: string, text: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   selection: SelectedTarget[];
   setSelection: (targets: SelectedTarget[]) => void;
@@ -422,6 +423,10 @@ export function useInspector(): InspectorCtx {
   const v = useContext(Ctx);
   if (!v) throw new Error('useInspector must be used inside <InspectorProvider>');
   return v;
+}
+
+export function useOptionalInspector(): InspectorCtx | null {
+  return useContext(Ctx);
 }
 
 export function InspectorProvider({
@@ -487,7 +492,7 @@ export function InspectorProvider({
     [],
   );
   const [opsVersion, setOpsVersion] = useState(0);
-  const { comments, error, add, remove } = useComments(slideId);
+  const { comments, error, add, update, remove } = useComments(slideId);
   const { applyEdit, applyEdits } = useEditor(slideId);
   const history = useHistory();
 
@@ -1396,6 +1401,7 @@ export function InspectorProvider({
       comments,
       error,
       add,
+      update,
       remove,
       selection,
       setSelection,
@@ -1436,6 +1442,7 @@ export function InspectorProvider({
       comments,
       error,
       add,
+      update,
       remove,
       selection,
       setSelection,
