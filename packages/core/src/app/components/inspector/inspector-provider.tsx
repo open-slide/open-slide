@@ -12,8 +12,10 @@ import {
 import { toast } from 'sonner';
 import { useHistory } from '@/components/history-provider';
 import { IconSwitcherIndicator } from '@/components/icon-switcher-indicator';
+import { IconTooltip } from '@/components/icon-tooltip';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { TooltipTrigger } from '@/components/ui/tooltip';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import {
   appendTextEdit,
@@ -26,7 +28,7 @@ import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-edi
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
 import { useLocale } from '@/lib/use-locale';
-import { cn, round2 } from '@/lib/utils';
+import { round2 } from '@/lib/utils';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { ImageCropDialog, type ImageCropRect } from './image-crop-dialog';
 
@@ -1357,6 +1359,12 @@ export function InspectorProvider({
         e.preventDefault();
         if (commentMode) exitCommentMode();
         else setMode('comment');
+      } else if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        setMode('preview');
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        setMode('edit');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -1601,10 +1609,10 @@ export function InspectModeSwitcher() {
   const t = useLocale();
   const { mode, setMode, comments } = useInspector();
   if (import.meta.env.PROD) return null;
-  const items: { value: InspectorMode; label: string; icon: ReactNode }[] = [
-    { value: 'preview', label: t.inspector.previewMode, icon: <Eye /> },
-    { value: 'edit', label: t.inspector.editMode, icon: <Pencil /> },
-    { value: 'comment', label: t.inspector.commentMode, icon: <MessageSquare /> },
+  const items: { value: InspectorMode; label: string; shortcut: string; icon: ReactNode }[] = [
+    { value: 'preview', label: t.inspector.previewMode, shortcut: 'V', icon: <Eye /> },
+    { value: 'edit', label: t.inspector.editMode, shortcut: 'E', icon: <Pencil /> },
+    { value: 'comment', label: t.inspector.commentMode, shortcut: 'C', icon: <MessageSquare /> },
   ];
   const index = Math.max(
     0,
@@ -1625,29 +1633,31 @@ export function InspectModeSwitcher() {
     >
       <IconSwitcherIndicator index={index} />
       {items.map((item) => (
-        <ToggleGroupItem
-          key={item.value}
-          value={item.value}
-          title={item.label}
-          aria-label={item.label}
-          data-inspector-mode={item.value}
-          onClick={(event) => {
-            if (event.detail > 0) event.currentTarget.blur();
-          }}
-          className="relative z-10 h-full w-8 rounded-md px-0 text-muted-foreground hover:bg-transparent data-pressed:bg-transparent data-pressed:text-foreground data-pressed:shadow-none"
-        >
-          {item.icon}
-          {item.value === 'comment' && comments.length > 0 && (
-            <span
-              aria-hidden
-              className={cn(
-                'pointer-events-none absolute -top-1.5 -right-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-brand px-1 font-mono text-[9px] font-semibold leading-none text-brand-foreground nums',
-              )}
-            >
-              {comments.length > 99 ? '99+' : comments.length}
-            </span>
-          )}
-        </ToggleGroupItem>
+        <IconTooltip key={item.value} label={item.label} shortcut={item.shortcut}>
+          <TooltipTrigger
+            render={
+              <ToggleGroupItem
+                value={item.value}
+                aria-label={item.label}
+                data-inspector-mode={item.value}
+                onClick={(event) => {
+                  if (event.detail > 0) event.currentTarget.blur();
+                }}
+                className="relative z-10 h-full w-8 rounded-md px-0 text-muted-foreground hover:bg-transparent data-pressed:bg-transparent data-pressed:text-foreground data-pressed:shadow-none"
+              />
+            }
+          >
+            {item.icon}
+            {item.value === 'comment' && comments.length > 0 && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-1.5 -right-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-brand px-1 font-mono text-[9px] font-semibold leading-none text-brand-foreground nums"
+              >
+                {comments.length > 99 ? '99+' : comments.length}
+              </span>
+            )}
+          </TooltipTrigger>
+        </IconTooltip>
       ))}
     </ToggleGroup>
   );
