@@ -306,7 +306,6 @@ const Footer = () => {
 const Frame = ({ children }: { children: ReactNode }) => (
   <div style={root}>
     {/* @slide-comment id="c-dcaec2ab" ts="2026-10-12T15:43:47.706Z" text="eyJub3RlIjoicXFxIiwicmVjdCI6eyJ4Ijo0OCwieSI6NDcxLCJ3IjoyMjAsImgiOjEyNH0sInBhZ2UiOjR9" */}
-    {/* @slide-comment id="c-f962908f" ts="2026-10-12T15:43:33.156Z" text="eyJub3RlIjoiaGFoYSIsInJlY3QiOnsieCI6NjUwLCJ5Ijo3NywidyI6OTk0LCJoIjo2Mzl9LCJwYWdlIjoyfQ" */}
     {/* @slide-comment id="c-350e3cf7" ts="2026-10-12T15:36:24.196Z" text="eyJub3RlIjoidGVzdCIsInJlY3QiOnsieCI6NTE0LCJ5IjoxODQsInciOjU1NywiaCI6MzQyfSwicGFnZSI6MH0" */}
     {children}
     <Footer />

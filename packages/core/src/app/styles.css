@@ -226,6 +226,59 @@
  * glides back and forth. Used for full-screen loading states in place of
  * a spinner; quieter, more typographic, easier on the eye.
  */
+/* Comment-mode hint pill: the shell materializes once, then every text
+   swap blurs the old copy out while the new one blurs in. */
+@keyframes island-enter {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(6px) scale(0.9);
+  }
+}
+
+@keyframes island-arrive {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: scale(0.94);
+  }
+}
+
+@keyframes island-leave {
+  to {
+    opacity: 0;
+    filter: blur(6px);
+    transform: scale(0.94);
+  }
+}
+
+.island-enter {
+  animation: island-enter 420ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.island-arrive {
+  animation: island-arrive 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.island-leave {
+  pointer-events: none;
+  animation: island-leave 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .island-enter,
+  .island-arrive {
+    animation: island-arrive 160ms ease-out both;
+    filter: none;
+    transform: none;
+  }
+
+  .island-leave {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 @keyframes osd-line-loader {
   0% {
     transform: translateX(0%);

@@ -1,6 +1,7 @@
 import { MessageSquare, Trash2 } from 'lucide-react';
 import {
   type ComponentProps,
+  type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
@@ -486,11 +487,9 @@ export function CommentLayer() {
         />
       )}
       <div className="absolute inset-x-0 bottom-3 flex justify-center">
-        <div
-          className={cn(
-            'max-w-[calc(100%-2rem)] truncate rounded-full border bg-card/95 px-3 py-1.5 text-[11px] text-muted-foreground shadow-floating backdrop-blur',
-            error && 'text-destructive',
-          )}
+        <IslandHint
+          contentKey={error ? 'error' : count === 0 ? 'empty' : `count:${count}`}
+          tone={error ? 'error' : 'default'}
         >
           {error ? (
             error
@@ -511,8 +510,83 @@ export function CommentLayer() {
               {t.inspector.commentsApplyHintSuffix}
             </>
           )}
-        </div>
+        </IslandHint>
       </div>
+    </div>
+  );
+}
+
+const ISLAND_SWAP_MS = 320;
+
+// The pill resizes to whatever it says, Dynamic Island style: the shell
+// animates its width while the outgoing text blurs out and the new text
+// blurs in. The shell's width is driven by the incoming content alone so
+// it never waits for the old text to unmount.
+function IslandHint({
+  contentKey,
+  tone,
+  children,
+}: {
+  contentKey: string;
+  tone: 'default' | 'error';
+  children: ReactNode;
+}) {
+  const contentRef = useRef<HTMLSpanElement>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  const [outgoing, setOutgoing] = useState<{ key: string; node: ReactNode } | null>(null);
+  const lastRef = useRef<{ key: string; node: ReactNode }>({ key: contentKey, node: children });
+
+  useLayoutEffect(() => {
+    const previous = lastRef.current;
+    lastRef.current = { key: contentKey, node: children };
+    if (previous.key === contentKey) return;
+    setOutgoing(previous);
+    const timer = setTimeout(() => setOutgoing(null), ISLAND_SWAP_MS);
+    return () => clearTimeout(timer);
+  }, [contentKey, children]);
+
+  // The content span remounts per key, and its entrance scales it, so
+  // re-attach per key and read the unscaled layout width.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-observe the remounted span
+  useLayoutEffect(() => {
+    const node = contentRef.current;
+    if (!node) return;
+    const update = () => setWidth(node.offsetWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [contentKey]);
+
+  return (
+    <div
+      data-comment-hint
+      className={cn(
+        'island-enter grid max-w-[calc(100%-2rem)] justify-items-start overflow-hidden rounded-full border bg-card/95 px-3 py-1.5 text-[11px] text-muted-foreground shadow-floating backdrop-blur',
+        'motion-safe:transition-[width] motion-safe:duration-500 motion-safe:ease-[cubic-bezier(0.32,0.72,0,1)]',
+        tone === 'error' && 'text-destructive',
+      )}
+      style={width === null ? undefined : { width: width + 26 }}
+    >
+      {outgoing && (
+        <span
+          key={outgoing.key}
+          aria-hidden
+          className="island-leave col-start-1 row-start-1 truncate whitespace-nowrap"
+        >
+          {outgoing.node}
+        </span>
+      )}
+      <span
+        key={contentKey}
+        ref={contentRef}
+        className={cn(
+          'col-start-1 row-start-1 w-max whitespace-nowrap',
+          outgoing && 'island-arrive',
+        )}
+      >
+        {children}
+      </span>
     </div>
   );
 }
