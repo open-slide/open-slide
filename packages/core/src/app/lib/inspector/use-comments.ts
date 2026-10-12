@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
 
+export type CommentRect = { x: number; y: number; w: number; h: number };
+
 export type SlideComment = {
   id: string;
   line: number;
   ts: string;
   note: string;
   hint?: string;
+  rect?: CommentRect;
+  page?: number;
+  target?: { line: number; column: number } | null;
+};
+
+export type AddCommentInput = {
+  line: number;
+  column: number;
+  text: string;
+  rect?: CommentRect;
+  page?: number;
 };
 
 type ListResponse = { comments: SlideComment[] };
@@ -31,11 +44,11 @@ export function useComments(slideId: string) {
   }, [slideId]);
 
   const add = useCallback(
-    async (line: number, column: number, text: string) => {
+    async (input: AddCommentInput) => {
       const res = await fetch('/__comments/add', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slideId, line, column, text }),
+        body: JSON.stringify({ slideId, ...input }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };

@@ -37,9 +37,9 @@ From a one-line prompt to a polished deck, no boilerplate.
 
 ### 🎯 In-browser inspector
 
-Click any element in the dev server and attach a comment — *"make this red"*, *"change to 'Open Slide Rocks'"*, *"shrink the headline"*. Comments are persisted as `@slide-comment` markers in source. Run `/apply-comments` and the agent applies every pending edit, then clears the markers.
+Switch the dev server toolbar to comment mode, then click any element or drag across a region and leave a note — *"make this red"*, *"change to 'Open Slide Rocks'"*, *"shrink the headline"*. Each comment floats as a pin beside its target and is persisted as an `@slide-comment` marker in source. Run `/apply-comments` and the agent applies every pending edit, then clears the markers.
 
-The loop: present → click to comment → `/apply-comments` → repeat.
+The loop: present → comment → `/apply-comments` → repeat.
 
 ### 🖼️ Assets manager + svgl logo search
 

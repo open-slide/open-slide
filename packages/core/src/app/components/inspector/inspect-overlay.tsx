@@ -1,6 +1,7 @@
 import { Crop, ImageIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { findSlideSource } from '@/lib/inspector/fiber';
+import { useFreezeSlideMotion } from '@/lib/inspector/freeze-motion';
 import {
   type Guide,
   type Point,
@@ -98,19 +99,7 @@ export function InspectOverlay() {
   const [scale, setScale] = useState(1);
   const displayed = localTargets ?? selection;
 
-  useEffect(() => {
-    if (!active) return;
-    const root = document.querySelector<HTMLElement>('[data-inspector-root]');
-    if (!root) return;
-    const style = document.createElement('style');
-    style.textContent = EDITING_FREEZE_CSS;
-    document.head.appendChild(style);
-    root.dataset.inspectorEditing = 'true';
-    return () => {
-      style.remove();
-      delete root.dataset.inspectorEditing;
-    };
-  }, [active]);
+  useFreezeSlideMotion(active ? 'edit' : null);
 
   useLayoutEffect(() => {
     if (!active) return;
@@ -656,29 +645,3 @@ export function InspectOverlay() {
     </div>
   );
 }
-
-const EDITING_FREEZE_CSS = `
-[data-inspector-editing] { touch-action: none; }
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *),
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *)::before,
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *)::after {
-  animation-duration: 1ms !important;
-  animation-delay: 0s !important;
-  animation-iteration-count: 1 !important;
-  animation-fill-mode: forwards !important;
-  transition: none !important;
-  view-transition-name: none !important;
-  user-select: none;
-}
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *, [data-visual-gesture], [data-visual-gesture] *),
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *, [data-visual-gesture], [data-visual-gesture] *)::before,
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *, [data-visual-gesture], [data-visual-gesture] *)::after {
-  cursor: default !important;
-}
-[data-inspector-editing] [data-visual-gesture],
-[data-inspector-editing] [data-visual-gesture] *,
-[data-inspector-editing] [data-visual-gesture] *::before,
-[data-inspector-editing] [data-visual-gesture] *::after {
-  cursor: var(--osd-gesture-cursor, default) !important;
-}
-`;

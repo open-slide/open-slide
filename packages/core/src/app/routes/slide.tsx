@@ -29,7 +29,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner';
 import { AssetView } from '@/components/asset-view';
 import { HistoryProvider } from '@/components/history-provider';
-import { CommentWidget } from '@/components/inspector/comment-widget';
+import { CommentLayer } from '@/components/inspector/comment-layer';
 import { InlineEditLayer } from '@/components/inspector/inline-text-editor';
 import { InspectOverlay } from '@/components/inspector/inspect-overlay';
 import {
@@ -855,7 +855,7 @@ export function Slide() {
                     <InspectOverlay />
                     <InlineEditLayer />
                     <SaveBar />
-                    {import.meta.env.DEV && <CommentWidget />}
+                    {import.meta.env.DEV && <CommentLayer />}
                   </main>
                   {/* Mobile-only horizontal rail. Sits below the canvas and
                     pads its bottom for the iOS home indicator / Safari URL bar. */}
@@ -1167,13 +1167,14 @@ function SlideViewportNavigation({
   canPrev: boolean;
   canNext: boolean;
 }) {
-  const { active, inlineEdit } = useInspector();
+  const { mode, inlineEdit } = useInspector();
   const isMobile = useIsMobile();
   const editing = !!inlineEdit;
+  const browsing = mode === 'preview';
 
   useWheelPageNavigation({
     ref: targetRef,
-    enabled: !active && !editing,
+    enabled: browsing && !editing,
     canPrev,
     canNext,
     onPrev,
@@ -1185,7 +1186,7 @@ function SlideViewportNavigation({
   // zones). Interactive slide content keeps its tap via the hook's passthrough.
   useClickPageNavigation({
     ref: targetRef,
-    enabled: isMobile && !active && !editing,
+    enabled: isMobile && browsing && !editing,
     edgeRatio: 0.18,
     canPrev,
     canNext,
