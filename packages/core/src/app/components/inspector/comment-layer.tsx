@@ -1,6 +1,7 @@
 import { MessageSquare, Trash2 } from 'lucide-react';
 import {
   type ComponentProps,
+  type CSSProperties,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -488,7 +489,7 @@ export function CommentLayer() {
       )}
       <div className="absolute inset-x-0 bottom-3 flex justify-center">
         <IslandHint
-          contentKey={error ? 'error' : count === 0 ? 'empty' : `count:${count}`}
+          contentKey={error ? 'error' : count === 0 ? 'empty' : 'count'}
           tone={error ? 'error' : 'default'}
         >
           {error ? (
@@ -497,9 +498,7 @@ export function CommentLayer() {
             t.inspector.commentEmptyHint
           ) : (
             <>
-              <span className="font-medium text-foreground nums">
-                {format(plural(count, t.inspector.commentsCount), { count })}
-              </span>
+              <CommentCountLabel count={count} />
               <span aria-hidden className="mx-1.5">
                 ·
               </span>
@@ -517,6 +516,52 @@ export function CommentLayer() {
 }
 
 const ISLAND_SWAP_MS = 320;
+
+// Only the digits roll when the count changes; the surrounding words
+// stay put so the pill reads as a counter ticking, not a text swap.
+function CommentCountLabel({ count }: { count: number }) {
+  const t = useLocale();
+  const [prefix, suffix] = plural(count, t.inspector.commentsCount).split('{count}');
+  return (
+    <span className="font-medium text-foreground nums">
+      {prefix}
+      <RollingNumber value={count} />
+      {suffix}
+    </span>
+  );
+}
+
+function RollingNumber({ value }: { value: number }) {
+  const [outgoing, setOutgoing] = useState<number | null>(null);
+  const lastRef = useRef(value);
+  useLayoutEffect(() => {
+    const previous = lastRef.current;
+    if (previous === value) return;
+    lastRef.current = value;
+    setOutgoing(previous);
+    const timer = setTimeout(() => setOutgoing(null), ISLAND_SWAP_MS);
+    return () => clearTimeout(timer);
+  }, [value]);
+  const direction = outgoing !== null && value < outgoing ? -1 : 1;
+  return (
+    <span
+      className="inline-grid overflow-hidden align-bottom"
+      style={{ '--roll': direction } as CSSProperties}
+    >
+      {outgoing !== null && (
+        <span key={`out-${outgoing}`} aria-hidden className="roll-leave col-start-1 row-start-1">
+          {outgoing}
+        </span>
+      )}
+      <span
+        key={`in-${value}`}
+        className={cn('col-start-1 row-start-1', outgoing !== null && 'roll-arrive')}
+      >
+        {value}
+      </span>
+    </span>
+  );
+}
 
 // The pill resizes to whatever it says, Dynamic Island style: the shell
 // animates its width while the outgoing text blurs out and the new text

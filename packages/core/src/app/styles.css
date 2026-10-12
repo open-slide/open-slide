@@ -265,6 +265,30 @@
   animation: island-leave 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
+/* Counter digits roll in the direction of the change (--roll: 1 up, -1 down). */
+@keyframes roll-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--roll, 1) * 100%));
+  }
+}
+
+@keyframes roll-leave {
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--roll, 1) * -100%));
+  }
+}
+
+.roll-arrive {
+  animation: roll-arrive 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.roll-leave {
+  pointer-events: none;
+  animation: roll-leave 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .island-enter,
   .island-arrive {
@@ -273,9 +297,15 @@
     transform: none;
   }
 
-  .island-leave {
+  .island-leave,
+  .roll-leave {
     animation: none;
     opacity: 0;
+  }
+
+  .roll-arrive {
+    animation: island-arrive 160ms ease-out both;
+    transform: none;
   }
 }
 
