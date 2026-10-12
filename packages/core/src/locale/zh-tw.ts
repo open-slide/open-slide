@@ -286,7 +286,6 @@ export const zhTW: Locale = {
       '已和 dev server 斷線，agent 看不到你選的元素了。請重新啟動 dev server 來恢復連線。',
     commentMode: '留言',
     commentPlaceholder: '描述你希望代理進行的修改…',
-    commentComposerHint: '⌘↵ 送出 · Esc 取消',
     commentPost: '送出',
     unsavedChanges: {
       one: '{count} 項未儲存的變更',
@@ -302,7 +301,6 @@ export const zhTW: Locale = {
     commentsApplyHintPrefix: '在你的代理中執行 ',
     commentsApplyHintSuffix: ' 以套用這些變更。',
     commentDeleteAria: '刪除',
-    commentEditorHint: '⌘↵ 儲存 · Esc 關閉',
     commentUpdateFailed: '無法更新留言：',
     commentAddFailed: '無法新增留言：',
     commentRegionNoTarget: '找不到可以附加這個範圍的元件。',

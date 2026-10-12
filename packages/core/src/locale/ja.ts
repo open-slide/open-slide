@@ -292,7 +292,6 @@ export const ja: Locale = {
       'dev server との接続が切れたため、選択中の要素がエージェントに見えなくなっています。dev server を再起動して接続を復旧してください。',
     commentMode: 'コメント',
     commentPlaceholder: 'エージェントに依頼する変更を記述…',
-    commentComposerHint: '⌘↵ で投稿 · Esc でキャンセル',
     commentPost: '投稿',
     unsavedChanges: {
       one: '未保存の変更 {count} 件',
@@ -308,7 +307,6 @@ export const ja: Locale = {
     commentsApplyHintPrefix: 'エージェントで ',
     commentsApplyHintSuffix: ' を実行して適用してください。',
     commentDeleteAria: '削除',
-    commentEditorHint: '⌘↵ で保存 · Esc で閉じる',
     commentUpdateFailed: 'コメントを更新できませんでした：',
     commentAddFailed: 'コメントを追加できませんでした：',
     commentRegionNoTarget: 'この範囲を付けられる要素が見つかりませんでした。',

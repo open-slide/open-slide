@@ -1,4 +1,4 @@
-import { MessageSquare, Trash2 } from 'lucide-react';
+import { ArrowUp, Check, MessageSquare, Trash2 } from 'lucide-react';
 import {
   type ComponentProps,
   type CSSProperties,
@@ -11,8 +11,6 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import { useFreezeSlideMotion } from '@/lib/inspector/freeze-motion';
 import { type Point, type Rect, rectContains } from '@/lib/inspector/geometry';
@@ -483,7 +481,6 @@ export function CommentLayer() {
           region={draft.kind === 'region'}
           anchor={pinRect(layout.draftFrame)}
           bounds={bounds}
-          onCancel={() => setDraft(null)}
           onSubmit={submit}
         />
       )}
@@ -636,9 +633,15 @@ function IslandHint({
   );
 }
 
-function useMeasuredSize(fallback: Size): [RefObject<HTMLDivElement | null>, Size] {
+// `mountKey` re-attaches the observer when the measured card mounts later
+// than the hook's owner (the pin's cards only exist while open or hovered).
+function useMeasuredSize(
+  fallback: Size,
+  mountKey: unknown = null,
+): [RefObject<HTMLDivElement | null>, Size] {
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>(fallback);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mountKey only triggers re-observation
   useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
@@ -652,7 +655,7 @@ function useMeasuredSize(fallback: Size): [RefObject<HTMLDivElement | null>, Siz
     const observer = new ResizeObserver(update);
     observer.observe(node);
     return () => observer.disconnect();
-  }, []);
+  }, [mountKey]);
   return [ref, size];
 }
 
@@ -706,7 +709,10 @@ function CommentPin({
 }) {
   const t = useLocale();
   const lit = open || hovered;
-  const [cardRef, cardSize] = useMeasuredSize({ width: 272, height: 120 });
+  const [cardRef, cardSize] = useMeasuredSize(
+    { width: 288, height: 120 },
+    open ? 'editor' : hovered ? 'preview' : null,
+  );
   const card = placeBeside(anchor, cardSize, bounds);
   const meta = `${format(t.inspector.commentLineLabel, { n: comment.line })}${
     region ? ` · ${t.inspector.commentRegionLabel}` : ''
@@ -750,7 +756,7 @@ function CommentPin({
           <div
             ref={cardRef}
             data-comment-preview
-            className="pointer-events-none absolute w-68 rounded-[8px] border bg-card text-[12px] shadow-overlay"
+            className="island-arrive pointer-events-none absolute w-72 origin-top-left rounded-[10px] border border-border/80 bg-card text-[12.5px] shadow-overlay"
             style={card}
           >
             <div className="truncate px-3 pt-2 font-mono text-[10px] text-muted-foreground">
@@ -805,48 +811,32 @@ function CommentEditor({
   };
 
   return (
-    <div
-      ref={cardRef}
-      data-comment-editor
-      className="pointer-events-auto absolute w-72 rounded-[8px] border bg-card p-2 shadow-overlay"
-      style={style}
-    >
-      <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
+    <CommentCard ref={cardRef} style={style} data-comment-editor>
+      <div className="flex h-8 items-center justify-between gap-2 pr-1.5 pl-3">
         <span className="truncate font-mono text-[10px] text-muted-foreground">{meta}</span>
         <button
           type="button"
           onClick={onRemove}
           disabled={saving}
-          className="-mr-1 shrink-0 rounded-[5px] p-1 text-muted-foreground transition-[color,background-color,scale] duration-150 hover:bg-muted hover:text-destructive active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="flex size-6 shrink-0 items-center justify-center rounded-[5px] text-muted-foreground transition-[color,background-color,scale] duration-150 hover:bg-muted hover:text-destructive active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           aria-label={t.inspector.commentDeleteAria}
           title={t.inspector.commentDeleteAria}
         >
           <Trash2 className="size-3.5" />
         </button>
       </div>
-      <Textarea
+      <CommentTextarea
         ref={textareaRef}
         value={text}
         disabled={saving}
         onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing) return;
-          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault();
-            save();
-          }
-        }}
-        className="min-h-14 resize-none text-[12px]"
+        onSubmit={save}
+        className="pt-0"
       />
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="truncate font-mono text-[10.5px] text-muted-foreground/70">
-          {t.inspector.commentEditorHint}
-        </span>
-        <Button size="sm" variant="brand" onClick={save} disabled={saving || !dirty}>
-          {t.common.save}
-        </Button>
-      </div>
-    </div>
+      <CommentCardFooter>
+        <SendButton icon={Check} label={t.common.save} onClick={save} disabled={saving || !dirty} />
+      </CommentCardFooter>
+    </CommentCard>
   );
 }
 
@@ -855,21 +845,19 @@ function Composer({
   region,
   anchor,
   bounds,
-  onCancel,
   onSubmit,
 }: {
   frame: ScreenRect;
   region: boolean;
   anchor: ScreenRect;
   bounds: Size;
-  onCancel: () => void;
   onSubmit: (text: string) => Promise<void>;
 }) {
   const t = useLocale();
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [cardRef, cardSize] = useMeasuredSize({ width: 288, height: 128 });
+  const [cardRef, cardSize] = useMeasuredSize({ width: 288, height: 112 });
   const card = placeBeside(anchor, cardSize, bounds);
 
   useEffect(() => {
@@ -893,40 +881,111 @@ function Composer({
       <Pin anchor={anchor} lit aria-hidden tabIndex={-1}>
         <MessageSquare className="size-3" />
       </Pin>
-      <div
-        ref={cardRef}
-        className="pointer-events-auto absolute w-72 rounded-[8px] border bg-card p-2 shadow-overlay"
-        style={card}
-      >
-        <Textarea
+      <CommentCard ref={cardRef} style={card} data-comment-composer>
+        <CommentTextarea
           ref={textareaRef}
           value={text}
           disabled={submitting}
           onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.nativeEvent.isComposing) return;
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              post();
-            }
-          }}
+          onSubmit={post}
           placeholder={t.inspector.commentPlaceholder}
-          className="min-h-14 resize-none text-[12px]"
         />
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="truncate font-mono text-[10.5px] text-muted-foreground/70">
-            {t.inspector.commentComposerHint}
-          </span>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button size="sm" variant="ghost" onClick={onCancel} disabled={submitting}>
-              {t.common.cancel}
-            </Button>
-            <Button size="sm" variant="brand" onClick={post} disabled={submitting || !text.trim()}>
-              {t.inspector.commentPost}
-            </Button>
-          </div>
-        </div>
-      </div>
+        <CommentCardFooter>
+          <SendButton
+            icon={ArrowUp}
+            label={t.inspector.commentPost}
+            onClick={post}
+            disabled={submitting || !text.trim()}
+          />
+        </CommentCardFooter>
+      </CommentCard>
     </>
+  );
+}
+
+// One quiet surface: the text sits directly on the card instead of inside
+// a second framed box, and the only strong element is the send button.
+function CommentCard({
+  className,
+  ...props
+}: ComponentProps<'div'> & { ref: RefObject<HTMLDivElement | null> }) {
+  return (
+    <div
+      {...props}
+      className={cn(
+        'island-arrive pointer-events-auto absolute w-72 origin-top-left rounded-[10px] border border-border/80 bg-card shadow-overlay',
+        className,
+      )}
+    />
+  );
+}
+
+function CommentTextarea({
+  onSubmit,
+  className,
+  ...props
+}: Omit<ComponentProps<'textarea'>, 'onSubmit'> & {
+  ref: RefObject<HTMLTextAreaElement | null>;
+  onSubmit: () => void;
+}) {
+  return (
+    <textarea
+      rows={2}
+      {...props}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          onSubmit();
+        }
+      }}
+      className={cn(
+        'field-sizing-content block max-h-40 min-h-[3.25rem] w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-[12.5px] leading-[1.5] text-foreground outline-none',
+        'placeholder:text-muted-foreground/60 disabled:opacity-60',
+        className,
+      )}
+    />
+  );
+}
+
+function CommentCardFooter({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2 px-2 pt-0.5 pb-2 pl-3">
+      <kbd className="rounded-[4px] border border-border/70 bg-muted/60 px-1.5 py-0.5 font-mono text-[9.5px] tracking-[0.04em] text-muted-foreground">
+        ⌘↵
+      </kbd>
+      {children}
+    </div>
+  );
+}
+
+function SendButton({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: typeof ArrowUp;
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={cn(
+        'flex size-7 shrink-0 items-center justify-center rounded-full transition-[background-color,color,scale,opacity] duration-150 ease-swift',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+        disabled
+          ? 'bg-muted text-muted-foreground/50'
+          : 'bg-brand text-brand-foreground shadow-[inset_0_1px_0_oklch(1_0_0/0.18),0_1px_0_oklch(0_0_0/0.16)] hover:brightness-105 active:scale-90',
+      )}
+    >
+      <Icon className="size-3.5" strokeWidth={2.5} />
+    </button>
   );
 }

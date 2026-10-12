@@ -289,7 +289,6 @@ export const en: Locale = {
     cropApply: 'Apply',
     commentMode: 'Comment',
     commentPlaceholder: 'Describe a change for the agent…',
-    commentComposerHint: '⌘↵ to post · Esc to cancel',
     commentPost: 'Post',
     unsavedChanges: {
       one: '{count} unsaved change',
@@ -305,7 +304,6 @@ export const en: Locale = {
     commentsApplyHintPrefix: 'Run ',
     commentsApplyHintSuffix: ' in your agent to apply these.',
     commentDeleteAria: 'Delete',
-    commentEditorHint: '⌘↵ to save · Esc to close',
     commentUpdateFailed: "Couldn't update comment:",
     commentAddFailed: "Couldn't add comment:",
     commentRegionNoTarget: "Couldn't find an element to attach this region to.",

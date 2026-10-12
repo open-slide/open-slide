@@ -286,7 +286,6 @@ export const zhCN: Locale = {
       '已和 dev server 断开连接，agent 看不到你选的元素了。请重新启动 dev server 来恢复连接。',
     commentMode: '评论',
     commentPlaceholder: '描述你希望代理执行的更改…',
-    commentComposerHint: '⌘↵ 发送 · Esc 取消',
     commentPost: '发送',
     unsavedChanges: {
       one: '{count} 项未保存的更改',
@@ -302,7 +301,6 @@ export const zhCN: Locale = {
     commentsApplyHintPrefix: '在你的代理中运行 ',
     commentsApplyHintSuffix: ' 以应用这些更改。',
     commentDeleteAria: '删除',
-    commentEditorHint: '⌘↵ 保存 · Esc 关闭',
     commentUpdateFailed: '无法更新评论：',
     commentAddFailed: '无法添加评论：',
     commentRegionNoTarget: '找不到可以附加该区域的元素。',

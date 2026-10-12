@@ -289,7 +289,6 @@ export type Locale = {
     cropApply: string;
     commentMode: string;
     commentPlaceholder: string;
-    commentComposerHint: string;
     commentPost: string;
     /** templates: "{count} unsaved change" / "{count} unsaved changes" */
     unsavedChanges: Plural;
@@ -302,7 +301,6 @@ export type Locale = {
     commentsApplyHintPrefix: string;
     commentsApplyHintSuffix: string;
     commentDeleteAria: string;
-    commentEditorHint: string;
     /** Prefix for the toast shown when a comment edit fails to write to disk. */
     commentUpdateFailed: string;
     /** Prefix for the toast shown when a comment fails to write to disk. */

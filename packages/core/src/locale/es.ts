@@ -294,7 +294,6 @@ export const es: Locale = {
     cropApply: 'Aplicar',
     commentMode: 'Comentar',
     commentPlaceholder: 'Describe un cambio para el agente…',
-    commentComposerHint: '⌘↵ para publicar · Esc para cancelar',
     commentPost: 'Publicar',
     unsavedChanges: {
       one: '{count} cambio sin guardar',
@@ -310,7 +309,6 @@ export const es: Locale = {
     commentsApplyHintPrefix: 'Ejecuta ',
     commentsApplyHintSuffix: ' en tu agente para aplicarlos.',
     commentDeleteAria: 'Eliminar',
-    commentEditorHint: '⌘↵ para guardar · Esc para cerrar',
     commentUpdateFailed: 'No se pudo actualizar el comentario:',
     commentAddFailed: 'No se pudo añadir el comentario:',
     commentRegionNoTarget: 'No se encontró un elemento al que asociar esta zona.',
