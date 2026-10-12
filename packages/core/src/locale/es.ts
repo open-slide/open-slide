@@ -212,6 +212,17 @@ export const es: Locale = {
     elementImage: 'Imagen',
     elementShape: 'Forma',
     sourceSection: 'Código',
+    copySourceLocation: 'Copiar ubicación en el código',
+    copyForAgent: 'Copiar para el agente',
+    sourceLocationCopied: 'Ubicación en el código copiada',
+    agentSnippetCopied: 'Ubicación y elemento copiados para tu agente',
+    clipboardFailed: 'No se pudo copiar al portapapeles',
+    sourceLocationMore: '+{count}',
+    untracedTitle: 'No está en el código de esta diapositiva',
+    untracedHint:
+      'Este <{tag}> viene del diseño o de un componente importado, no de {file}. Elige un elemento escrito en ese archivo.',
+    sharedInstancesHint:
+      'Se renderiza {count} veces desde esta línea. Los cambios de estilo afectan a todas las copias.',
     rotateHandle: 'Rotar elemento',
     resizeHandle: 'Redimensionar {handle}',
     arrangeSection: 'Organizar',
