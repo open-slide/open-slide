@@ -183,6 +183,7 @@ const Stage = ({ bg, children }: { bg: string; children: ReactNode }) => (
       WebkitFontSmoothing: 'antialiased',
     }}
   >
+    {/* @slide-comment id="c-7b5fef2a" ts="2026-10-12T15:21:36.369Z" text="eyJub3RlIjoidGVzdCIsInJlY3QiOnsieCI6MjY5LCJ5IjoxNjIsInciOjc5MywiaCI6NDg4fSwicGFnZSI6MH0" */}
     {children}
   </div>
 );

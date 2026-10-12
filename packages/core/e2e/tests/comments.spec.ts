@@ -1,3 +1,4 @@
+import { writeFile } from 'node:fs/promises';
 import { type APIRequestContext, expect, type Page, test } from '@playwright/test';
 import {
   deleteSlide,
@@ -5,6 +6,7 @@ import {
   editorCanvas,
   openSlide,
   readSlideSource,
+  slideSourcePath,
 } from './helpers.ts';
 
 const MARKER_RE =
@@ -100,5 +102,49 @@ test.describe('comment mode', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-comment-layer]')).toHaveCount(0);
     await expect(page.locator('[data-inspector-ready]')).toBeVisible();
+  });
+
+  test('region comments stay on the page they were left on', async ({ page, request }) => {
+    createdSlides.push('cm-pages');
+    await duplicateSlide(request, 'edit-target', 'cm-pages');
+    await writeFile(
+      slideSourcePath('cm-pages'),
+      `import type { Page, SlideMeta } from '@open-slide/core';
+export const meta: SlideMeta = { title: 'Paged', createdAt: '2026-01-01T00:00:00.000Z' };
+const Frame = ({ title }: { title: string }) => (
+  <div style={{ width: '100%', height: '100%', background: '#14213d', color: 'white', padding: 120 }}>
+    <h1 style={{ fontSize: 96, margin: 0 }}>{title}</h1>
+  </div>
+);
+const One: Page = () => <Frame title="First page" />;
+const Two: Page = () => <Frame title="Second page" />;
+export default [One, Two] satisfies Page[];
+`,
+    );
+    await openSlide(page, 'cm-pages');
+    await page.waitForLoadState('networkidle');
+    await expect(editorCanvas(page).getByText('First page')).toBeVisible();
+    await page.locator('[data-inspector-mode="comment"]').click();
+
+    const canvas = await editorCanvas(page).locator('[data-osd-canvas]').boundingBox();
+    if (!canvas) throw new Error('canvas not laid out');
+    await page.mouse.move(canvas.x + canvas.width * 0.2, canvas.y + canvas.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(canvas.x + canvas.width * 0.6, canvas.y + canvas.height * 0.8, {
+      steps: 8,
+    });
+    await page.mouse.up();
+    await page.getByPlaceholder('Describe a change for the agent…').fill('Only here');
+    await page.getByRole('button', { name: 'Post', exact: true }).click();
+    const pin = page.getByRole('button', { name: 'Comment 1', exact: true });
+    await expect(pin).toBeVisible();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(editorCanvas(page).getByText('Second page')).toBeVisible();
+    await expect(pin).toHaveCount(0);
+
+    await page.keyboard.press('ArrowLeft');
+    await expect(editorCanvas(page).getByText('First page')).toBeVisible();
+    await expect(pin).toBeVisible();
   });
 });

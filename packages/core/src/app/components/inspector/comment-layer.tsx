@@ -172,6 +172,9 @@ export function CommentLayer() {
       const pins: Record<string, PinLayout> = {};
       const previous = lastPinsRef.current;
       for (const comment of comments) {
+        // Pages often share a wrapper component, so the target loc alone
+        // would match on every page; the stored page index decides.
+        if (comment.page !== undefined && comment.page !== pageIndex) continue;
         const anchor = comment.target
           ? canvas.root.querySelector<HTMLElement>(
               `[data-slide-loc="${comment.target.line}:${comment.target.column}"]`,
