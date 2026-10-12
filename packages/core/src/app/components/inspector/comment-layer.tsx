@@ -21,7 +21,7 @@ import {
 } from '@/lib/inspector/pick-target';
 import type { CommentRect, SlideComment } from '@/lib/inspector/use-comments';
 import { type Canvas, readCanvas, readFrame } from '@/lib/inspector/visual-dom';
-import { isTypingTarget } from '@/lib/keys';
+import { IS_APPLE, isTypingTarget } from '@/lib/keys';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import { type SelectedTarget, useInspector } from './inspector-provider';
@@ -513,6 +513,7 @@ export function CommentLayer() {
 }
 
 const ISLAND_SWAP_MS = 320;
+const SUBMIT_SHORTCUT = IS_APPLE ? '⌘↵' : 'Ctrl ↵';
 
 // Only the digits roll when the count changes; the surrounding words
 // stay put so the pill reads as a counter ticking, not a text swap.
@@ -952,7 +953,7 @@ function CommentCardFooter({ children }: { children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2 px-2 pt-0.5 pb-2 pl-3">
       <kbd className="rounded-[4px] border border-border/70 bg-muted/60 px-1.5 py-0.5 font-mono text-[9.5px] tracking-[0.04em] text-muted-foreground">
-        ⌘↵
+        {SUBMIT_SHORTCUT}
       </kbd>
       {children}
     </div>

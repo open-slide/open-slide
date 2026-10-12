@@ -27,7 +27,7 @@ import { type Edit, type EditOp, useEditor } from '@/lib/inspector/use-editor';
 import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-editor';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
-import { useLocale } from '@/lib/use-locale';
+import { format, plural, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { ImageCropDialog, type ImageCropRect } from './image-crop-dialog';
@@ -1618,6 +1618,11 @@ export function InspectModeSwitcher() {
     0,
     items.findIndex((item) => item.value === mode),
   );
+  const pending = comments.length;
+  const accessibleName = (item: (typeof items)[number]) =>
+    item.value === 'comment' && pending > 0
+      ? `${item.label} · ${format(plural(pending, t.inspector.commentsCount), { count: pending })}`
+      : item.label;
   return (
     <ToggleGroup
       size="sm"
@@ -1638,7 +1643,7 @@ export function InspectModeSwitcher() {
             render={
               <ToggleGroupItem
                 value={item.value}
-                aria-label={item.label}
+                aria-label={accessibleName(item)}
                 data-inspector-mode={item.value}
                 onClick={(event) => {
                   if (event.detail > 0) event.currentTarget.blur();
@@ -1648,12 +1653,12 @@ export function InspectModeSwitcher() {
             }
           >
             {item.icon}
-            {item.value === 'comment' && comments.length > 0 && (
+            {item.value === 'comment' && pending > 0 && (
               <span
                 aria-hidden
                 className="pointer-events-none absolute -top-1.5 -right-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-brand px-1 font-mono text-[9px] font-semibold leading-none text-brand-foreground nums"
               >
-                {comments.length > 99 ? '99+' : comments.length}
+                {pending > 99 ? '99+' : pending}
               </span>
             )}
           </TooltipTrigger>
