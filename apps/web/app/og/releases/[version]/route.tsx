@@ -8,6 +8,10 @@ import { appName } from '@/lib/shared';
 
 export const revalidate = 86400;
 
+export async function generateStaticParams() {
+  return (await getCoreReleases()).map((r) => ({ version: r.version }));
+}
+
 const NIGHT = '#0B0B0C';
 const INK = '#F4F4F5';
 const MUTED = '#8A8A8F';
