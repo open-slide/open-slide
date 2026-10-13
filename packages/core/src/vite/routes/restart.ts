@@ -11,7 +11,7 @@ import { json } from './context.ts';
 //   Exits with RESTART_EXIT_CODE so the CLI supervisor respawns the server
 //   against the currently installed @open-slide/core.
 
-const executionId = randomUUID();
+export const executionId = randomUUID();
 
 export function registerRestartRoutes(server: ViteDevServer): void {
   server.middlewares.use('/__server-status', (req, res, next) => {

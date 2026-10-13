@@ -57,11 +57,6 @@ export type Locale = {
     menu: string;
     newFolder: string;
     folderName: string;
-    updateAvailable: string;
-    updatePackage: string;
-    updatingPackage: string;
-    updatePackageDone: string;
-    updatePackageFailed: string;
     restartServer: string;
     restartingServer: string;
     restartServerFailed: string;
@@ -524,6 +519,31 @@ export type Locale = {
     processing: string;
     generating: string;
     done: string;
+  };
+
+  update: {
+    available: string;
+    cardFallbackTitle: string;
+    updateNow: string;
+    whatsNew: string;
+    dismiss: string;
+    later: string;
+    gotIt: string;
+    whatsNewIn: string;
+    updatedTo: string;
+    features: string;
+    fixes: string;
+    breaking: string;
+    stepInstall: string;
+    stepSync: string;
+    stepRestart: string;
+    keepTabOpen: string;
+    restartToFinish: string;
+    failed: string;
+    restartFailed: string;
+    notesUnavailable: string;
+    fullChangelog: string;
+    commandUpdate: string;
   };
 
   commandMenu: {

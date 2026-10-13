@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { notFound } from 'next/navigation';
 import { ImageResponse } from 'next/og';
+import { loadGoogleFont } from '@/lib/og-fonts';
 import { appName } from '@/lib/shared';
 import { getPageImage, source } from '@/lib/source';
 
@@ -14,18 +15,6 @@ const INK_SOFT = '#3A3A3A';
 const MUTED = '#636363';
 const RULE = '#E4E4E4';
 const ACCENT = '#DE3B3D';
-
-async function loadGoogleFont(family: string, weight: number, italic = false) {
-  const ital = italic ? 'ital,' : '';
-  const axis = italic ? `${ital}wght@1,${weight}` : `wght@${weight}`;
-  const css = await fetch(
-    `https://fonts.googleapis.com/css2?family=${family.replace(/ /g, '+')}:${axis}&display=swap`,
-    { headers: { 'User-Agent': 'Mozilla/5.0 (Open-Slide OG)' } },
-  ).then((r) => r.text());
-  const url = css.match(/src:\s*url\((https:[^)]+)\)\s*format/)?.[1];
-  if (!url) throw new Error(`Could not resolve font: ${family} ${weight}`);
-  return fetch(url).then((r) => r.arrayBuffer());
-}
 
 export async function GET(_req: Request, { params }: RouteContext<'/og/docs/[...slug]'>) {
   const { slug } = await params;

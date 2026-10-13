@@ -2,7 +2,7 @@ import { Fragment, type ReactNode, useMemo } from 'react';
 import { type NoteBlock, type NoteInline, parseNoteMarkdown } from '@/lib/note-markdown';
 import { cn } from '@/lib/utils';
 
-function renderInline(nodes: NoteInline[]): ReactNode {
+export function renderInline(nodes: NoteInline[]): ReactNode {
   return nodes.map((node, i) => {
     switch (node.type) {
       case 'text':
