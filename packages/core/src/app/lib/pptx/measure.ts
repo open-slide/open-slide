@@ -83,16 +83,25 @@ type Measured = {
   clip: Rect | null;
 };
 
+/** Only schemes PowerPoint should open from an exported deck. */
+export function isExportableHyperlink(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:';
+  } catch {
+    return false;
+  }
+}
+
 /** Absolute http(s)/mailto URL from the nearest wrapping `<a href>`, else null. */
 function resolveHref(el: Element): string | null {
   const anchor = el.closest('a[href]');
   if (!(anchor instanceof HTMLAnchorElement)) return null;
   const raw = anchor.getAttribute('href')?.trim() ?? '';
-  if (!raw || raw === '#' || /^javascript:/i.test(raw)) return null;
-  const abs = anchor.href;
-  if (!abs || /^javascript:/i.test(abs)) return null;
   // Hash-only links resolve to the current page URL + hash — skip those.
-  if (raw.startsWith('#')) return null;
+  if (!raw || raw.startsWith('#')) return null;
+  const abs = anchor.href;
+  if (!abs || !isExportableHyperlink(abs)) return null;
   return abs;
 }
 
