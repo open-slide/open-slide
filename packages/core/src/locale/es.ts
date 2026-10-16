@@ -240,6 +240,19 @@ export const es: Locale = {
     sendBackward: 'Enviar atrás',
     sendToBack: 'Enviar al fondo',
     smartGuides: 'Guías inteligentes',
+    resetPosition: 'Restablecer',
+    resetPositionAria: 'Restablecer posición',
+    resetOptions: 'Opciones de restablecimiento',
+    resetPositionOnly: 'Restablecer posición y rotación',
+    resetAll: 'Restablecer posición, tamaño y capa',
+    resetHint:
+      'Lo devuelve a su posición en el código fuente y quita la rotación. Alt+clic también restablece el tamaño y la capa.',
+    resetAllOnly:
+      'No hay movimiento ni rotación que restablecer. Usa el menú para restablecer el tamaño y la capa.',
+    resetNothing:
+      'Nada que restablecer: el editor no ha aplicado movimiento, rotación, tamaño ni capa.',
+    resetKeptPosition:
+      'Se mantuvo position: relative porque hay elementos anidados posicionados respecto a él.',
     selectParent: 'Seleccionar contenedor',
     visualEditorHint:
       'Mayús+clic para seleccionar más. ⌘A selecciona todo. Las flechas mueven 1 px; con Mayús, 10 px. Alt ignora las guías. Mayús restringe el arrastre o mantiene las proporciones.',
