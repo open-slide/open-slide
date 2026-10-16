@@ -1,5 +1,11 @@
 # @open-slide/core
 
+## 2.2.1
+
+### Patch Changes
+
+- [#559](https://github.com/open-slide/open-slide/pull/559) [`4081bf9`](https://github.com/open-slide/open-slide/commit/4081bf973db1c4b81b2772fafa66f93004c98bde) Thanks [@1weiho](https://github.com/1weiho)! - Keep letterbox bars black in present mode when the screen isn't 16:9.
+
 ## 2.2.0
 
 ### Minor Changes
