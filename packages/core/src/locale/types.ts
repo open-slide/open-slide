@@ -459,6 +459,11 @@ export type Locale = {
     pages: string;
     /** template: "Go to page {n}" */
     goToPageAria: string;
+    addPage: string;
+    addPageAfter: string;
+    /** template: "Added page {n}" */
+    toastAdded: string;
+    toastAddFailed: string;
     duplicatePage: string;
     deletePage: string;
     /** template: "Page {n} actions" */
