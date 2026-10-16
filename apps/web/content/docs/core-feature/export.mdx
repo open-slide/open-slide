@@ -21,11 +21,29 @@ GitHub Pages — anything that hosts files.
 The **Export** menu in the slide toolbar exports the active deck directly:
 
 - **HTML** — a static HTML snapshot of the deck. Decks that reference
-  assets download as a zip (HTML file + assets folder).
+  assets download as a zip (HTML file + assets folder). CSS entrance animations
+  and `SlideTransition` enter/exit transitions replay when navigating pages;
+  `<Steps>` content still reveals one step at a time with the arrow keys.
 - **PDF** — one 1920 × 1080 landscape PDF page per deck page. Not supported
   in Safari.
 - **PPTX (images)** — each page rendered as an image on a PowerPoint slide.
   Native editable PPTX export is not available yet.
+
+HTML snapshots keep `useIsActivePage()` false by default, preserving the deck's
+static content. Page transitions respect reduced-motion preferences, and the
+deck's CSS media queries still apply.
+
+For CSS entrances gated by `useIsActivePage()`, opt in in the deck module:
+
+```tsx
+export const htmlExport = { activePage: true };
+```
+
+This captures the active-page markup. Use it only when the deck's active state
+is safe to snapshot: React effects can freeze animated numbers or other content
+at an intermediate value. Export and check the downloaded file after enabling
+it. React event handlers, state-driven interactions, and shared-element morphs
+require the full `open-slide build` runtime.
 
 ## What gets shipped
 
