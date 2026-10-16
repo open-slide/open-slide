@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Loader2, Upload } from 'lucide-react';
+import { ArrowDownToLine, ClipboardPaste, Loader2, Upload } from 'lucide-react';
 import { useCallback, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -10,6 +10,13 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type AssetEntry, GLOBAL_ASSET_SCOPE, uploadWithAutoRename, useAssets } from '@/lib/assets';
+import {
+  canReadSystemClipboard,
+  namePastedImages,
+  PASTE_SHORTCUT,
+  readImagesFromSystemClipboard,
+  usePasteImages,
+} from '@/lib/clipboard-images';
 import { dragHasFiles } from '@/lib/dom';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
@@ -27,12 +34,14 @@ export function AssetPickerDialog({
 }) {
   const [scope, setScope] = useState<PickerScope>('slide');
   const effectiveSlideId = scope === 'global' ? GLOBAL_ASSET_SCOPE : slideId;
-  const { assets, loading, refresh } = useAssets(effectiveSlideId);
+  const { assets, available, loading, refresh } = useAssets(effectiveSlideId);
   const images = assets.filter((a) => a.mime.startsWith('image/'));
   const t = useLocale();
   const path = scope === 'global' ? 'assets/' : `slides/${slideId}/assets/`;
   const [descPrefix, descSuffix] = t.inspector.replaceImageDescription.split('{path}');
+  const [pasteHintPrefix, pasteHintSuffix] = t.asset.pasteHint.split('{shortcut}');
   const [uploading, setUploading] = useState(false);
+  const [pasting, setPasting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const dragDepth = useRef(0);
   const inputId = useId();
@@ -56,6 +65,38 @@ export function AssetPickerDialog({
     [effectiveSlideId, scope, refresh, onPick, t],
   );
 
+  const handlePastedImages = useCallback(
+    (files: File[]) => {
+      const [file] = namePastedImages(
+        files,
+        assets.map((a) => a.name),
+      );
+      if (file) handleFile(file).catch(() => {});
+    },
+    [assets, handleFile],
+  );
+
+  // Outranks the assets panel that may be mounted behind this modal.
+  usePasteImages(available && !uploading, handlePastedImages, 1);
+
+  const pasteFromClipboard = useCallback(async () => {
+    setPasting(true);
+    try {
+      const files = await readImagesFromSystemClipboard();
+      if (files.length === 0) {
+        toast.error(t.asset.toastPasteNoImage);
+        return;
+      }
+      handlePastedImages(files);
+    } catch {
+      toast.error(t.asset.toastPasteFailed);
+    } finally {
+      setPasting(false);
+    }
+  }, [handlePastedImages, t]);
+
+  const busy = uploading || pasting;
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-xl">
@@ -73,21 +114,45 @@ export function AssetPickerDialog({
             <TabsTrigger value="global">{t.asset.scopeGlobal}</TabsTrigger>
           </TabsList>
         </Tabs>
-        <label
-          htmlFor={inputId}
-          className={cn(
-            'absolute right-12 top-3.5 inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[5px] border border-border bg-card px-2 text-[12px] font-medium transition-colors',
-            'hover:bg-muted/60 hover:border-foreground/20 active:translate-y-px',
-            uploading && 'pointer-events-none opacity-60',
-          )}
-        >
-          {uploading ? (
-            <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />
-          ) : (
-            <Upload className="size-3.5" />
-          )}
-          <span>{t.asset.upload}</span>
-        </label>
+        <div className="absolute right-12 top-3.5 flex items-center gap-1.5">
+          {canReadSystemClipboard() ? (
+            <button
+              type="button"
+              onClick={() => {
+                pasteFromClipboard().catch(() => {});
+              }}
+              disabled={busy}
+              title={format(t.asset.pasteHint, { shortcut: PASTE_SHORTCUT })}
+              className={cn(
+                'inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[5px] border border-border bg-card px-2 text-[12px] font-medium transition-colors',
+                'hover:bg-muted/60 hover:border-foreground/20 active:translate-y-px',
+                busy && 'pointer-events-none opacity-60',
+              )}
+            >
+              {pasting ? (
+                <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <ClipboardPaste className="size-3.5" />
+              )}
+              <span>{t.asset.pasteImage}</span>
+            </button>
+          ) : null}
+          <label
+            htmlFor={inputId}
+            className={cn(
+              'inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[5px] border border-border bg-card px-2 text-[12px] font-medium transition-colors',
+              'hover:bg-muted/60 hover:border-foreground/20 active:translate-y-px',
+              busy && 'pointer-events-none opacity-60',
+            )}
+          >
+            {uploading ? (
+              <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />
+            ) : (
+              <Upload className="size-3.5" />
+            )}
+            <span>{t.asset.upload}</span>
+          </label>
+        </div>
         <input
           id={inputId}
           type="file"
@@ -132,9 +197,14 @@ export function AssetPickerDialog({
               {t.inspector.pickerLoading}
             </p>
           ) : images.length === 0 ? (
-            <p className="px-1 py-6 text-center text-xs text-muted-foreground">
-              {t.inspector.pickerEmpty}
-            </p>
+            <div className="px-1 py-6 text-center text-xs text-muted-foreground">
+              <p>{t.inspector.pickerEmpty}</p>
+              <p className="mt-1.5">
+                {pasteHintPrefix}
+                <span className="font-mono text-foreground">{PASTE_SHORTCUT}</span>
+                {pasteHintSuffix}
+              </p>
+            </div>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
               {images.map((asset) => (
