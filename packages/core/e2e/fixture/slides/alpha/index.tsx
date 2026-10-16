@@ -38,4 +38,6 @@ const Three: Page = () => (
 
 export const notes: (string | undefined)[] = ['Alpha speaker note', undefined, 'Alpha final note'];
 
+export const durations: (number | undefined)[] = [1, undefined, 3600];
+
 export default [One, Two, Three] satisfies Page[];

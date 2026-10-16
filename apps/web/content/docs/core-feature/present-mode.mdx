@@ -24,6 +24,10 @@ presenter view in a second window:
 - **Next slide** preview.
 - **Speaker notes** for the current page.
 - **Timer** — elapsed time since you entered present mode.
+- **Slide time** — how long you've spent on the current page, measured
+  against its budget when the deck sets one.
+- **Schedule** — whether you're ahead of or behind the plan overall, when
+  the deck sets budgets.
 
 Keep it on the laptop screen while the deck mirrors to the projector.
 
@@ -39,3 +43,31 @@ export const notes = [
   'Pause here for questions. The chart is a hand-off.',
 ];
 ```
+
+## Time budget
+
+Plan how long each page should take and let the presenter view keep score.
+Export `durations` — seconds per page, index-aligned like `notes`:
+
+```tsx
+export const durations = [
+  30, // cover
+  undefined, // no budget for this page
+  120,
+];
+```
+
+The presenter view shows a per-page timer with a progress bar. When a page
+runs past its budget the bar and readout turn red, the current-slide frame
+gets a red border, and an overrun badge counts how far over you are.
+
+The clock for a page pauses when you leave it and resumes when you come
+back, so stepping backward to revisit a slide doesn't restart its budget.
+
+The top bar also shows an overall schedule readout — **Ahead by 00:40**,
+**Behind by 01:20**, or **On schedule**. It compares the budgets of the pages
+you've finished against the time you actually spent, so overrunning one page
+and making it up on the next nets out. Pages without a budget don't count.
+
+**Reset** in the presenter view restarts the elapsed clock and every page
+timer on both windows — handy between rehearsal runs.

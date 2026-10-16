@@ -157,6 +157,14 @@ export type Locale = {
     resetTimer: string;
     currentTime: string;
     elapsed: string;
+    slideTime: string;
+    /** template: "Over budget by {time}" */
+    overBudget: string;
+    /** template: "Ahead by {time}" */
+    ahead: string;
+    /** template: "Behind by {time}" */
+    behind: string;
+    onSchedule: string;
     jump: string;
     /** template: "Loading {slideId}…" */
     loadingSlide: string;

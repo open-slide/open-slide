@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cn, pad2, round2 } from './utils.ts';
+import { cn, formatClock, pad2, round2 } from './utils.ts';
 
 describe('cn', () => {
   it('joins multiple class names', () => {
@@ -45,5 +45,22 @@ describe('round2', () => {
 
   it('leaves whole numbers alone', () => {
     expect(round2(42)).toBe(42);
+  });
+});
+
+describe('formatClock', () => {
+  it('formats minutes and seconds', () => {
+    expect(formatClock(0)).toBe('00:00');
+    expect(formatClock(65)).toBe('01:05');
+    expect(formatClock(3599)).toBe('59:59');
+  });
+
+  it('adds an hour digit past sixty minutes', () => {
+    expect(formatClock(3600)).toBe('1:00:00');
+    expect(formatClock(3661.9)).toBe('1:01:01');
+  });
+
+  it('clamps negatives to zero', () => {
+    expect(formatClock(-5)).toBe('00:00');
   });
 });

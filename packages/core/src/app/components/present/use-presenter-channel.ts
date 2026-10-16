@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PageTimes } from './page-timer';
 
 export type PresenterState = {
   index: number;
@@ -7,6 +8,7 @@ export type PresenterState = {
   startedAt: number; // epoch ms when present mode began
   stepIndex: number;
   stepCount: number;
+  pageTimes: PageTimes;
 };
 
 export type PresenterCommand =
@@ -16,6 +18,7 @@ export type PresenterCommand =
   | { type: 'prev' }
   | { type: 'request-state' }
   | { type: 'toggle-blackout'; mode: 'black' | 'white' }
+  | { type: 'reset-timer' }
   | { type: 'switch-slide'; slideId: string };
 
 type Handler = (msg: PresenterCommand) => void;
