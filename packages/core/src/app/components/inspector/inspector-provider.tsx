@@ -412,6 +412,7 @@ type InspectorCtx = {
   // close) is what actually writes to disk; `cancelEdits` reverts.
   bufferOps: (line: number, column: number, anchor: HTMLElement, ops: EditOp[]) => void;
   pendingCount: number;
+  pendingStyleValue: (line: number, column: number, key: string) => string | null | undefined;
   commitEdits: () => Promise<void>;
   cancelEdits: () => void;
   committing: boolean;
@@ -954,6 +955,12 @@ export function InspectorProvider({
     bufferBatch,
   });
 
+  const pendingStyleValue = useCallback(
+    (line: number, column: number, key: string) =>
+      pendingRef.current.get(`${line}:${column}`)?.styleOps.get(key)?.value,
+    [],
+  );
+
   const commitEdits = useCallback(async () => {
     const buckets = pendingRef.current;
     if (buckets.size === 0) return;
@@ -1428,6 +1435,7 @@ export function InspectorProvider({
       applyEdit,
       bufferOps,
       pendingCount,
+      pendingStyleValue,
       commitEdits,
       cancelEdits,
       committing,
@@ -1468,6 +1476,7 @@ export function InspectorProvider({
       applyEdit,
       bufferOps,
       pendingCount,
+      pendingStyleValue,
       commitEdits,
       cancelEdits,
       committing,
