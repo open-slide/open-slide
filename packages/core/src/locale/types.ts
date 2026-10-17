@@ -575,4 +575,82 @@ export type Locale = {
     expandPromptAria: string;
     collapsePromptAria: string;
   };
+
+  agent: {
+    title: string;
+    open: string;
+    openTitle: string;
+    close: string;
+    newSession: string;
+    sessions: string;
+    noSessions: string;
+    deleteSession: string;
+    switchProvider: string;
+    /** template: "Ask {provider} to create or edit slides…" */
+    composerPlaceholder: string;
+    send: string;
+    stop: string;
+    working: string;
+    you: string;
+    /** template: "Page {n}" */
+    contextPage: string;
+    contextSelection: string;
+    /** plural, template: "{count} comments" */
+    pendingComments: Plural;
+    applyComments: string;
+    /** template: "Apply with {provider}" */
+    applyCommentsWith: string;
+    createDeck: string;
+    /** template: "Create a deck with {provider}" */
+    createDeckWith: string;
+    quickCreate: string;
+    quickCreateHint: string;
+    quickApply: string;
+    quickApplyHint: string;
+    quickTheme: string;
+    quickThemeHint: string;
+    quickEdit: string;
+    quickEditHint: string;
+    emptyTitle: string;
+    emptyHint: string;
+    questionSubmit: string;
+    questionOther: string;
+    questionOtherPlaceholder: string;
+    questionAnswered: string;
+    questionCancelled: string;
+    permissionTitle: string;
+    allow: string;
+    deny: string;
+    allowed: string;
+    denied: string;
+    autoApprove: string;
+    autoApproveHint: string;
+    resultDone: string;
+    resultStopped: string;
+    /** template: "{seconds}s" */
+    resultSeconds: string;
+    errorEyebrow: string;
+    statusLoading: string;
+    disabled: string;
+    connectTitle: string;
+    connectDescription: string;
+    connect: string;
+    connecting: string;
+    connected: string;
+    /** template: "Adds {pkg} to this workspace with {pm}." */
+    connectInstallHint: string;
+    /** template: "CLI found · v{version}" */
+    cliFound: string;
+    cliFoundNoVersion: string;
+    cliMissing: string;
+    /** template: "Install and sign in to the {name} CLI first; the panel reuses its login." */
+    cliHint: string;
+    /** template: "{name} connected" */
+    toastConnected: string;
+    /** template: "Could not install {pkg}" */
+    toastConnectFailed: string;
+    manageConnections: string;
+    backToChat: string;
+    toastSendFailed: string;
+  };
 };

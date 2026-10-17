@@ -1,0 +1,79 @@
+---
+title: Agent panel
+description: Drive Claude Code or Codex from inside the dev server — create decks, apply comments, and edit the current page without a terminal.
+---
+
+The dev server ships an in-app agent panel. Connect a locally installed
+coding agent once, and the whole authoring loop — drafting a deck, answering
+the scoping questions, applying inspector comments, tweaking "this element" —
+happens in the browser instead of a terminal.
+
+Nothing changes until you connect: without an agent the UI keeps pointing at
+the `/create-slide` and `/apply-comments` skills for your terminal agent, as
+before.
+
+## Supported agents
+
+| Agent | SDK installed into your workspace | Uses your login from |
+| --- | --- | --- |
+| [Claude Code](https://code.claude.com) | `@anthropic-ai/claude-agent-sdk` | the `claude` CLI |
+| [Codex](https://developers.openai.com/codex) | `@openai/codex-sdk` | the `codex` CLI |
+
+The panel talks to each agent through its official TypeScript SDK. The SDKs
+are not bundled with `@open-slide/core` — they pull in a native binary — so
+they are added to your workspace as a dev dependency only when you connect.
+If the matching CLI is on your `PATH`, the panel points the SDK at it so you
+keep the same version and sign-in you already use in the terminal.
+
+## Connect
+
+Open the **Agent** entry in the sidebar (or press `A` on any slide) and click
+**Connect** next to the agent you want. The dev server runs
+`pnpm add -D <sdk>` (or your package manager's equivalent) and the panel
+switches to chat as soon as the install finishes. Sign in to the CLI first
+(`claude` or `codex login`); the panel reuses that login.
+
+Both agents can be connected; switch between them from the provider menu in
+the panel header. Set `agent: { enabled: false }` in `open-slide.config.ts` to
+hide the panel entirely.
+
+## What you can do
+
+- **Draft a deck.** From the home page click **New deck**, or pick *Draft a new
+  deck* in the panel. The agent runs the `create-slide` skill and asks its
+  scoping questions as option cards you answer in place.
+- **Apply comments.** Leave comments in the inspector's comment mode, then
+  click **Apply with Claude Code** in the comment island (or the comment chip
+  in the composer). The agent resolves every `@slide-comment` marker and the
+  page hot-reloads.
+- **Edit the current page.** On a slide, the composer carries the slide, page
+  and selected element as context, so "make this heading bigger" refers to
+  what you have selected.
+- **Create a theme**, or ask for anything else the skills cover.
+
+Every turn streams into the transcript: assistant text, each file read or
+edit, and shell commands. Edits inside the workspace are applied directly.
+Other actions — a shell command that changes state, for example — pause for
+approval in the panel unless you turn on **Auto-approve** in the provider
+menu. Codex runs inside its own `workspace-write` sandbox and never prompts.
+
+Sessions persist across dev-server restarts under
+`node_modules/.open-slide/agent-sessions.json`, and each one resumes the
+agent's own native session, so follow-ups keep their history.
+
+## Dev-server API
+
+The panel is a thin client over `/__agent/*`:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/__agent/status` | Which agents are installed, their CLI versions, and whether they are connected. |
+| `POST` | `/__agent/install` | Install an agent SDK into the workspace. |
+| `GET` / `POST` | `/__agent/sessions` | List sessions / start one. |
+| `GET` / `DELETE` | `/__agent/sessions/:id` | Read a session's transcript / delete it. |
+| `POST` | `/__agent/sessions/:id/messages` | Send a prompt. Progress streams over the HMR socket as `open-slide:agent` events. |
+| `POST` | `/__agent/sessions/:id/respond` | Answer a question or approve a command. |
+| `POST` | `/__agent/sessions/:id/stop` | Abort the running turn. |
+
+All mutating routes carry the same origin checks as the rest of the dev API
+and are only available while the dev server runs.

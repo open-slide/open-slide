@@ -12,6 +12,7 @@ export type ApiContext = {
   globalAssetsRoot: string;
   manifestPath: string;
   coreVersion: string;
+  agentEnabled: boolean;
 };
 
 export type ApiPluginOptions = {
@@ -19,6 +20,7 @@ export type ApiPluginOptions = {
   slidesDir?: string;
   assetsDir?: string;
   coreVersion: string;
+  agentEnabled?: boolean;
 };
 
 export function makeContext(opts: ApiPluginOptions): ApiContext {
@@ -35,6 +37,7 @@ export function makeContext(opts: ApiPluginOptions): ApiContext {
     globalAssetsRoot,
     manifestPath,
     coreVersion: opts.coreVersion,
+    agentEnabled: opts.agentEnabled ?? true,
   };
 }
 

@@ -14,6 +14,7 @@ import {
   MoreHorizontal,
   Play,
   Presentation,
+  Sparkles,
   Terminal,
 } from 'lucide-react';
 import {
@@ -27,6 +28,7 @@ import {
 } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { AgentDock, AgentToggleButton } from '@/components/agent/agent-dock';
 import { AssetView } from '@/components/asset-view';
 import { HistoryProvider } from '@/components/history-provider';
 import { CommentLayer } from '@/components/inspector/comment-layer';
@@ -57,6 +59,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { setDockOpen, useAgentDock } from '@/lib/agent/use-agent';
 import { useFolders } from '@/lib/folders';
 import {
   hasModifier,
@@ -74,6 +77,7 @@ import { format, useLocale } from '@/lib/use-locale';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { useWheelPageNavigation } from '@/lib/use-wheel-page-navigation';
 import { cn } from '@/lib/utils';
+import type { AgentTurnContext } from '../../agent/types';
 import { SlideCommandMenu } from '../components/command/slide-command-menu';
 import { PdfProgressToast, PptxProgressToast } from '../components/export-progress-toast';
 import { NotesDrawer } from '../components/notes-drawer';
@@ -132,6 +136,7 @@ export function Slide() {
   const [designOpen, setDesignOpen] = useState(false);
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const { open: agentOpen } = useAgentDock();
   const [, setWarmedTick] = useState(0);
   const handleAssetsWarmed = useCallback(() => {
     markDeckWarmed(slideId);
@@ -351,11 +356,13 @@ export function Slide() {
         setPlayMode('window');
       } else if (import.meta.env.DEV && (e.key === 'd' || e.key === 'D')) {
         setDesignOpen((v) => !v);
+      } else if (import.meta.env.DEV && (e.key === 'a' || e.key === 'A')) {
+        setDockOpen(!agentOpen);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [index, goTo, playMode, slideId, overviewOpen]);
+  }, [index, goTo, playMode, slideId, overviewOpen, agentOpen]);
 
   if (error) {
     return (
@@ -619,8 +626,11 @@ export function Slide() {
       <InspectorProvider
         slideId={slideId}
         pageIndex={index}
-        panelHidden={designOpen}
-        onPanelOpen={() => setDesignOpen(false)}
+        panelHidden={designOpen || agentOpen}
+        onPanelOpen={() => {
+          setDesignOpen(false);
+          setDockOpen(false);
+        }}
       >
         <SelectionReporter />
         <div className="flex h-dvh flex-col overflow-hidden bg-sidebar text-foreground">
@@ -739,6 +749,12 @@ export function Slide() {
                       />
                     )}
                     <DropdownMenuGroup>
+                      {narrowToolbar && import.meta.env.DEV && (
+                        <DropdownMenuItem onClick={() => setDockOpen(!agentOpen)}>
+                          <Sparkles />
+                          {t.agent.openTitle}
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem onClick={() => setCommandOpen(true)}>
                         <Terminal />
                         {t.commandMenu.trigger}
@@ -753,6 +769,7 @@ export function Slide() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
+              {import.meta.env.DEV && view === 'slides' && !narrowToolbar && <AgentToggleButton />}
               {view === 'slides' && !narrowToolbar && (
                 <DesignToggleButton active={designOpen} onToggle={() => setDesignOpen((v) => !v)} />
               )}
@@ -875,7 +892,16 @@ export function Slide() {
                   <EditorSidebar
                     designOpen={designOpen}
                     onCloseDesign={() => setDesignOpen(false)}
+                    hidden={agentOpen}
                   />
+                  {import.meta.env.DEV && (
+                    <SlideAgentDock
+                      slideId={slideId}
+                      slideTitle={title}
+                      pageNumber={index + 1}
+                      totalPages={pageCount}
+                    />
+                  )}
                 </div>
                 {import.meta.env.DEV && (
                   <NotesDrawer
@@ -916,6 +942,7 @@ export function Slide() {
                 onCopyLink: copyLink,
                 onOverview: () => setOverviewOpen(true),
                 onToggleDesignPanel: () => setDesignOpen((v) => !v),
+                onToggleAgentPanel: () => setDockOpen(!agentOpen),
                 onExportHtml: exportHtml,
                 onExportPdf: exportPdf,
                 onExportPptx: exportPptx,
@@ -1094,6 +1121,39 @@ function EditorMenuItems({
       <DropdownMenuSeparator />
     </>
   );
+}
+
+function SlideAgentDock({
+  slideId,
+  slideTitle,
+  pageNumber,
+  totalPages,
+}: {
+  slideId: string;
+  slideTitle: string;
+  pageNumber: number;
+  totalPages: number;
+}) {
+  const { selected, comments } = useInspector();
+  const context = useMemo<AgentTurnContext>(
+    () => ({
+      slideId,
+      slideTitle,
+      pageNumber,
+      totalPages,
+      pendingComments: comments.length,
+      selection: selected
+        ? {
+            line: selected.line,
+            column: selected.column,
+            tagName: selected.anchor.tagName.toLowerCase(),
+            text: (selected.anchor.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 120),
+          }
+        : null,
+    }),
+    [slideId, slideTitle, pageNumber, totalPages, comments.length, selected],
+  );
+  return <AgentDock context={context} />;
 }
 
 function AgentConnectedBadge() {

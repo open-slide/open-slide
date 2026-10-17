@@ -1,0 +1,192 @@
+import { describe, expect, it } from 'vitest';
+import type { AgentProvider, ProviderRunOptions } from './provider.ts';
+import { createAgentRunner } from './runner.ts';
+import { createSessionStore } from './store.ts';
+
+function fakeProvider(run: AgentProvider['run']): AgentProvider {
+  return { id: 'claude', name: 'Fake', sdkPackage: 'fake', cliCommand: 'fake', run };
+}
+
+async function settle() {
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+function sessionOf(store: ReturnType<typeof createSessionStore>, id: string) {
+  const session = store.get(id);
+  if (!session) throw new Error(`missing session ${id}`);
+  return session;
+}
+
+function itemOf(store: ReturnType<typeof createSessionStore>, id: string, kind: string) {
+  const item = sessionOf(store, id).items.find((i) => i.kind === kind);
+  if (!item) throw new Error(`missing ${kind} item`);
+  return item;
+}
+
+function setup(run: AgentProvider['run']) {
+  const store = createSessionStore({ file: null });
+  const provider = fakeProvider(run);
+  const runner = createAgentRunner({
+    userCwd: '/ws',
+    store,
+    providers: { claude: provider, codex: provider },
+  });
+  return { store, runner };
+}
+
+describe('createAgentRunner', () => {
+  it('records a full turn: user, streamed assistant text, tools and result', async () => {
+    const captured: ProviderRunOptions[] = [];
+    const { store, runner } = setup(async (opts) => {
+      captured.push(opts);
+      opts.emit({ type: 'session-id', id: 'native-1' });
+      opts.emit({ type: 'text-start', id: 't1' });
+      opts.emit({ type: 'text-delta', id: 't1', text: 'Hel' });
+      opts.emit({ type: 'text-delta', id: 't1', text: 'lo' });
+      opts.emit({ type: 'tool-start', id: 'tool1', name: 'Edit', title: 'Edit', detail: 'a.tsx' });
+      opts.emit({ type: 'tool-end', id: 'tool1', ok: true });
+      opts.emit({ type: 'text-end', id: 't1', text: 'Hello!' });
+      opts.emit({ type: 'result', durationMs: 5, costUsd: 0.01 });
+    });
+    const session = store.create('claude', null);
+    await runner.send(session.id, {
+      text: 'make a deck',
+      context: { slideId: 'deck', pageNumber: 2, totalPages: 4 },
+    });
+    expect(runner.isRunning(session.id)).toBe(true);
+    await settle();
+
+    const after = sessionOf(store, session.id);
+    expect(after.status).toBe('idle');
+    expect(after.title).toBe('make a deck');
+    expect(after.slideId).toBe('deck');
+    expect(after.providerSessionId).toBe('native-1');
+    expect(after.items.map((i) => i.kind)).toEqual(['user', 'assistant', 'tool', 'result']);
+    expect(after.items[1]).toMatchObject({ text: 'Hello!', streaming: false });
+    expect(after.items[2]).toMatchObject({ status: 'done' });
+    expect(after.items[3]).toMatchObject({ durationMs: 5, costUsd: 0.01, aborted: false });
+    expect(captured[0]?.prompt).toContain('<open-slide-context>');
+    expect(captured[0]?.resume).toBeNull();
+    expect(runner.isRunning(session.id)).toBe(false);
+  });
+
+  it('passes the provider session id back as resume on the next turn', async () => {
+    const resumes: (string | null)[] = [];
+    const { store, runner } = setup(async (opts) => {
+      resumes.push(opts.resume);
+      opts.emit({ type: 'session-id', id: 'native-9' });
+    });
+    const session = store.create('codex', null);
+    await runner.send(session.id, { text: 'one' });
+    await settle();
+    await runner.send(session.id, { text: 'two' });
+    await settle();
+    expect(resumes).toEqual([null, 'native-9']);
+    expect(store.get(session.id)?.title).toBe('one');
+  });
+
+  it('rejects concurrent sends and empty prompts', async () => {
+    let release: () => void = () => {};
+    const { store, runner } = setup(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'go' });
+    await expect(runner.send(session.id, { text: 'again' })).rejects.toThrow('already running');
+    await expect(runner.send(session.id, { text: '  ' })).rejects.toThrow();
+    release();
+    await settle();
+    expect(store.get(session.id)?.status).toBe('idle');
+  });
+
+  it('routes questions and permissions through pending prompts', async () => {
+    const seen: unknown[] = [];
+    const { store, runner } = setup(async (opts) => {
+      const answers = await opts.askUser([
+        { header: 'Look', question: 'Which?', options: [{ label: 'A' }], multiSelect: false },
+      ]);
+      seen.push(answers);
+      const allowed = await opts.requestPermission({ tool: 'Bash', title: 'Run', detail: 'ls' });
+      seen.push(allowed);
+    });
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'ask me' });
+    await settle();
+
+    const question = itemOf(store, session.id, 'question');
+    expect(question).toMatchObject({ status: 'pending' });
+    expect(runner.respond(session.id, question.id, { allow: true })).toBe(false);
+    expect(runner.respond(session.id, question.id, { answers: { 'Which?': 'A' } })).toBe(true);
+    await settle();
+
+    const permission = itemOf(store, session.id, 'permission');
+    expect(permission).toMatchObject({ status: 'pending', tool: 'Bash' });
+    expect(runner.respond(session.id, permission.id, { allow: false })).toBe(true);
+    await settle();
+
+    expect(seen).toEqual([{ 'Which?': 'A' }, false]);
+    expect(sessionOf(store, session.id).items.find((i) => i.id === question.id)).toMatchObject({
+      status: 'answered',
+      answers: { 'Which?': 'A' },
+    });
+    expect(sessionOf(store, session.id).items.find((i) => i.id === permission.id)).toMatchObject({
+      status: 'denied',
+    });
+    expect(runner.respond(session.id, permission.id, { allow: true })).toBe(false);
+  });
+
+  it('auto-approves permissions when asked to', async () => {
+    const { store, runner } = setup(async (opts) => {
+      await opts.requestPermission({ tool: 'Bash', title: 'Run', detail: 'ls' });
+    });
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'go', autoApprove: true });
+    await settle();
+    expect(sessionOf(store, session.id).items.find((i) => i.kind === 'permission')).toMatchObject({
+      status: 'allowed',
+    });
+  });
+
+  it('stop aborts the turn, cancels pending prompts and marks the result aborted', async () => {
+    const { store, runner } = setup(async (opts) => {
+      opts.emit({ type: 'text-start', id: 't1' });
+      opts.emit({ type: 'tool-start', id: 'x', name: 'Bash', title: 'Run', detail: null });
+      const answer = await opts.askUser([]);
+      if (answer === null && !opts.signal.aborted) {
+        await new Promise<void>((resolve) =>
+          opts.signal.addEventListener('abort', () => resolve()),
+        );
+      }
+      throw new Error('should be swallowed after abort');
+    });
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'go' });
+    await settle();
+    expect(runner.stop(session.id)).toBe(true);
+    await settle();
+    await settle();
+
+    const items = sessionOf(store, session.id).items;
+    expect(items.find((i) => i.kind === 'assistant')).toMatchObject({ streaming: false });
+    expect(items.find((i) => i.kind === 'tool')).toMatchObject({ status: 'error' });
+    expect(items.find((i) => i.kind === 'question')).toMatchObject({ status: 'cancelled' });
+    expect(items.find((i) => i.kind === 'error')).toBeUndefined();
+    expect(items.at(-1)).toMatchObject({ kind: 'result', aborted: true });
+    expect(runner.stop(session.id)).toBe(false);
+  });
+
+  it('surfaces provider failures as error items', async () => {
+    const { store, runner } = setup(async () => {
+      throw new Error('not connected');
+    });
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'go' });
+    await settle();
+    const items = sessionOf(store, session.id).items;
+    expect(items.map((i) => i.kind)).toEqual(['user', 'error', 'result']);
+    expect(items[1]).toMatchObject({ text: 'not connected' });
+  });
+});
