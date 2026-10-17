@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import type { SelectedTarget } from '@/components/inspector/inspector-provider';
-import { isTypingTarget } from '@/lib/keys';
+import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { useLocale } from '@/lib/use-locale';
 import { type Alignment, alignRects, distributeRects, unionRects } from './geometry';
 import type { EditOp } from './use-editor';
@@ -368,6 +368,33 @@ export function useVisualEditor({
     setSelection(independentTargets(objects));
   }, [slideId, setSelection]);
 
+  const removeSelected = useCallback(() => {
+    const canvas = readCanvas();
+    if (!canvas || committing || !selection.length) return false;
+    const targets = independentTargets(selection);
+    if (
+      targets.some(
+        (target) =>
+          !target.anchor.isConnected ||
+          !canvas.root.contains(target.anchor) ||
+          target.anchor === canvas.root ||
+          target.anchor.dataset.slideLoc !== `${target.line}:${target.column}` ||
+          !target.anchor.dataset.slideDelete ||
+          canvas.root.querySelectorAll(`[data-slide-loc="${target.line}:${target.column}"]`)
+            .length !== 1,
+      )
+    )
+      return false;
+    bufferBatch(
+      targets.map((target) => ({
+        ...target,
+        ops: [{ kind: 'remove-element', revision: target.anchor.dataset.slideDelete as string }],
+      })),
+    );
+    setSelection([]);
+    return true;
+  }, [selection, committing, bufferBatch, setSelection]);
+
   useEffect(() => {
     if (!active || inlineEditing || committing) return;
     const onKey = (event: KeyboardEvent) => {
@@ -393,6 +420,12 @@ export function useVisualEditor({
         return;
       }
       if (!selection.length || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === 'Backspace' || event.key === 'Delete') {
+        if (event.repeat || isShortcutControlTarget(event.target) || !removeSelected()) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
       const vectors: Record<string, { x: number; y: number }> = {
         ArrowLeft: { x: -1, y: 0 },
         ArrowRight: { x: 1, y: 0 },
@@ -411,7 +444,7 @@ export function useVisualEditor({
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [active, inlineEditing, committing, selection, move, selectAll]);
+  }, [active, inlineEditing, committing, selection, move, selectAll, removeSelected]);
 
   return useMemo(
     () => ({

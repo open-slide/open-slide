@@ -51,6 +51,7 @@ Width, height, and rotation inputs apply to one element at a time.
 | `Enter` with a text object selected | Edit its text |
 | `Escape` while editing text | Return to object selection |
 | `Escape` with an object selected | Clear the selection |
+| `Backspace` or `Delete` with an object selected | Remove it from the slide |
 | `I` | Show or hide the Format panel |
 | Arrow keys | Move the selection by 1 slide pixel |
 | `Shift` + arrow keys | Move by 10 slide pixels |
@@ -68,7 +69,9 @@ Inline text spans inherit their containing block's layout. Use **Select
 parent** to move that block. Elements rendered repeatedly from the same JSX
 definition also share source styles; select a unique parent container to
 arrange an instance independently. The panel explains when a selected element
-cannot be transformed.
+cannot be transformed. `Backspace` and `Delete` remove only uniquely mapped JSX
+children from the slide source, not page roots, shared component instances,
+or objects in a text editor. Removal can be undone or discarded before saving.
 Layer changes preserve nested content's position and size. If shared nested
 content prevents this, select a positioned parent container to change layers.
 
