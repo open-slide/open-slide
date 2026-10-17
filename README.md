@@ -41,6 +41,10 @@ Switch the dev server toolbar to comment mode, then click any element or drag ac
 
 The loop: present → comment → `/apply-comments` → repeat.
 
+### 🧑‍💻 In-app agent panel
+
+Connect your locally installed Claude Code or Codex once and the whole loop moves into the browser: draft a deck, answer the scoping questions as option cards, apply comments with one click, and edit the selected element by describing the change. Without a connected agent the dev server keeps the terminal-driven flow above.
+
 ### 🖼️ Assets manager + svgl logo search
 
 Manage images, videos, and fonts per deck through a built-in assets panel. Search and drop in any brand logo via the integrated [svgl](https://svgl.app/) catalogue — no more hunting for SVGs.

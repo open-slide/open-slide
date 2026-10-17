@@ -12,6 +12,7 @@ import {
   Play,
   Presentation,
   RectangleHorizontal,
+  Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format, useLocale } from '@/lib/use-locale';
@@ -26,6 +27,7 @@ export type SlideCommandHandlers = {
   onCopyLink: () => void;
   onOverview: () => void;
   onToggleDesignPanel: () => void;
+  onToggleAgentPanel: () => void;
   onExportHtml: () => void;
   onExportPdf: () => void;
   onExportPptx: () => void;
@@ -104,6 +106,14 @@ export function SlideCommandMenu({
         keywords: ['design', 'style', 'tokens'],
         shortcut: 'D',
         run: handlers.onToggleDesignPanel,
+      });
+      deck.push({
+        id: 'agent-panel',
+        label: t.agent.openTitle,
+        icon: <Sparkles />,
+        keywords: ['agent', 'claude', 'codex', 'chat', 'ai'],
+        shortcut: 'A',
+        run: handlers.onToggleAgentPanel,
       });
     }
     if (showSlideBrowser) {

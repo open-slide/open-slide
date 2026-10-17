@@ -6,6 +6,7 @@ import {
   Palette,
   Pencil,
   PenLine,
+  Sparkles,
   Trash2,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -42,13 +43,14 @@ function useSlideDragActive() {
   return active;
 }
 
-export type SystemViewKind = 'all' | 'draft' | 'themes' | 'assets';
+export type SystemViewKind = 'all' | 'draft' | 'themes' | 'assets' | 'agent';
 
 const SYSTEM_VIEW_ICONS: Record<SystemViewKind, LucideIcon> = {
   all: LayoutGrid,
   draft: PenLine,
   themes: Palette,
   assets: FolderOpen,
+  agent: Sparkles,
 };
 
 export function SystemViewIcon({ kind, className }: { kind: SystemViewKind; className?: string }) {
@@ -103,6 +105,9 @@ type Row =
     }
   | {
       kind: 'assets';
+    }
+  | {
+      kind: 'agent';
     };
 
 export function FolderItem({
@@ -168,7 +173,9 @@ export function FolderItem({
           ? t.home.themes
           : row.kind === 'assets'
             ? t.home.assets
-            : row.folder.name;
+            : row.kind === 'agent'
+              ? t.agent.title
+              : row.folder.name;
 
   const commitRename = () => {
     if (row.kind !== 'folder') return;

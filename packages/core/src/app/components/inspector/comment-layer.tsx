@@ -11,6 +11,7 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
+import { requestAgent, useAgentStatus } from '@/lib/agent/use-agent';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import { useFreezeSlideMotion } from '@/lib/inspector/freeze-motion';
 import { type Point, type Rect, rectContains } from '@/lib/inspector/geometry';
@@ -24,6 +25,7 @@ import { type Canvas, readCanvas, readFrame } from '@/lib/inspector/visual-dom';
 import { IS_APPLE, isTypingTarget } from '@/lib/keys';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
+import { applyCommentsPrompt } from '../../../agent/prompt';
 import { type SelectedTarget, useInspector } from './inspector-provider';
 
 type ScreenRect = { left: number; top: number; width: number; height: number };
@@ -119,6 +121,7 @@ export function CommentLayer() {
   const { commentMode, exitCommentMode, slideId, pageIndex, comments, add, update, remove, error } =
     useInspector();
   const t = useLocale();
+  const agent = useAgentStatus();
   useFreezeSlideMotion(commentMode ? 'comment' : null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
@@ -486,13 +489,29 @@ export function CommentLayer() {
       )}
       <div className="absolute inset-x-0 bottom-3 flex justify-center">
         <IslandHint
-          contentKey={error ? 'error' : count === 0 ? 'empty' : 'count'}
+          contentKey={
+            error ? 'error' : count === 0 ? 'empty' : agent.connected ? 'count-agent' : 'count'
+          }
           tone={error ? 'error' : 'default'}
         >
           {error ? (
             error
           ) : count === 0 ? (
             t.inspector.commentEmptyHint
+          ) : agent.connected ? (
+            <>
+              <CommentCountLabel count={count} />
+              <span aria-hidden className="mx-1.5">
+                ·
+              </span>
+              <button
+                type="button"
+                className="pointer-events-auto rounded-[4px] px-1 py-0.5 font-medium text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30"
+                onClick={() => requestAgent({ text: applyCommentsPrompt(slideId), send: true })}
+              >
+                {format(t.agent.applyCommentsWith, { provider: agent.providerName ?? '' })}
+              </button>
+            </>
           ) : (
             <>
               <CommentCountLabel count={count} />

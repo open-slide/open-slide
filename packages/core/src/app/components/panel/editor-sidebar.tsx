@@ -8,20 +8,24 @@ import { PANEL_TRANSITION_MS, PANEL_W, usePanelMount } from './panel-shell';
 export function EditorSidebar({
   designOpen,
   onCloseDesign,
+  hidden = false,
 }: {
   designOpen: boolean;
   onCloseDesign: () => void;
+  hidden?: boolean;
 }) {
   const { active, panelOpen } = useInspector();
   const { loaded, draft } = useDesignPanelState();
   const [preferredTab, setPreferredTab] = useState<'format' | 'arrange'>('format');
-  const mode = designOpen
-    ? loaded && draft
-      ? 'design'
-      : null
-    : active && panelOpen
-      ? 'format'
-      : null;
+  const mode = hidden
+    ? null
+    : designOpen
+      ? loaded && draft
+        ? 'design'
+        : null
+      : active && panelOpen
+        ? 'format'
+        : null;
   const [lastMode, setLastMode] = useState<'format' | 'design'>('format');
   if (mode && mode !== lastMode) setLastMode(mode);
   const open = mode !== null;
