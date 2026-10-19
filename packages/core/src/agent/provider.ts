@@ -1,4 +1,4 @@
-import type { AgentProviderId, AgentQuestion } from './types.ts';
+import type { AgentEffort, AgentModelOption, AgentProviderId, AgentQuestion } from './types.ts';
 
 export type ProviderEvent =
   | { type: 'session-id'; id: string }
@@ -17,6 +17,8 @@ export type ProviderRunOptions = {
   prompt: string;
   systemPromptAppend: string;
   resume: string | null;
+  model: string | null;
+  effort: AgentEffort | null;
   signal: AbortSignal;
   emit: (event: ProviderEvent) => void;
   askUser: (questions: AgentQuestion[]) => Promise<Record<string, string> | null>;
@@ -28,6 +30,7 @@ export interface AgentProvider {
   name: string;
   sdkPackage: string;
   cliCommand: string;
+  models(): Promise<AgentModelOption[]>;
   run(opts: ProviderRunOptions): Promise<void>;
 }
 

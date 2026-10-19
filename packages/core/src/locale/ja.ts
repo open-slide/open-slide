@@ -621,5 +621,12 @@ export const ja: Locale = {
     toastCreateDeckFailed: 'デッキを作成できませんでした',
     steps: { one: '{count} ステップ', other: '{count} ステップ' },
     questionSkip: 'スキップ',
+    modelDefault: 'デフォルト',
+    reasoning: '推論',
+    effortAuto: '自動',
+    efforts: { minimal: '最小', low: '低', medium: '中', high: '高', xhigh: '最高', max: '最大' },
+    presenceEditing: '{provider} が編集中',
+    presenceThinking: '考え中',
+    presenceWaiting: 'あなたの回答待ち',
   },
 };

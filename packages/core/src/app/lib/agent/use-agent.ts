@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import {
+  AGENT_EFFORTS,
   AGENT_WS_EVENT,
+  type AgentEffort,
   type AgentItem,
+  type AgentModelOption,
   type AgentProviderId,
   type AgentSession,
   type AgentSessionSummary,
@@ -10,7 +13,17 @@ import {
   type AgentWsEvent,
 } from '../../../agent/types';
 
-export type { AgentItem, AgentProviderId, AgentSession, AgentSessionSummary, AgentStatus };
+export type {
+  AgentEffort,
+  AgentItem,
+  AgentModelOption,
+  AgentProviderId,
+  AgentSession,
+  AgentSessionSummary,
+  AgentStatus,
+};
+
+export type ModelChoice = { model: string; effort: AgentEffort | null };
 
 export type AgentRequest = {
   text: string;
@@ -31,6 +44,7 @@ type State = {
   full: Record<string, AgentSession>;
   activeId: string | null;
   provider: AgentProviderId;
+  modelChoices: Partial<Record<AgentProviderId, ModelChoice>>;
   autoApprove: boolean;
   dockOpen: boolean;
   request: AgentRequest | null;
@@ -40,6 +54,7 @@ type State = {
 
 const ACTIVE_KEY = 'open-slide:agent-session';
 const PROVIDER_KEY = 'open-slide:agent-provider';
+const MODEL_KEY = 'open-slide:agent-model';
 const AUTO_APPROVE_KEY = 'open-slide:agent-auto-approve';
 const DOCK_KEY = 'open-slide:agent-dock';
 const NEW_DECK_KEY = 'open-slide:agent-new-deck';
@@ -63,6 +78,24 @@ function isProviderId(value: string | null): value is AgentProviderId {
   return value === 'claude' || value === 'codex';
 }
 
+function isEffort(value: unknown): value is AgentEffort {
+  return typeof value === 'string' && (AGENT_EFFORTS as readonly string[]).includes(value);
+}
+
+function readModelChoices(): Partial<Record<AgentProviderId, ModelChoice>> {
+  const choices: Partial<Record<AgentProviderId, ModelChoice>> = {};
+  try {
+    const raw = JSON.parse(readStorage(MODEL_KEY) ?? '{}') as Record<string, unknown>;
+    for (const [provider, value] of Object.entries(raw)) {
+      if (!isProviderId(provider) || !value || typeof value !== 'object') continue;
+      const v = value as Record<string, unknown>;
+      if (typeof v.model !== 'string') continue;
+      choices[provider] = { model: v.model, effort: isEffort(v.effort) ? v.effort : null };
+    }
+  } catch {}
+  return choices;
+}
+
 const available = import.meta.env.DEV && typeof window !== 'undefined';
 
 let state: State = {
@@ -76,6 +109,7 @@ let state: State = {
     const stored = readStorage(PROVIDER_KEY);
     return isProviderId(stored) ? stored : 'claude';
   })(),
+  modelChoices: readModelChoices(),
   autoApprove: readStorage(AUTO_APPROVE_KEY) === '1',
   dockOpen: readStorage(DOCK_KEY) === '1',
   request: null,
@@ -162,6 +196,9 @@ function applyEvent(event: AgentWsEvent) {
         return { full: { ...prev.full, [event.sessionId]: { ...current, items } } };
       });
       return;
+    case 'slide-renamed':
+      followSlideRename(event.from, event.to);
+      return;
     case 'delta':
       setState((prev) => {
         const current = prev.full[event.sessionId];
@@ -173,6 +210,18 @@ function applyEvent(event: AgentWsEvent) {
         return { full: { ...prev.full, [event.sessionId]: { ...current, items } } };
       });
       return;
+  }
+}
+
+function followSlideRename(from: string, to: string) {
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const prefix = `${base}/s/${encodeURIComponent(from)}`;
+  const { pathname, search, hash } = window.location;
+  if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
+    const rest = pathname.slice(prefix.length);
+    window.location.replace(`${base}/s/${encodeURIComponent(to)}${rest}${search}${hash}`);
+  } else {
+    window.location.reload();
   }
 }
 
@@ -258,9 +307,18 @@ export async function sendMessage(
   text: string,
   context: AgentTurnContext | undefined,
 ): Promise<void> {
+  const provider = state.full[id]?.provider ?? state.provider;
+  const status = state.status?.providers.find((p) => p.id === provider);
+  const choice = status ? resolveModelChoice(status.models, state.modelChoices[provider]) : null;
   await request(
     `/__agent/sessions/${encodeURIComponent(id)}/messages`,
-    post({ text, context, autoApprove: state.autoApprove }),
+    post({
+      text,
+      context,
+      autoApprove: state.autoApprove,
+      model: choice?.model.id || null,
+      effort: choice?.effort ?? null,
+    }),
   );
 }
 
@@ -290,9 +348,23 @@ export function setActiveSession(id: string | null): void {
   setState({ activeId: id });
 }
 
-export function setPreferredProvider(provider: AgentProviderId): void {
+export function setModelChoice(provider: AgentProviderId, choice: ModelChoice): void {
+  const modelChoices = { ...state.modelChoices, [provider]: choice };
+  writeStorage(MODEL_KEY, JSON.stringify(modelChoices));
   writeStorage(PROVIDER_KEY, provider);
-  setState({ provider });
+  setState({ modelChoices, provider });
+}
+
+// Falls back to the provider's first model when the remembered one is gone,
+// and drops an effort the chosen model can't take.
+export function resolveModelChoice(
+  models: AgentModelOption[],
+  choice: ModelChoice | undefined,
+): { model: AgentModelOption; effort: AgentEffort | null } | null {
+  const model = models.find((m) => m.id === choice?.model) ?? models[0];
+  if (!model) return null;
+  const effort = choice?.effort && model.efforts.includes(choice.effort) ? choice.effort : null;
+  return { model, effort };
 }
 
 export function setAutoApprove(value: boolean): void {
@@ -351,6 +423,7 @@ export function useAgentStatus() {
     void refreshStatus();
   }, [s.status]);
   const provider = resolveProvider(s.status, s.provider);
+  const choice = provider ? resolveModelChoice(provider.models, s.modelChoices[provider.id]) : null;
   return {
     status: s.status,
     loading: s.status === null && !s.statusError,
@@ -359,6 +432,9 @@ export function useAgentStatus() {
     connected: provider !== null,
     provider,
     providerName: provider?.name ?? null,
+    model: choice?.model ?? null,
+    effort: choice?.effort ?? null,
+    modelChoices: s.modelChoices,
   };
 }
 
@@ -385,9 +461,28 @@ export function useAgentSession(id: string | null): AgentSession | null {
   return session;
 }
 
-export function useAgentWriting(slideId: string): boolean {
+export type AgentActivity = {
+  provider: AgentProviderId;
+  phase: 'thinking' | 'tool' | 'waiting';
+  title: string | null;
+  detail: string | null;
+};
+
+export function useAgentActivity(slideId: string): AgentActivity | null {
   const { sessions } = useAgentSessions();
-  return sessions.some((s) => s.slideId === slideId && s.status === 'running');
+  const summary = sessions.find((s) => s.slideId === slideId && s.status === 'running') ?? null;
+  const session = useAgentSession(summary?.id ?? null);
+  if (!summary) return null;
+  const items = session?.items ?? [];
+  const waiting = items.some(
+    (i) => (i.kind === 'question' || i.kind === 'permission') && i.status === 'pending',
+  );
+  if (waiting) return { provider: summary.provider, phase: 'waiting', title: null, detail: null };
+  const last = items.at(-1);
+  if (last?.kind === 'tool' && last.status === 'running') {
+    return { provider: summary.provider, phase: 'tool', title: last.title, detail: last.detail };
+  }
+  return { provider: summary.provider, phase: 'thinking', title: null, detail: null };
 }
 
 export function useAgentDock() {

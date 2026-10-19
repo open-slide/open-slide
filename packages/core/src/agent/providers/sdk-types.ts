@@ -18,6 +18,8 @@ export type ClaudeQueryOptions = {
   settingSources?: ('user' | 'project' | 'local')[];
   systemPrompt?: { type: 'preset'; preset: 'claude_code'; append?: string };
   resume?: string;
+  model?: string;
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   includePartialMessages?: boolean;
   pathToClaudeCodeExecutable?: string;
   abortController?: AbortController;
@@ -85,6 +87,8 @@ export type CodexThreadOptions = {
   skipGitRepoCheck?: boolean;
   sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
   approvalPolicy?: 'never' | 'on-request' | 'on-failure' | 'untrusted';
+  model?: string;
+  modelReasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 };
 
 export type CodexItem =

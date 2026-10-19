@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentProvider, ProviderRunOptions } from './provider.ts';
-import { createAgentRunner } from './runner.ts';
+import { createAgentRunner, type TurnEnd } from './runner.ts';
 import { createSessionStore } from './store.ts';
 
 function fakeProvider(run: AgentProvider['run']): AgentProvider {
-  return { id: 'claude', name: 'Fake', sdkPackage: 'fake', cliCommand: 'fake', run };
+  return {
+    id: 'claude',
+    name: 'Fake',
+    sdkPackage: 'fake',
+    cliCommand: 'fake',
+    models: async () => [],
+    run,
+  };
 }
 
 async function settle() {
@@ -23,13 +30,14 @@ function itemOf(store: ReturnType<typeof createSessionStore>, id: string, kind: 
   return item;
 }
 
-function setup(run: AgentProvider['run']) {
+function setup(run: AgentProvider['run'], onTurnEnd?: (turn: TurnEnd) => void) {
   const store = createSessionStore({ file: null });
   const provider = fakeProvider(run);
   const runner = createAgentRunner({
     userCwd: '/ws',
     store,
     providers: { claude: provider, codex: provider },
+    onTurnEnd,
   });
   return { store, runner };
 }
@@ -68,6 +76,27 @@ describe('createAgentRunner', () => {
     expect(captured[0]?.prompt).toContain('<open-slide-context>');
     expect(captured[0]?.resume).toBeNull();
     expect(runner.isRunning(session.id)).toBe(false);
+  });
+
+  it('passes the chosen model and effort, then reports the turn end', async () => {
+    const seen: [string | null, string | null][] = [];
+    const ended: TurnEnd[] = [];
+    const { store, runner } = setup(
+      async (opts) => {
+        seen.push([opts.model, opts.effort]);
+      },
+      (turn) => {
+        ended.push(turn);
+      },
+    );
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'go', model: 'sonnet', effort: 'high' });
+    await settle();
+    await settle();
+    expect(seen).toEqual([['sonnet', 'high']]);
+    expect(ended).toEqual([
+      { sessionId: session.id, userItemId: sessionOf(store, session.id).items[0].id },
+    ]);
   });
 
   it('passes the provider session id back as resume on the next turn', async () => {

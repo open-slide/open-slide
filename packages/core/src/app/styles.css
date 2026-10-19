@@ -383,3 +383,167 @@
     background-clip: content-box;
   }
 }
+
+/*
+ * Agent presence. While an agent edits a deck, its frame wears a slowly
+ * turning gradient ring in the provider's colours, each write sweeps a band
+ * of light across the canvas, and live steps shimmer.
+ */
+@property --agent-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+[data-agent-provider] {
+  --agent-a: oklch(0.68 0.14 42);
+  --agent-b: oklch(0.82 0.12 75);
+}
+
+[data-agent-provider="codex"] {
+  --agent-a: oklch(0.64 0.13 170);
+  --agent-b: oklch(0.7 0.14 240);
+}
+
+@keyframes agent-spin {
+  to {
+    --agent-angle: 360deg;
+  }
+}
+
+@keyframes agent-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.agent-ring {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--agent-angle),
+    transparent 0deg,
+    var(--agent-a) 70deg,
+    var(--agent-b) 140deg,
+    transparent 210deg,
+    transparent 360deg
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  animation:
+    agent-spin 3.6s linear infinite,
+    agent-fade-in 400ms var(--ease-swift) both;
+}
+
+.agent-glow {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--agent-a) 35%, transparent),
+    inset 0 0 48px -12px color-mix(in oklch, var(--agent-a) 45%, transparent);
+  animation: agent-fade-in 400ms var(--ease-swift) both;
+}
+
+@keyframes agent-sweep {
+  from {
+    background-position: 120% 0;
+    opacity: 1;
+  }
+  to {
+    background-position: -20% 0;
+    opacity: 0;
+  }
+}
+
+.agent-sweep {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    color-mix(in oklch, var(--agent-b) 22%, transparent) 50%,
+    transparent 65%
+  );
+  background-size: 250% 100%;
+  animation: agent-sweep 900ms var(--ease-swift) both;
+}
+
+@keyframes agent-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+.agent-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--muted-foreground) 35%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 65%
+  );
+  background-size: 300% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: agent-shimmer 1.8s linear infinite;
+}
+
+@keyframes agent-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.agent-progress {
+  pointer-events: none;
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1.5px;
+  overflow: hidden;
+}
+
+.agent-progress::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--agent-a), var(--agent-b), transparent);
+  animation: agent-progress 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-ring {
+    animation: agent-fade-in 160ms ease-out both;
+    --agent-angle: 120deg;
+  }
+
+  .agent-sweep {
+    display: none;
+  }
+
+  .agent-shimmer {
+    animation: none;
+    color: var(--foreground);
+    background: none;
+  }
+
+  .agent-progress::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}

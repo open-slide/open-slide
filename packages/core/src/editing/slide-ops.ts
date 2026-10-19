@@ -45,7 +45,7 @@ function unwrapExpression(
   return current;
 }
 
-function readMetaTitleInSource(source: string): MetaTitleRead {
+export function readMetaTitleInSource(source: string): MetaTitleRead {
   let ast: unknown;
   try {
     ast = babelParse(source, {
@@ -225,6 +225,54 @@ export async function createBlankSlideDir(
     const file = path.join(dir, 'index.tsx');
     await fs.writeFile(file, blankSlideSource(), 'utf8');
     return { ok: true, slideId, file };
+  }
+  return { ok: false, status: 409, error: 'no free slide id' };
+}
+
+export function slugifyTitle(title: string): string {
+  return title
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .slice(0, 48)
+    .replace(/-+$/, '');
+}
+
+export async function renameSlideDir(
+  slidesRoot: string,
+  slideId: string,
+  desiredId: string,
+): Promise<
+  | { ok: true; slideId: string; from: string; to: string }
+  | { ok: false; status: number; error: string }
+> {
+  if (!SLIDE_ID_RE.test(slideId) || !SLIDE_ID_RE.test(desiredId)) {
+    return { ok: false, status: 400, error: 'invalid slideId' };
+  }
+  const root = path.resolve(slidesRoot);
+  const from = path.resolve(root, slideId);
+  if (!from.startsWith(root + path.sep))
+    return { ok: false, status: 400, error: 'invalid slideId' };
+  try {
+    await fs.access(path.join(from, 'index.tsx'));
+  } catch {
+    return { ok: false, status: 404, error: 'slide not found' };
+  }
+  for (let suffix = 1; suffix < 1000; suffix++) {
+    const candidate = suffix === 1 ? desiredId : `${desiredId}-${suffix}`;
+    if (candidate === slideId) return { ok: false, status: 409, error: 'slide id unchanged' };
+    if (await slideIdTaken(root, candidate)) continue;
+    const to = path.join(root, candidate);
+    try {
+      await fs.rename(from, to);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST' || code === 'ENOTEMPTY') continue;
+      return { ok: false, status: 500, error: String((err as Error).message ?? err) };
+    }
+    return { ok: true, slideId: candidate, from, to };
   }
   return { ok: false, status: 409, error: 'no free slide id' };
 }

@@ -156,6 +156,12 @@ test.describe('agent panel', () => {
     await expect(dock.getByRole('heading', { name: "What's this deck about?" })).toBeVisible();
     await expect(dock.getByPlaceholder('A 10-minute talk on…')).toBeFocused();
 
+    await dock.getByRole('button', { name: /^Opus/ }).click();
+    await page.getByRole('menuitemradio', { name: 'Sonnet' }).click();
+    await page.getByRole('menuitemradio', { name: 'High', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(dock.getByRole('button', { name: 'Sonnet High' })).toBeVisible();
+
     expect((await request.delete(`/__slides/${slideId}`)).status()).toBe(200);
   });
 });

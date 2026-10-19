@@ -658,5 +658,13 @@ export type Locale = {
     toastCreateDeckFailed: string;
     steps: Plural;
     questionSkip: string;
+    modelDefault: string;
+    reasoning: string;
+    effortAuto: string;
+    efforts: Record<'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max', string>;
+    /** template: "{provider} is editing" */
+    presenceEditing: string;
+    presenceThinking: string;
+    presenceWaiting: string;
   };
 };

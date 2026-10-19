@@ -609,5 +609,12 @@ export const zhTW: Locale = {
     toastCreateDeckFailed: '無法建立簡報',
     steps: { one: '{count} 個步驟', other: '{count} 個步驟' },
     questionSkip: '略過',
+    modelDefault: '預設',
+    reasoning: '推理強度',
+    effortAuto: '自動',
+    efforts: { minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高' },
+    presenceEditing: '{provider} 正在編輯',
+    presenceThinking: '思考中',
+    presenceWaiting: '等待你的回覆',
   },
 };

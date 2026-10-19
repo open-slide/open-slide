@@ -1,13 +1,17 @@
 import { buildTurnPrompt, SYSTEM_PROMPT_APPEND } from './prompt.ts';
 import type { AgentProvider, PermissionRequest, ProviderEvent } from './provider.ts';
 import { newId, type SessionStore, titleFromPrompt } from './store.ts';
-import type { AgentProviderId, AgentQuestion, AgentTurnContext } from './types.ts';
+import type { AgentEffort, AgentProviderId, AgentQuestion, AgentTurnContext } from './types.ts';
 
 export type SendOptions = {
   text: string;
   context?: AgentTurnContext;
   autoApprove?: boolean;
+  model?: string | null;
+  effort?: AgentEffort | null;
 };
+
+export type TurnEnd = { sessionId: string; userItemId: string };
 
 export type RespondPayload =
   | { answers: Record<string, string> }
@@ -24,8 +28,9 @@ export function createAgentRunner(opts: {
   userCwd: string;
   store: SessionStore;
   providers: Record<AgentProviderId, AgentProvider>;
+  onTurnEnd?: (turn: TurnEnd) => void | Promise<void>;
 }) {
-  const { userCwd, store, providers } = opts;
+  const { userCwd, store, providers, onTurnEnd } = opts;
   const running = new Map<string, AbortController>();
   const pending = new Map<string, PendingPrompt>();
 
@@ -50,7 +55,8 @@ export function createAgentRunner(opts: {
     if (options.context?.slideId && !session.slideId) {
       store.patch(sessionId, { slideId: options.context.slideId });
     }
-    store.appendItem(sessionId, { kind: 'user', id: newId('u'), ts: now(), text });
+    const userItemId = newId('u');
+    store.appendItem(sessionId, { kind: 'user', id: userItemId, ts: now(), text });
     store.patch(sessionId, { status: 'running' });
 
     const openText = new Set<string>();
@@ -196,6 +202,11 @@ export function createAgentRunner(opts: {
         });
       }
       store.patch(sessionId, { status: 'idle' });
+      if (onTurnEnd) {
+        void Promise.resolve()
+          .then(() => onTurnEnd({ sessionId, userItemId }))
+          .catch(() => {});
+      }
     };
 
     const prompt = buildTurnPrompt(text, options.context);
@@ -205,6 +216,8 @@ export function createAgentRunner(opts: {
         prompt,
         systemPromptAppend: SYSTEM_PROMPT_APPEND,
         resume: session.providerSessionId,
+        model: options.model ?? null,
+        effort: options.effort ?? null,
         signal: controller.signal,
         emit,
         askUser,

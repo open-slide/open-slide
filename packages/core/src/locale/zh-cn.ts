@@ -609,5 +609,12 @@ export const zhCN: Locale = {
     toastCreateDeckFailed: '无法创建幻灯片',
     steps: { one: '{count} 个步骤', other: '{count} 个步骤' },
     questionSkip: '跳过',
+    modelDefault: '默认',
+    reasoning: '推理强度',
+    effortAuto: '自动',
+    efforts: { minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高' },
+    presenceEditing: '{provider} 正在编辑',
+    presenceThinking: '思考中',
+    presenceWaiting: '等待你的回复',
   },
 };

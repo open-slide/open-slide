@@ -1,9 +1,10 @@
-import { Check, ChevronRight, CircleAlert, Loader2 } from 'lucide-react';
+import { Check, ChevronRight, CircleAlert } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { AgentItem, AgentSession, RespondPayload } from '@/lib/agent/use-agent';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
+import { stripDeckSlug } from '../../../agent/prompt';
 import type { AgentQuestion } from '../../../agent/types';
 import { AgentMarkdown } from './agent-markdown';
 
@@ -64,9 +65,8 @@ export function Transcript({
 function WorkingIndicator() {
   const t = useLocale();
   return (
-    <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
-      <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
-      {t.agent.working}…
+    <div className="text-[11.5px]">
+      <span className="agent-shimmer">{t.agent.working}…</span>
     </div>
   );
 }
@@ -83,7 +83,7 @@ function TranscriptItem({
       return <UserItem text={item.text} />;
     case 'assistant':
       return item.text || !item.streaming ? (
-        <AgentMarkdown text={item.text} />
+        <AgentMarkdown text={stripDeckSlug(item.text)} />
       ) : (
         <WorkingIndicator />
       );
@@ -142,7 +142,7 @@ function ToolRow({ item }: { item: ToolEntry }) {
       <span
         className={cn(
           'shrink-0',
-          item.status === 'running' && 'text-foreground/80',
+          item.status === 'running' && 'agent-shimmer',
           item.status === 'error' && 'text-destructive',
         )}
       >

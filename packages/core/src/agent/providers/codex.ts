@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { findOnPath, importWorkspacePackage } from '../detect.ts';
 import {
   type AgentProvider,
@@ -6,9 +9,59 @@ import {
   type ProviderRunOptions,
   ProviderUnavailableError,
 } from '../provider.ts';
+import { AGENT_EFFORTS, type AgentEffort, type AgentModelOption } from '../types.ts';
 import type { CodexItem, CodexSdkModule, CodexThreadEvent } from './sdk-types.ts';
 
 export const CODEX_SDK_PACKAGE = '@openai/codex-sdk';
+
+const CODEX_DEFAULT_MODEL: AgentModelOption = {
+  id: '',
+  label: 'Default',
+  efforts: ['low', 'medium', 'high'],
+};
+
+function isEffort(value: unknown): value is AgentEffort {
+  return typeof value === 'string' && (AGENT_EFFORTS as readonly string[]).includes(value);
+}
+
+// The Codex CLI caches the model list it shows in its own /model picker.
+// Reading that keeps the panel in step with whatever the user's account can
+// use, without a network call of our own.
+export function parseCodexModelsCache(raw: unknown): AgentModelOption[] {
+  const list = (raw as { models?: unknown } | null)?.models;
+  if (!Array.isArray(list)) return [];
+  const models: { option: AgentModelOption; priority: number }[] = [];
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue;
+    const m = entry as Record<string, unknown>;
+    if (typeof m.slug !== 'string' || !m.slug) continue;
+    if (m.visibility !== undefined && m.visibility !== 'list') continue;
+    const levels = Array.isArray(m.supported_reasoning_levels) ? m.supported_reasoning_levels : [];
+    const efforts = levels
+      .map((l) => (l && typeof l === 'object' ? (l as { effort?: unknown }).effort : l))
+      .filter(isEffort);
+    models.push({
+      option: {
+        id: m.slug,
+        label: typeof m.display_name === 'string' && m.display_name ? m.display_name : m.slug,
+        efforts,
+      },
+      priority: typeof m.priority === 'number' ? m.priority : Number.MAX_SAFE_INTEGER,
+    });
+  }
+  return models.sort((a, b) => a.priority - b.priority).map((m) => m.option);
+}
+
+async function readCodexModels(): Promise<AgentModelOption[]> {
+  const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+  try {
+    const raw = JSON.parse(await fs.readFile(path.join(home, 'models_cache.json'), 'utf8'));
+    const models = parseCodexModelsCache(raw);
+    return models.length > 0 ? models : [CODEX_DEFAULT_MODEL];
+  } catch {
+    return [CODEX_DEFAULT_MODEL];
+  }
+}
 
 // The Codex SDK only reports completed items (no token deltas), so each
 // agent message lands as one finished block.
@@ -116,6 +169,7 @@ export function createCodexProvider(): AgentProvider {
     name: 'Codex',
     sdkPackage: CODEX_SDK_PACKAGE,
     cliCommand: 'codex',
+    models: readCodexModels,
     async run(opts: ProviderRunOptions): Promise<void> {
       const sdk = await importWorkspacePackage<CodexSdkModule>(opts.cwd, CODEX_SDK_PACKAGE);
       if (!sdk || typeof sdk.Codex !== 'function') throw new ProviderUnavailableError(this);
@@ -127,6 +181,8 @@ export function createCodexProvider(): AgentProvider {
         skipGitRepoCheck: true,
         sandboxMode: 'workspace-write' as const,
         approvalPolicy: 'never' as const,
+        ...(opts.model ? { model: opts.model } : {}),
+        ...(opts.effort ? { modelReasoningEffort: opts.effort } : {}),
       };
       const thread = opts.resume
         ? codex.resumeThread(opts.resume, threadOptions)

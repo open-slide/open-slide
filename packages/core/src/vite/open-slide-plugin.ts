@@ -280,7 +280,9 @@ export function openSlidePlugin(opts: OpenSlidePluginOptions): Plugin {
         if (isSlideEntry(p) && !hasRecentWrite(p)) reload();
       });
       server.watcher.on('unlink', (p) => {
-        if (isSlideEntry(p)) reload();
+        // A rename the dev server made itself is announced to clients, which
+        // navigate to the new id; a reload would land them on the old one.
+        if (isSlideEntry(p) && !hasRecentWrite(p)) reload();
       });
 
       let foldersTimer: ReturnType<typeof setTimeout> | null = null;

@@ -33,9 +33,11 @@ Open the **Agent** entry in the sidebar (or press `A` on any slide) and click
 switches to chat as soon as the install finishes. Sign in to the CLI first
 (`claude` or `codex login`); the panel reuses that login.
 
-Both agents can be connected; switch between them from the provider menu in
-the panel header. Set `agent: { enabled: false }` in `open-slide.config.ts` to
-hide the panel entirely.
+Both agents can be connected. The model menu in the panel header lists each
+connected agent's models (Opus, Sonnet and Haiku for Claude Code; the models
+your Codex CLI offers for Codex) and the reasoning effort the chosen model
+supports. Set `agent: { enabled: false }` in `open-slide.config.ts` to hide
+the panel entirely.
 
 ## What you can do
 
@@ -43,7 +45,9 @@ hide the panel entirely.
   deck* in the panel. A blank deck opens with the agent panel beside it;
   describe what it should be and the agent drafts it with the `create-slide`
   skill, one page at a time, while the canvas follows each new page. Any
-  scoping questions show up as option cards you answer in place.
+  scoping questions show up as option cards you answer in place. When the
+  draft is done, the deck's `untitled` folder is renamed to a slug the agent
+  picks for it.
 - **Apply comments.** Leave comments in the inspector's comment mode, then
   click **Apply with Claude Code** in the comment island (or the comment chip
   in the composer). The agent resolves every `@slide-comment` marker and the
@@ -54,7 +58,9 @@ hide the panel entirely.
 - **Create a theme**, or ask for anything else the skills cover.
 
 Every turn streams into the transcript: assistant text, each file read or
-edit, and shell commands. Edits inside the workspace are applied directly.
+edit, and shell commands. While an agent is editing the open deck, the slide
+frame glows in the agent's colours and a pill above the canvas shows its
+current step. Edits inside the workspace are applied directly.
 Other actions — a shell command that changes state, for example — pause for
 approval in the panel unless you turn on **Auto-approve** in the provider
 menu. Codex runs inside its own `workspace-write` sandbox and never prompts.

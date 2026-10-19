@@ -9,8 +9,10 @@ import {
   duplicateSlideDir,
   removeNotesElementInSource,
   removePageFromDefaultExportInSource,
+  renameSlideDir,
   reorderDefaultExportPagesInSource,
   reorderNotesArrayInSource,
+  slugifyTitle,
   updateMetaTitleInSource,
   validateSlideName,
 } from './slide-ops.ts';
@@ -44,6 +46,32 @@ describe('createBlankSlideDir', () => {
       const source = await fs.readFile(path.join(root, 'untitled-2', 'index.tsx'), 'utf8');
       expect(source).toContain('export const meta: SlideMeta = { title: "Untitled" };');
       expect(source).toContain('export default [Blank] satisfies Page[];');
+    });
+  });
+});
+
+describe('slugifyTitle', () => {
+  it('folds a title into a slide id', () => {
+    expect(slugifyTitle('Rust for Backend Teams!')).toBe('rust-for-backend-teams');
+    expect(slugifyTitle('  Café  Résumé ')).toBe('cafe-resume');
+    expect(slugifyTitle('台灣 AI 趨勢')).toBe('ai');
+    expect(slugifyTitle('簡報')).toBe('');
+  });
+});
+
+describe('renameSlideDir', () => {
+  it('moves the folder to the first free id', async () => {
+    await withSlidesRoot(async (root) => {
+      await writeSlide(root, 'untitled');
+      await writeSlide(root, 'Rust-Talk');
+      const renamed = await renameSlideDir(root, 'untitled', 'rust-talk');
+      expect(renamed).toMatchObject({ ok: true, slideId: 'rust-talk-2' });
+      expect(await fs.readdir(root)).toEqual(expect.arrayContaining(['Rust-Talk', 'rust-talk-2']));
+      await expect(fs.access(path.join(root, 'rust-talk-2', 'assets', 'hero.txt'))).resolves.toBe(
+        undefined,
+      );
+      expect(await renameSlideDir(root, 'untitled', 'x')).toMatchObject({ ok: false, status: 404 });
+      expect(await renameSlideDir(root, 'rust-talk-2', '../x')).toMatchObject({ ok: false });
     });
   });
 });

@@ -1,7 +1,11 @@
+import { UNTITLED_SLIDE_ID_RE } from '../editing/placeholder-id.ts';
 import type { AgentTurnContext } from './types.ts';
 
 const PAGE_BY_PAGE =
   'Write a new deck page by page so the user can follow along on the canvas: first replace the file with the imports, meta, design and the cover page only, then add each remaining page with its own separate edit, keeping the file compiling after every write.';
+
+const DECK_SLUG =
+  "This deck's folder still has a placeholder name. Never rename or move the folder yourself: once the deck has content, end your final reply with a slug for it on a line of its own as <deck-slug>short-kebab-case-english-slug</deck-slug>, and open-slide renames the folder from it.";
 
 export const SYSTEM_PROMPT_APPEND = [
   'You are running inside the open-slide dev server, driven from its in-app agent panel in the browser rather than a terminal.',
@@ -30,10 +34,12 @@ function contextLines(context: AgentTurnContext | undefined): string[] {
       `${file} is a blank deck created for this request. Draft the deck the user describes into it with the create-slide skill: replace the placeholder page, keep the slide id, and do not create another folder.`,
       'Ask the create-slide scoping questions in a single AskUserQuestion call only for what the request leaves unclear; skip any it already answers.',
       PAGE_BY_PAGE,
+      DECK_SLUG,
     );
     return lines;
   }
   lines.push(`The user is viewing slide "${context.slideId}": ${file}.`);
+  if (UNTITLED_SLIDE_ID_RE.test(context.slideId)) lines.push(DECK_SLUG);
   if (context.slideTitle) {
     lines.push(`<slide-title>${escapeTag(context.slideTitle)}</slide-title>`);
   }
@@ -55,6 +61,23 @@ function contextLines(context: AgentTurnContext | undefined): string[] {
     );
   }
   return lines;
+}
+
+const DECK_SLUG_RE = /\s*<deck-slug>\s*([^<]*?)\s*<\/deck-slug>\s*/gi;
+
+export function extractDeckSlug(text: string): string | null {
+  let slug: string | null = null;
+  for (const match of text.matchAll(DECK_SLUG_RE)) slug = match[1] || slug;
+  return slug;
+}
+
+// Also drops a tag that is still streaming in, so the marker never flashes
+// in the transcript.
+export function stripDeckSlug(text: string): string {
+  return text
+    .replace(DECK_SLUG_RE, '\n')
+    .replace(/\s*<deck-slug>[^<]*$/i, '')
+    .trimEnd();
 }
 
 export function applyCommentsPrompt(slideId: string): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommentsPrompt, buildTurnPrompt } from './prompt.ts';
+import { applyCommentsPrompt, buildTurnPrompt, extractDeckSlug, stripDeckSlug } from './prompt.ts';
 
 describe('buildTurnPrompt', () => {
   it('returns the text untouched without slide context', () => {
@@ -54,6 +54,25 @@ describe('buildTurnPrompt', () => {
     expect(out).toContain('create-slide skill');
     expect(out).toContain('page by page');
     expect(out).not.toContain('page 1 of 1');
+    expect(out).toContain('<deck-slug>');
+  });
+
+  it('asks for a slug only while the deck keeps its placeholder id', () => {
+    expect(buildTurnPrompt('more', { slideId: 'untitled-2' })).toContain('<deck-slug>');
+    expect(buildTurnPrompt('more', { slideId: 'rust-talk' })).not.toContain('<deck-slug>');
+  });
+});
+
+describe('deck slug marker', () => {
+  it('reads the last slug and strips every marker', () => {
+    const text = 'Drafted 6 pages.\n\n<deck-slug> rust-for-backends </deck-slug>';
+    expect(extractDeckSlug(text)).toBe('rust-for-backends');
+    expect(stripDeckSlug(text)).toBe('Drafted 6 pages.');
+    expect(extractDeckSlug('no marker')).toBeNull();
+  });
+
+  it('hides a marker that is still streaming in', () => {
+    expect(stripDeckSlug('Done.\n<deck-slug>rust-fo')).toBe('Done.');
   });
 });
 

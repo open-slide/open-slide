@@ -19,12 +19,15 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  type AgentEffort,
+  type AgentModelOption,
   type AgentProviderId,
   clearNewDeck,
   consumeRequest,
@@ -36,7 +39,7 @@ import {
   sendMessage,
   setActiveSession,
   setAutoApprove,
-  setPreferredProvider,
+  setModelChoice,
   startBlankDeck,
   stopSession,
   useAgentSession,
@@ -66,7 +69,7 @@ export function AgentPanel({
   className?: string;
 }) {
   const t = useLocale();
-  const { status, loading, connected, provider } = useAgentStatus();
+  const { status, loading, connected, provider, model, effort, modelChoices } = useAgentStatus();
   const { sessions, activeId } = useAgentSessions();
   const session = useAgentSession(activeId);
   const { request, autoApprove, newDeck } = useAgentState();
@@ -85,8 +88,10 @@ export function AgentPanel({
   const ensureSession = useCallback(
     async (fresh: boolean) => {
       const current = activeId ? sessions.find((s) => s.id === activeId) : null;
-      if (!fresh && current && current.status !== 'running') return current.id;
       if (!provider) throw new Error('no agent connected');
+      if (!fresh && current && current.status !== 'running' && current.provider === provider.id) {
+        return current.id;
+      }
       const created = await createSession(provider.id, contextRef.current?.slideId ?? null);
       return created.id;
     },
@@ -186,7 +191,11 @@ export function AgentPanel({
   ) : null;
 
   return (
-    <div className={cn('flex h-full min-h-0 flex-col bg-sidebar', className)}>
+    <div
+      data-agent-provider={provider?.id}
+      className={cn('relative flex h-full min-h-0 flex-col bg-sidebar', className)}
+    >
+      {running && <span aria-hidden className="agent-progress z-10" />}
       <header className="flex h-9 shrink-0 items-center justify-between gap-1 border-b border-hairline px-2">
         <div className="flex min-w-0 items-center gap-0.5">
           {showConnect && connected ? (
@@ -194,10 +203,12 @@ export function AgentPanel({
               {t.agent.backToChat}
             </Button>
           ) : (
-            <ProviderMenu
+            <ModelMenu
               status={status}
               providerId={provider?.id ?? null}
-              providerName={providerName || t.agent.title}
+              model={model}
+              effort={effort}
+              modelChoices={modelChoices}
               autoApprove={autoApprove}
               onManage={() => setManage(true)}
             />
@@ -290,21 +301,31 @@ export function AgentPanel({
   );
 }
 
-function ProviderMenu({
+function modelLabel(model: AgentModelOption, t: ReturnType<typeof useLocale>): string {
+  return model.id ? model.label : t.agent.modelDefault;
+}
+
+function ModelMenu({
   status,
   providerId,
-  providerName,
+  model,
+  effort,
+  modelChoices,
   autoApprove,
   onManage,
 }: {
   status: ReturnType<typeof useAgentStatus>['status'];
   providerId: AgentProviderId | null;
-  providerName: string;
+  model: AgentModelOption | null;
+  effort: AgentEffort | null;
+  modelChoices: ReturnType<typeof useAgentStatus>['modelChoices'];
   autoApprove: boolean;
   onManage: () => void;
 }) {
   const t = useLocale();
+  const providers = status?.enabled ? status.providers : [];
   const ready = readyProviders(status);
+  const value = providerId && model ? `${providerId}:${model.id}` : '';
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -316,25 +337,70 @@ function ProviderMenu({
         ) : (
           <span aria-hidden className="size-1.5 rounded-full bg-muted-foreground/50" />
         )}
-        <span className="truncate">{providerName}</span>
+        <span className="truncate">{model ? modelLabel(model, t) : t.agent.title}</span>
+        {effort && (
+          <span className="shrink-0 font-normal text-muted-foreground">
+            {t.agent.efforts[effort]}
+          </span>
+        )}
         <ChevronDown className="size-3 text-muted-foreground" aria-hidden />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-[220px]">
+      <DropdownMenuContent align="start" className="min-w-[232px]">
         {ready.length > 0 && (
           <>
             <DropdownMenuRadioGroup
-              value={providerId ?? ''}
-              onValueChange={(value) => {
-                if (value === 'claude' || value === 'codex') setPreferredProvider(value);
+              value={value}
+              onValueChange={(next) => {
+                const [id, ...rest] = String(next).split(':');
+                if (id !== 'claude' && id !== 'codex') return;
+                const prev = modelChoices[id];
+                setModelChoice(id, { model: rest.join(':'), effort: prev?.effort ?? null });
               }}
             >
-              {ready.map((p) => (
-                <DropdownMenuRadioItem key={p.id} value={p.id}>
-                  <ProviderLogo provider={p.id} className="size-3.5" />
-                  {p.name}
-                </DropdownMenuRadioItem>
+              {providers.map((p) => (
+                <DropdownMenuGroup key={p.id}>
+                  <DropdownMenuLabel className="flex items-center gap-1.5">
+                    <ProviderLogo provider={p.id} className="size-3" />
+                    {p.name}
+                  </DropdownMenuLabel>
+                  {p.ready ? (
+                    p.models.map((m) => (
+                      <DropdownMenuRadioItem key={m.id} value={`${p.id}:${m.id}`}>
+                        {modelLabel(m, t)}
+                      </DropdownMenuRadioItem>
+                    ))
+                  ) : (
+                    <DropdownMenuItem onClick={onManage} className="pl-8 text-muted-foreground">
+                      {t.agent.connect}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuGroup>
               ))}
             </DropdownMenuRadioGroup>
+            {providerId && model && model.efforts.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>{t.agent.reasoning}</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={effort ?? ''}
+                    onValueChange={(next) =>
+                      setModelChoice(providerId, {
+                        model: model.id,
+                        effort: next ? (next as AgentEffort) : null,
+                      })
+                    }
+                  >
+                    <DropdownMenuRadioItem value="">{t.agent.effortAuto}</DropdownMenuRadioItem>
+                    {model.efforts.map((e) => (
+                      <DropdownMenuRadioItem key={e} value={e}>
+                        {t.agent.efforts[e]}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuGroup>
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem checked={autoApprove} onCheckedChange={setAutoApprove}>
               <div className="flex flex-col">

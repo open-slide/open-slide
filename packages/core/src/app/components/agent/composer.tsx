@@ -42,10 +42,11 @@ export function Composer({
     <div className="shrink-0 border-t border-hairline bg-sidebar px-3 pt-2.5 pb-3">
       <div
         className={cn(
-          'flex flex-col rounded-[8px] border border-border bg-background shadow-edge transition-colors duration-100',
+          'relative flex flex-col rounded-[8px] border border-border bg-background shadow-edge transition-colors duration-100',
           'focus-within:border-foreground/40 focus-within:ring-2 focus-within:ring-ring/30',
         )}
       >
+        {running && <span aria-hidden className="agent-ring" />}
         <textarea
           ref={textareaRef}
           value={value}

@@ -1,17 +1,37 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ViteDevServer } from 'vite';
+import { extractDeckSlug, stripDeckSlug } from '../../agent/prompt.ts';
 import { createProviders } from '../../agent/providers/index.ts';
-import { type AgentRunner, createAgentRunner, type RespondPayload } from '../../agent/runner.ts';
-import { agentStatus, installSdk } from '../../agent/status.ts';
-import { createSessionStore } from '../../agent/store.ts';
 import {
+  type AgentRunner,
+  createAgentRunner,
+  type RespondPayload,
+  type TurnEnd,
+} from '../../agent/runner.ts';
+import { agentStatus, installSdk } from '../../agent/status.ts';
+import { createSessionStore, type SessionStore } from '../../agent/store.ts';
+import {
+  AGENT_EFFORTS,
   AGENT_WS_EVENT,
+  type AgentEffort,
   type AgentProviderId,
   type AgentTurnContext,
   type AgentWsEvent,
 } from '../../agent/types.ts';
-import { SLIDE_ID_RE } from '../../editing/slide-ops.ts';
+import { UNTITLED_SLIDE_ID_RE } from '../../editing/placeholder-id.ts';
+import {
+  BLANK_SLIDE_TITLE,
+  readMetaTitleInSource,
+  renameSlideDir,
+  resolveSlideEntry,
+  SLIDE_ID_RE,
+  slugifyTitle,
+} from '../../editing/slide-ops.ts';
+import { readManifest, writeManifest } from '../../files/folders.ts';
 import { validateMutationRequest } from '../../http/request-guard.ts';
+import { invalidateSlidesModule } from '../open-slide-plugin.ts';
+import { recordWrite } from '../recent-writes.ts';
 import { type ApiContext, json, readBody } from './context.ts';
 import { detectPackageManager } from './update.ts';
 
@@ -21,7 +41,7 @@ import { detectPackageManager } from './update.ts';
 // POST   /__agent/sessions                    { provider, slideId? } → AgentSession
 // GET    /__agent/sessions/:id                → AgentSession
 // DELETE /__agent/sessions/:id                → { ok }
-// POST   /__agent/sessions/:id/messages       { text, context?, autoApprove? } → { ok }
+// POST   /__agent/sessions/:id/messages       { text, context?, autoApprove?, model?, effort? } → { ok }
 // POST   /__agent/sessions/:id/stop           → { ok }
 // POST   /__agent/sessions/:id/respond        { itemId, answers? | allow? | cancel? } → { ok }
 //
@@ -65,6 +85,75 @@ function parseContext(raw: unknown): AgentTurnContext | undefined {
   return ctx;
 }
 
+const MODEL_RE = /^[\w.:[\]-]{1,80}$/;
+
+function parseModel(raw: unknown): string | null {
+  return typeof raw === 'string' && MODEL_RE.test(raw) ? raw : null;
+}
+
+function parseEffort(raw: unknown): AgentEffort | null {
+  return typeof raw === 'string' && (AGENT_EFFORTS as readonly string[]).includes(raw)
+    ? (raw as AgentEffort)
+    : null;
+}
+
+// A deck drafted into a blank `untitled` folder gets a real id once the turn
+// that wrote it ends: the agent's <deck-slug> wins, else the title's slug.
+// Renaming mid-turn would pull the file out from under the agent's edits.
+async function renamePlaceholderDeck(
+  server: ViteDevServer,
+  ctx: ApiContext,
+  store: SessionStore,
+  turn: TurnEnd,
+): Promise<void> {
+  const session = store.get(turn.sessionId);
+  const slideId = session?.slideId;
+  if (!session || !slideId || !UNTITLED_SLIDE_ID_RE.test(slideId)) return;
+
+  const start = session.items.findIndex((i) => i.id === turn.userItemId);
+  let marked: string | null = null;
+  for (const item of session.items.slice(start + 1)) {
+    if (item.kind !== 'assistant') continue;
+    const slug = extractDeckSlug(item.text);
+    if (slug === null) continue;
+    marked = slug;
+    store.updateItem(session.id, item.id, 'assistant', { text: stripDeckSlug(item.text) });
+  }
+
+  if (store.list().some((s) => s.slideId === slideId && s.status === 'running')) return;
+  const entry = resolveSlideEntry(ctx.slidesRoot, slideId);
+  if (!entry) return;
+  let source: string;
+  try {
+    source = await fs.readFile(entry, 'utf8');
+  } catch {
+    return;
+  }
+  const meta = readMetaTitleInSource(source);
+  if (meta.kind !== 'found' || meta.title === BLANK_SLIDE_TITLE) return;
+  const desired = slugifyTitle(marked ?? '') || slugifyTitle(meta.title);
+  if (!desired || UNTITLED_SLIDE_ID_RE.test(desired)) return;
+
+  recordWrite(entry);
+  const renamed = await renameSlideDir(ctx.slidesRoot, slideId, desired);
+  if (!renamed.ok) return;
+  recordWrite(path.join(renamed.to, 'index.tsx'));
+
+  const manifest = await readManifest(ctx.manifestPath);
+  const folderId = manifest.assignments[slideId];
+  if (folderId) {
+    delete manifest.assignments[slideId];
+    manifest.assignments[renamed.slideId] = folderId;
+    await writeManifest(ctx.manifestPath, manifest);
+  }
+  for (const s of store.list()) {
+    if (s.slideId === slideId) store.patch(s.id, { slideId: renamed.slideId });
+  }
+  invalidateSlidesModule(server);
+  const event: AgentWsEvent = { type: 'slide-renamed', from: slideId, to: renamed.slideId };
+  server.ws.send({ type: 'custom', event: AGENT_WS_EVENT, data: event });
+}
+
 function parseRespond(raw: unknown): RespondPayload | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -85,7 +174,12 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
   const store = createSessionStore({
     file: path.join(ctx.userCwd, 'node_modules', '.open-slide', 'agent-sessions.json'),
   });
-  const runner: AgentRunner = createAgentRunner({ userCwd: ctx.userCwd, store, providers });
+  const runner: AgentRunner = createAgentRunner({
+    userCwd: ctx.userCwd,
+    store,
+    providers,
+    onTurnEnd: (turn) => renamePlaceholderDeck(server, ctx, store, turn),
+  });
 
   store.subscribe((event: AgentWsEvent) => {
     server.ws.send({ type: 'custom', event: AGENT_WS_EVENT, data: event });
@@ -169,6 +263,8 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
             text?: unknown;
             context?: unknown;
             autoApprove?: unknown;
+            model?: unknown;
+            effort?: unknown;
           };
           if (typeof body.text !== 'string' || !body.text.trim()) {
             return json(res, 400, { error: 'missing text' });
@@ -178,6 +274,8 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
             text: body.text,
             context: parseContext(body.context),
             autoApprove: body.autoApprove === true,
+            model: parseModel(body.model),
+            effort: parseEffort(body.effort),
           });
           return json(res, 202, { ok: true });
         }

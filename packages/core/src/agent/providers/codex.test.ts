@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProviderEvent } from '../provider.ts';
-import { createCodexMapper } from './codex.ts';
+import { createCodexMapper, parseCodexModelsCache } from './codex.ts';
 import type { CodexThreadEvent } from './sdk-types.ts';
 
 function collect() {
@@ -75,5 +75,29 @@ describe('createCodexMapper', () => {
       { type: 'error', text: 'turn failed' },
       { type: 'result', durationMs: null, costUsd: null },
     ]);
+  });
+});
+
+describe('parseCodexModelsCache', () => {
+  it('lists the models the Codex picker shows, in its order', () => {
+    const models = parseCodexModelsCache({
+      models: [
+        {
+          slug: 'gpt-b',
+          display_name: 'GPT B',
+          priority: 2,
+          supported_reasoning_levels: [{ effort: 'low' }, { effort: 'high' }, { effort: 'bogus' }],
+        },
+        { slug: 'gpt-hidden', visibility: 'hide', priority: 0 },
+        { slug: 'gpt-a', priority: 1, supported_reasoning_levels: ['medium'] },
+        { display_name: 'no slug' },
+      ],
+    });
+    expect(models).toEqual([
+      { id: 'gpt-a', label: 'gpt-a', efforts: ['medium'] },
+      { id: 'gpt-b', label: 'GPT B', efforts: ['low', 'high'] },
+    ]);
+    expect(parseCodexModelsCache(null)).toEqual([]);
+    expect(parseCodexModelsCache({ models: 'x' })).toEqual([]);
   });
 });

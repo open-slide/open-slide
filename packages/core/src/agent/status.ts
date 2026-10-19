@@ -13,7 +13,10 @@ export async function providerStatus(
 ): Promise<AgentProviderStatus> {
   const sdk = resolveWorkspacePackage(userCwd, provider.sdkPackage);
   const cliPath = findOnPath(provider.cliCommand);
-  const cliVersion = cliPath ? await commandVersion(cliPath) : null;
+  const [cliVersion, models] = await Promise.all([
+    cliPath ? commandVersion(cliPath) : null,
+    provider.models(),
+  ]);
   return {
     id: provider.id,
     name: provider.name,
@@ -24,6 +27,7 @@ export async function providerStatus(
     cliFound: cliPath !== null,
     cliVersion,
     ready: sdk !== null,
+    models,
   };
 }
 

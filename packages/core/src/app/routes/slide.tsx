@@ -29,6 +29,7 @@ import {
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AgentDock, AgentToggleButton } from '@/components/agent/agent-dock';
+import { AgentPresence } from '@/components/agent/agent-presence';
 import { AssetView } from '@/components/asset-view';
 import { HistoryProvider } from '@/components/history-provider';
 import { CommentLayer } from '@/components/inspector/comment-layer';
@@ -59,7 +60,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { setDockOpen, useAgentDock, useAgentWriting } from '@/lib/agent/use-agent';
+import { setDockOpen, useAgentActivity, useAgentDock } from '@/lib/agent/use-agent';
 import { useFolders } from '@/lib/folders';
 import {
   hasModifier,
@@ -202,7 +203,8 @@ export function Slide() {
 
   // While an agent writes this deck page by page, jump to each page as it
   // lands so the user can follow along.
-  const agentWriting = useAgentWriting(slideId);
+  const agentActivity = useAgentActivity(slideId);
+  const agentWriting = agentActivity !== null;
   const seenPageCount = useRef(pageCount);
   useEffect(() => {
     if (agentWriting && pageCount > seenPageCount.current) goTo(pageCount - 1);
@@ -860,6 +862,7 @@ export function Slide() {
                     ref={slideViewportRef}
                     data-inspector-root
                     data-slide-id={slideId}
+                    data-agent-provider={agentActivity?.provider}
                     className="relative min-h-0 min-w-0 flex-1 bg-background p-2 md:mx-2 md:mb-2 md:rounded-[10px] md:p-10 md:shadow-edge md:ring-1 md:ring-foreground/[0.06]"
                   >
                     <SlideViewportNavigation
@@ -882,6 +885,7 @@ export function Slide() {
                     <InlineEditLayer />
                     <SaveBar />
                     {import.meta.env.DEV && <CommentLayer />}
+                    {agentActivity && <AgentPresence activity={agentActivity} revision={pages} />}
                   </main>
                   {/* Mobile-only horizontal rail. Sits below the canvas and
                     pads its bottom for the iOS home indicator / Safari URL bar. */}

@@ -1,5 +1,16 @@
 export type AgentProviderId = 'claude' | 'codex';
 
+export const AGENT_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+export type AgentEffort = (typeof AGENT_EFFORTS)[number];
+
+export type AgentModelOption = {
+  // Empty when the option stands for the CLI's own default model.
+  id: string;
+  label: string;
+  efforts: AgentEffort[];
+};
+
 export type AgentProviderStatus = {
   id: AgentProviderId;
   name: string;
@@ -10,6 +21,7 @@ export type AgentProviderStatus = {
   cliFound: boolean;
   cliVersion: string | null;
   ready: boolean;
+  models: AgentModelOption[];
 };
 
 export type AgentStatus = {
@@ -97,7 +109,8 @@ export type AgentWsEvent =
   | { type: 'session'; session: AgentSessionSummary }
   | { type: 'session-removed'; sessionId: string }
   | { type: 'item'; sessionId: string; item: AgentItem }
-  | { type: 'delta'; sessionId: string; itemId: string; text: string };
+  | { type: 'delta'; sessionId: string; itemId: string; text: string }
+  | { type: 'slide-renamed'; from: string; to: string };
 
 export const AGENT_WS_EVENT = 'open-slide:agent';
 

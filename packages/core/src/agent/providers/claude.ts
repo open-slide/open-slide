@@ -7,7 +7,7 @@ import {
   ProviderUnavailableError,
   relativeToCwd,
 } from '../provider.ts';
-import type { AgentQuestion } from '../types.ts';
+import type { AgentEffort, AgentModelOption, AgentQuestion } from '../types.ts';
 import type {
   ClaudeCanUseTool,
   ClaudeContentBlock,
@@ -16,6 +16,20 @@ import type {
 } from './sdk-types.ts';
 
 export const CLAUDE_SDK_PACKAGE = '@anthropic-ai/claude-agent-sdk';
+
+const CLAUDE_EFFORTS: AgentEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+// Aliases rather than dated ids: Claude Code resolves each to the newest
+// model of that family, so the list never goes stale.
+export const CLAUDE_MODELS: AgentModelOption[] = [
+  { id: 'opus', label: 'Opus', efforts: CLAUDE_EFFORTS },
+  { id: 'sonnet', label: 'Sonnet', efforts: CLAUDE_EFFORTS },
+  { id: 'haiku', label: 'Haiku', efforts: [] },
+];
+
+export function claudeEffort(effort: AgentEffort | null) {
+  return effort && effort !== 'minimal' ? effort : undefined;
+}
 
 export function describeClaudeTool(
   name: string,
@@ -193,6 +207,9 @@ export function createClaudeProvider(): AgentProvider {
     name: 'Claude Code',
     sdkPackage: CLAUDE_SDK_PACKAGE,
     cliCommand: 'claude',
+    async models() {
+      return CLAUDE_MODELS;
+    },
     async run(opts: ProviderRunOptions): Promise<void> {
       const sdk = await importWorkspacePackage<ClaudeSdkModule>(opts.cwd, CLAUDE_SDK_PACKAGE);
       if (!sdk || typeof sdk.query !== 'function') throw new ProviderUnavailableError(this);
@@ -221,6 +238,7 @@ export function createClaudeProvider(): AgentProvider {
       };
 
       const localCli = findOnPath('claude');
+      const effort = claudeEffort(opts.effort);
       let stderr = '';
       const stream = sdk.query({
         prompt: opts.prompt,
@@ -233,6 +251,8 @@ export function createClaudeProvider(): AgentProvider {
           abortController,
           canUseTool,
           ...(opts.resume ? { resume: opts.resume } : {}),
+          ...(opts.model ? { model: opts.model } : {}),
+          ...(effort ? { effort } : {}),
           ...(localCli ? { pathToClaudeCodeExecutable: localCli } : {}),
           stderr: (data: string) => {
             stderr = (stderr + data).slice(-2000);
