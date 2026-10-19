@@ -564,7 +564,7 @@ export const en: Locale = {
     createDeck: 'New deck',
     createDeckWith: 'Create a deck with {provider}',
     quickCreate: 'Draft a new deck',
-    quickCreateHint: 'Runs the create-slide skill and asks the scoping questions here.',
+    quickCreateHint: 'Opens a blank deck; describe it and the agent drafts it page by page.',
     quickApply: 'Apply pending comments',
     quickApplyHint: 'Resolves every @slide-comment marker in this slide.',
     quickTheme: 'Create a theme',
@@ -607,5 +607,12 @@ export const en: Locale = {
     manageConnections: 'Manage agents',
     backToChat: 'Back',
     toastSendFailed: 'Could not send message',
+    newDeckTitle: "What's this deck about?",
+    newDeckHint:
+      'Describe the topic, audience and tone. {provider} drafts it page by page while you watch.',
+    newDeckPlaceholder: 'A 10-minute talk on…',
+    toastCreateDeckFailed: 'Could not create a deck',
+    steps: { one: '{count} step', other: '{count} steps' },
+    questionSkip: 'Skip',
   },
 };

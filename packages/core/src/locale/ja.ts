@@ -570,7 +570,7 @@ export const ja: Locale = {
     createDeck: '新しいデッキ',
     createDeckWith: '{provider} でデッキを作成',
     quickCreate: '新しいデッキを下書き',
-    quickCreateHint: 'create-slide スキルを実行し、ここで要件を確認します。',
+    quickCreateHint: '空のデッキを開き、内容を伝えるとエージェントが 1 ページずつ作成します。',
     quickApply: '未処理のコメントを適用',
     quickApplyHint: 'このスライドの @slide-comment マーカーをすべて処理します。',
     quickTheme: 'テーマを作成',
@@ -614,5 +614,12 @@ export const ja: Locale = {
     manageConnections: 'エージェントを管理',
     backToChat: '戻る',
     toastSendFailed: 'メッセージを送信できませんでした',
+    newDeckTitle: 'どんなデッキにしますか？',
+    newDeckHint:
+      'テーマ、対象、トーンを伝えてください。{provider} が 1 ページずつ作成する様子を見られます。',
+    newDeckPlaceholder: '10 分間のトーク：…',
+    toastCreateDeckFailed: 'デッキを作成できませんでした',
+    steps: { one: '{count} ステップ', other: '{count} ステップ' },
+    questionSkip: 'スキップ',
   },
 };

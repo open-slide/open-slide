@@ -1,8 +1,8 @@
-import { Check, CircleAlert, Loader2, Wrench, X } from 'lucide-react';
+import { Check, ChevronRight, CircleAlert, Loader2 } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { AgentItem, AgentSession, RespondPayload } from '@/lib/agent/use-agent';
-import { format, useLocale } from '@/lib/use-locale';
+import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import type { AgentQuestion } from '../../../agent/types';
 import { AgentMarkdown } from './agent-markdown';
@@ -38,9 +38,16 @@ export function Transcript({
       className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
     >
       <ol className="flex flex-col gap-3">
-        {session.items.map((item) => (
-          <li key={item.id}>
-            <TranscriptItem item={item} onRespond={(payload) => onRespond(item.id, payload)} />
+        {toBlocks(session.items).map((block) => (
+          <li key={block.key}>
+            {'tools' in block ? (
+              <ToolGroup tools={block.tools} />
+            ) : (
+              <TranscriptItem
+                item={block.item}
+                onRespond={(payload) => onRespond(block.item.id, payload)}
+              />
+            )}
           </li>
         ))}
         {session.status === 'running' &&
@@ -80,8 +87,6 @@ function TranscriptItem({
       ) : (
         <WorkingIndicator />
       );
-    case 'tool':
-      return <ToolItem item={item} />;
     case 'question':
       return <QuestionItem item={item} onRespond={onRespond} />;
     case 'permission':
@@ -105,23 +110,88 @@ function UserItem({ text }: { text: string }) {
   );
 }
 
-function ToolItem({ item }: { item: Extract<AgentItem, { kind: 'tool' }> }) {
+type ToolEntry = Extract<AgentItem, { kind: 'tool' }>;
+
+type Block = { key: string; item: AgentItem } | { key: string; tools: ToolEntry[] };
+
+function toBlocks(items: AgentItem[]): Block[] {
+  const blocks: Block[] = [];
+  for (const item of items) {
+    const last = blocks.at(-1);
+    if (item.kind === 'tool' && last && 'tools' in last) last.tools.push(item);
+    else if (item.kind === 'tool') blocks.push({ key: item.id, tools: [item] });
+    else blocks.push({ key: item.id, item });
+  }
+  return blocks;
+}
+
+function ToolRow({ item }: { item: ToolEntry }) {
   return (
-    <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
-      <span className="grid size-4 shrink-0 place-items-center">
-        {item.status === 'running' ? (
-          <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
-        ) : item.status === 'done' ? (
-          <Check className="size-3" aria-hidden />
-        ) : (
-          <X className="size-3 text-destructive" aria-hidden />
+    <div className="flex min-w-0 items-center gap-2 text-[11.5px] leading-5 text-muted-foreground">
+      <span
+        aria-hidden
+        className={cn(
+          'size-1 shrink-0 rounded-full',
+          item.status === 'running'
+            ? 'animate-pulse bg-foreground/70 motion-reduce:animate-none'
+            : item.status === 'error'
+              ? 'bg-destructive'
+              : 'bg-muted-foreground/40',
         )}
+      />
+      <span
+        className={cn(
+          'shrink-0',
+          item.status === 'running' && 'text-foreground/80',
+          item.status === 'error' && 'text-destructive',
+        )}
+      >
+        {item.title}
       </span>
-      <span className="shrink-0 font-medium text-foreground/80">{item.title}</span>
       {item.detail && (
-        <span className="min-w-0 truncate font-mono text-[11px]" title={item.detail}>
+        <span
+          className="min-w-0 truncate font-mono text-[10.5px] text-muted-foreground/70"
+          title={item.detail}
+        >
           {item.detail}
         </span>
+      )}
+    </div>
+  );
+}
+
+function ToolGroup({ tools }: { tools: ToolEntry[] }) {
+  const t = useLocale();
+  const [open, setOpen] = useState(false);
+  if (tools.length === 1) return <ToolRow item={tools[0]} />;
+  const live = [...tools].reverse().find((tool) => tool.status === 'running');
+  const failed = tools.some((tool) => tool.status === 'error');
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 rounded-[4px] text-[11.5px] leading-5 text-muted-foreground outline-none transition-colors duration-100 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+      >
+        <ChevronRight
+          aria-hidden
+          className={cn(
+            'size-3 transition-transform duration-150 motion-reduce:transition-none',
+            open && 'rotate-90',
+          )}
+        />
+        {format(plural(tools.length, t.agent.steps), { count: tools.length })}
+        {failed && <span aria-hidden className="ml-0.5 size-1 rounded-full bg-destructive" />}
+      </button>
+      {(open || live) && (
+        <div className="mt-0.5 ml-1.5 flex flex-col border-l border-hairline pl-3">
+          {open ? (
+            tools.map((tool) => <ToolRow key={tool.id} item={tool} />)
+          ) : live ? (
+            <ToolRow item={live} />
+          ) : null}
+        </div>
       )}
     </div>
   );
@@ -171,40 +241,42 @@ function PermissionItem({
       setBusy(false);
     }
   };
-  const pending = item.status === 'pending';
-  return (
-    <div
-      className={cn(
-        'rounded-[6px] border px-3 py-2.5',
-        pending ? 'border-amber-500/40 bg-amber-500/5' : 'border-hairline bg-card',
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="eyebrow flex items-center gap-1">
-          <Wrench className="size-3" aria-hidden />
-          {pending
-            ? t.agent.permissionTitle
-            : item.status === 'allowed'
-              ? t.agent.allowed
-              : t.agent.denied}
+
+  if (item.status !== 'pending') {
+    return (
+      <p className="flex min-w-0 items-center gap-2 text-[11.5px] leading-5 text-muted-foreground">
+        <span
+          aria-hidden
+          className={cn(
+            'size-1 shrink-0 rounded-full',
+            item.status === 'allowed' ? 'bg-muted-foreground/40' : 'bg-destructive',
+          )}
+        />
+        <span className="shrink-0">
+          {item.status === 'allowed' ? t.agent.allowed : t.agent.denied}
         </span>
-        {pending && (
-          <div className="flex items-center gap-1">
-            <Button size="xs" variant="ghost" disabled={busy} onClick={() => decide(false)}>
-              {t.agent.deny}
-            </Button>
-            <Button size="xs" disabled={busy} onClick={() => decide(true)}>
-              {t.agent.allow}
-            </Button>
-          </div>
-        )}
-      </div>
-      <p className="mt-1 text-[12px] font-medium">{item.title}</p>
+        <span className="min-w-0 truncate text-foreground/70">{item.title}</span>
+      </p>
+    );
+  }
+
+  return (
+    <div className="rounded-[8px] border border-hairline bg-background px-3 py-2.5">
+      <p className="text-[11.5px] text-muted-foreground">{t.agent.permissionTitle}</p>
+      <p className="mt-0.5 text-[12.5px] font-medium leading-snug">{item.title}</p>
       {item.detail && (
-        <pre className="mt-1 whitespace-pre-wrap break-all font-mono text-[11px] leading-relaxed text-muted-foreground">
+        <pre className="mt-1.5 line-clamp-4 whitespace-pre-wrap break-all font-mono text-[10.5px] leading-relaxed text-muted-foreground">
           {item.detail}
         </pre>
       )}
+      <div className="mt-2.5 flex justify-end gap-1">
+        <Button size="xs" variant="ghost" disabled={busy} onClick={() => decide(false)}>
+          {t.agent.deny}
+        </Button>
+        <Button size="xs" disabled={busy} onClick={() => decide(true)}>
+          {t.agent.allow}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -220,7 +292,6 @@ function QuestionItem({
   const [picked, setPicked] = useState<Record<string, string[]>>({});
   const [other, setOther] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const pending = item.status === 'pending';
 
   const answerFor = (q: AgentQuestion): string | null => {
     const custom = other[q.question]?.trim();
@@ -230,106 +301,118 @@ function QuestionItem({
   };
   const complete = item.questions.every((q) => answerFor(q) !== null);
 
-  const submit = async () => {
-    const answers: Record<string, string> = {};
-    for (const q of item.questions) answers[q.question] = answerFor(q) ?? '';
+  const reply = async (payload: RespondPayload) => {
     setBusy(true);
     try {
-      await onRespond({ answers });
+      await onRespond(payload);
     } finally {
       setBusy(false);
     }
   };
+  const submit = () => {
+    const answers: Record<string, string> = {};
+    for (const q of item.questions) answers[q.question] = answerFor(q) ?? '';
+    void reply({ answers });
+  };
+  const toggle = (q: AgentQuestion, label: string) =>
+    setPicked((prev) => {
+      const current = prev[q.question] ?? [];
+      const on = current.includes(label);
+      const next = q.multiSelect
+        ? on
+          ? current.filter((l) => l !== label)
+          : [...current, label]
+        : on
+          ? []
+          : [label];
+      return { ...prev, [q.question]: next };
+    });
 
-  return (
-    <div
-      className={cn(
-        'rounded-[8px] border px-3 py-3',
-        pending ? 'border-brand/40 bg-brand/[0.04]' : 'border-hairline bg-card',
-      )}
-    >
-      <div className="flex flex-col gap-3.5">
+  if (item.status !== 'pending') {
+    return (
+      <div className="flex flex-col gap-0.5">
         {item.questions.map((q) => (
-          <div key={q.question}>
-            {q.header && <span className="eyebrow">{q.header}</span>}
-            <p className="mt-0.5 text-[12.5px] font-medium leading-snug">{q.question}</p>
-            {pending ? (
-              <>
-                <div className="mt-2 flex flex-col gap-1">
-                  {q.options.map((option) => {
-                    const selected = (picked[q.question] ?? []).includes(option.label);
-                    return (
-                      <button
-                        key={option.label}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() =>
-                          setPicked((prev) => {
-                            const current = prev[q.question] ?? [];
-                            const next = q.multiSelect
-                              ? selected
-                                ? current.filter((l) => l !== option.label)
-                                : [...current, option.label]
-                              : selected
-                                ? []
-                                : [option.label];
-                            return { ...prev, [q.question]: next };
-                          })
-                        }
-                        className={cn(
-                          'rounded-[6px] border px-2.5 py-1.5 text-left outline-none transition-colors duration-100 focus-visible:ring-2 focus-visible:ring-ring/30',
-                          selected
-                            ? 'border-foreground bg-foreground text-background'
-                            : 'border-border bg-background hover:border-foreground/30',
-                        )}
-                      >
-                        <span className="block text-[12px] font-medium">{option.label}</span>
-                        {option.description && (
-                          <span
-                            className={cn(
-                              'mt-0.5 block text-[11px] leading-snug',
-                              selected ? 'text-background/75' : 'text-muted-foreground',
-                            )}
-                          >
-                            {option.description}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                <input
-                  value={other[q.question] ?? ''}
-                  onChange={(e) => setOther((prev) => ({ ...prev, [q.question]: e.target.value }))}
-                  placeholder={`${t.agent.questionOther} · ${t.agent.questionOtherPlaceholder}`}
-                  className="mt-1.5 h-8 w-full rounded-[6px] border border-border bg-background px-2.5 text-[12px] outline-none placeholder:text-muted-foreground/60 focus-visible:border-foreground/40 focus-visible:ring-2 focus-visible:ring-ring/30"
-                />
-              </>
-            ) : (
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                {item.status === 'answered'
-                  ? (item.answers?.[q.question] ?? '—')
-                  : t.agent.questionCancelled}
-              </p>
-            )}
-          </div>
+          <p key={q.question} className="text-[11.5px] leading-5 text-muted-foreground">
+            <span>{q.header || q.question}</span>
+            <span aria-hidden className="mx-1.5">
+              ·
+            </span>
+            <span className="text-foreground/80">
+              {item.status === 'answered'
+                ? item.answers?.[q.question] || '—'
+                : t.agent.questionCancelled}
+            </span>
+          </p>
         ))}
       </div>
-      {pending && (
-        <div className="mt-3 flex justify-end gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy}
-            onClick={() => onRespond({ cancel: true })}
-          >
-            {t.common.cancel}
-          </Button>
-          <Button size="sm" disabled={busy || !complete} onClick={submit}>
-            {t.agent.questionSubmit}
-          </Button>
-        </div>
-      )}
+    );
+  }
+
+  return (
+    <div className="rounded-[8px] border border-hairline bg-background px-1.5 pt-2.5 pb-2">
+      <div className="flex flex-col gap-3">
+        {item.questions.map((q) => (
+          <fieldset key={q.question} className="min-w-0">
+            <legend className="px-1.5 text-[12.5px] font-medium leading-snug">{q.question}</legend>
+            <div className="mt-1 flex flex-col">
+              {q.options.map((option) => {
+                const selected = (picked[q.question] ?? []).includes(option.label);
+                return (
+                  <button
+                    key={option.label}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => toggle(q, option.label)}
+                    className="flex items-start gap-2 rounded-[5px] px-1.5 py-1 text-left outline-none transition-colors duration-100 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30"
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'mt-[3px] grid size-3 shrink-0 place-items-center border transition-colors duration-100',
+                        q.multiSelect ? 'rounded-[3px]' : 'rounded-full',
+                        selected
+                          ? 'border-foreground bg-foreground text-background'
+                          : 'border-muted-foreground/40',
+                      )}
+                    >
+                      {selected && <Check className="size-2" strokeWidth={3} />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[12px] leading-snug">{option.label}</span>
+                      {option.description && (
+                        <span className="block text-[11px] leading-snug text-muted-foreground">
+                          {option.description}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+              <input
+                value={other[q.question] ?? ''}
+                onChange={(e) => setOther((prev) => ({ ...prev, [q.question]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing && complete && !busy) {
+                    e.preventDefault();
+                    submit();
+                  }
+                }}
+                placeholder={`${t.agent.questionOther}…`}
+                aria-label={t.agent.questionOtherPlaceholder}
+                className="mx-1.5 mt-1 h-7 border-b border-hairline bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/60 focus-visible:border-foreground/40"
+              />
+            </div>
+          </fieldset>
+        ))}
+      </div>
+      <div className="mt-2.5 flex justify-end gap-1 px-1">
+        <Button size="xs" variant="ghost" disabled={busy} onClick={() => reply({ cancel: true })}>
+          {t.agent.questionSkip}
+        </Button>
+        <Button size="xs" disabled={busy || !complete} onClick={submit}>
+          {t.agent.questionSubmit}
+        </Button>
+      </div>
     </div>
   );
 }

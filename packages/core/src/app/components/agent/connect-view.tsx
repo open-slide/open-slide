@@ -5,6 +5,7 @@ import { installProvider, useAgentState, useAgentStatus } from '@/lib/agent/use-
 import { format, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import type { AgentProviderStatus } from '../../../agent/types';
+import { ProviderLogo } from './provider-logo';
 
 export function ConnectView({ className }: { className?: string }) {
   const t = useLocale();
@@ -78,7 +79,10 @@ function ProviderCard({
     <div className="rounded-[8px] border border-border bg-card p-3 shadow-edge">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="font-heading text-[13px] font-semibold tracking-tight">{provider.name}</h3>
+          <h3 className="flex items-center gap-1.5 font-heading text-[13px] font-semibold tracking-tight">
+            <ProviderLogo provider={provider.id} className="size-3.5 shrink-0" />
+            {provider.name}
+          </h3>
           <p
             className={cn(
               'mt-0.5 flex items-center gap-1 text-[11px]',

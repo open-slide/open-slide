@@ -570,7 +570,8 @@ export const es: Locale = {
     createDeck: 'Nueva presentación',
     createDeckWith: 'Crear una presentación con {provider}',
     quickCreate: 'Redactar una nueva presentación',
-    quickCreateHint: 'Ejecuta la skill create-slide y hace aquí las preguntas de alcance.',
+    quickCreateHint:
+      'Abre una presentación en blanco; descríbela y el agente la redacta página a página.',
     quickApply: 'Aplicar comentarios pendientes',
     quickApplyHint: 'Resuelve todos los marcadores @slide-comment de esta presentación.',
     quickTheme: 'Crear un tema',
@@ -614,5 +615,12 @@ export const es: Locale = {
     manageConnections: 'Gestionar agentes',
     backToChat: 'Volver',
     toastSendFailed: 'No se pudo enviar el mensaje',
+    newDeckTitle: '¿De qué trata esta presentación?',
+    newDeckHint:
+      'Describe el tema, la audiencia y el tono. {provider} la redacta página a página mientras miras.',
+    newDeckPlaceholder: 'Una charla de 10 minutos sobre…',
+    toastCreateDeckFailed: 'No se pudo crear la presentación',
+    steps: { one: '{count} paso', other: '{count} pasos' },
+    questionSkip: 'Omitir',
   },
 };

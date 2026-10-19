@@ -652,5 +652,11 @@ export type Locale = {
     manageConnections: string;
     backToChat: string;
     toastSendFailed: string;
+    newDeckTitle: string;
+    newDeckHint: string;
+    newDeckPlaceholder: string;
+    toastCreateDeckFailed: string;
+    steps: Plural;
+    questionSkip: string;
   };
 };

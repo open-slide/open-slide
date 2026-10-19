@@ -90,6 +90,7 @@ export type AgentTurnContext = {
   totalPages?: number;
   pendingComments?: number;
   selection?: { line: number; column: number; tagName: string; text: string } | null;
+  newDeck?: boolean;
 };
 
 export type AgentWsEvent =

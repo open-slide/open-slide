@@ -10,6 +10,7 @@ export function Composer({
   onSend,
   onStop,
   running,
+  busy,
   disabled,
   placeholder,
   chips,
@@ -20,13 +21,14 @@ export function Composer({
   onSend: () => void;
   onStop: () => void;
   running: boolean;
+  busy?: boolean;
   disabled?: boolean;
   placeholder: string;
   chips?: ReactNode;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
 }) {
   const t = useLocale();
-  const canSend = !running && !disabled && value.trim().length > 0;
+  const canSend = !running && !busy && !disabled && value.trim().length > 0;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the text changes
   useLayoutEffect(() => {

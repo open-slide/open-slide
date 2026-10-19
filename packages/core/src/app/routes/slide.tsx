@@ -59,7 +59,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { setDockOpen, useAgentDock } from '@/lib/agent/use-agent';
+import { setDockOpen, useAgentDock, useAgentWriting } from '@/lib/agent/use-agent';
 import { useFolders } from '@/lib/folders';
 import {
   hasModifier,
@@ -199,6 +199,15 @@ export function Slide() {
     },
     [pageCount, setSearchParams],
   );
+
+  // While an agent writes this deck page by page, jump to each page as it
+  // lands so the user can follow along.
+  const agentWriting = useAgentWriting(slideId);
+  const seenPageCount = useRef(pageCount);
+  useEffect(() => {
+    if (agentWriting && pageCount > seenPageCount.current) goTo(pageCount - 1);
+    seenPageCount.current = pageCount;
+  }, [agentWriting, pageCount, goTo]);
 
   const reorderPage = useCallback(
     async (from: number, to: number) => {

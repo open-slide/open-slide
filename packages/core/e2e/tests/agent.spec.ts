@@ -14,7 +14,7 @@ type Session = {
   id: string;
   provider: string;
   status: string;
-  items: { kind: string; text?: string; aborted?: boolean }[];
+  items: { id: string; kind: string; text?: string; aborted?: boolean }[];
 };
 
 test.describe('agent panel', () => {
@@ -85,7 +85,7 @@ test.describe('agent panel', () => {
     expect(final.items[1].text).toContain(missing.sdkPackage);
 
     const again = await request.post(`/__agent/sessions/${session.id}/respond`, {
-      data: { itemId: final.items[1].kind, allow: true },
+      data: { itemId: final.items[1].id, allow: true },
     });
     expect(again.status()).toBe(409);
 
@@ -125,5 +125,37 @@ test.describe('agent panel', () => {
 
     await page.getByRole('button', { name: 'Open the agent panel' }).click();
     await expect(dock).toBeVisible();
+  });
+
+  test('New deck opens a blank deck with the agent dock asking for a brief', async ({
+    page,
+    request,
+  }) => {
+    const status = (await (await request.get('/__agent/status')).json()) as {
+      enabled: boolean;
+      packageManager: string;
+      providers: ProviderStatus[];
+    };
+    await page.route('**/__agent/status', (route) =>
+      route.fulfill({
+        json: {
+          ...status,
+          providers: status.providers.map((p) =>
+            p.id === 'claude' ? { ...p, sdkInstalled: true, ready: true } : p,
+          ),
+        },
+      }),
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'New deck' }).click();
+    await expect(page).toHaveURL(/\/s\/untitled[^/]*$/);
+    const slideId = new URL(page.url()).pathname.split('/').pop() ?? '';
+
+    const dock = page.locator('[data-agent-dock]');
+    await expect(dock.getByRole('heading', { name: "What's this deck about?" })).toBeVisible();
+    await expect(dock.getByPlaceholder('A 10-minute talk on…')).toBeFocused();
+
+    expect((await request.delete(`/__slides/${slideId}`)).status()).toBe(200);
   });
 });

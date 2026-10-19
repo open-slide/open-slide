@@ -49,6 +49,7 @@ function parseContext(raw: unknown): AgentTurnContext | undefined {
   if (typeof r.pendingComments === 'number' && Number.isFinite(r.pendingComments)) {
     ctx.pendingComments = Math.max(0, Math.floor(r.pendingComments));
   }
+  if (r.newDeck === true) ctx.newDeck = true;
   const sel = r.selection;
   if (sel && typeof sel === 'object') {
     const s = sel as Record<string, unknown>;

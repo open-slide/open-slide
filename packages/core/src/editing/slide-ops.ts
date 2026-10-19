@@ -192,6 +192,43 @@ export async function duplicateSlideDir(
   }
 }
 
+export const BLANK_SLIDE_TITLE = 'Untitled';
+
+export function blankSlideSource(title: string = BLANK_SLIDE_TITLE): string {
+  return `import type { Page, SlideMeta } from '@open-slide/core';
+
+export const meta: SlideMeta = { title: ${JSON.stringify(title)} };
+
+const Blank: Page = () => <div style={{ width: '100%', height: '100%', background: '#ffffff' }} />;
+
+export default [Blank] satisfies Page[];
+`;
+}
+
+export async function createBlankSlideDir(
+  slidesRoot: string,
+): Promise<
+  { ok: true; slideId: string; file: string } | { ok: false; status: number; error: string }
+> {
+  const root = path.resolve(slidesRoot);
+  await fs.mkdir(root, { recursive: true });
+  for (let suffix = 1; suffix < 1000; suffix++) {
+    const slideId = suffix === 1 ? 'untitled' : `untitled-${suffix}`;
+    if (await slideIdTaken(root, slideId)) continue;
+    const dir = path.join(root, slideId);
+    try {
+      await fs.mkdir(dir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
+      return { ok: false, status: 500, error: String((err as Error).message ?? err) };
+    }
+    const file = path.join(dir, 'index.tsx');
+    await fs.writeFile(file, blankSlideSource(), 'utf8');
+    return { ok: true, slideId, file };
+  }
+  return { ok: false, status: 409, error: 'no free slide id' };
+}
+
 export function resolveSlideEntry(slidesRoot: string, slideId: string): string | null {
   if (!SLIDE_ID_RE.test(slideId)) return null;
   const dir = path.resolve(slidesRoot, slideId);

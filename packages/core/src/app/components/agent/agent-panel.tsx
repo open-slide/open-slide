@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   type AgentProviderId,
+  clearNewDeck,
   consumeRequest,
   createSession,
   deleteSession,
@@ -36,6 +37,7 @@ import {
   setActiveSession,
   setAutoApprove,
   setPreferredProvider,
+  startBlankDeck,
   stopSession,
   useAgentSession,
   useAgentSessions,
@@ -44,10 +46,11 @@ import {
 } from '@/lib/agent/use-agent';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
-import { applyCommentsPrompt, createSlidePrompt } from '../../../agent/prompt';
+import { applyCommentsPrompt } from '../../../agent/prompt';
 import type { AgentTurnContext } from '../../../agent/types';
 import { Composer, ContextChip } from './composer';
 import { ConnectView } from './connect-view';
+import { ProviderLogo } from './provider-logo';
 import { Transcript } from './transcript';
 
 const CREATE_THEME_PROMPT =
@@ -66,8 +69,10 @@ export function AgentPanel({
   const { status, loading, connected, provider } = useAgentStatus();
   const { sessions, activeId } = useAgentSessions();
   const session = useAgentSession(activeId);
-  const { request, autoApprove } = useAgentState();
+  const { request, autoApprove, newDeck } = useAgentState();
   const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [manage, setManage] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const running = session?.status === 'running';
@@ -75,6 +80,7 @@ export function AgentPanel({
 
   const contextRef = useRef(context);
   contextRef.current = context;
+  const isNewDeck = Boolean(context?.slideId) && newDeck === context?.slideId;
 
   const ensureSession = useCallback(
     async (fresh: boolean) => {
@@ -90,19 +96,43 @@ export function AgentPanel({
   const send = useCallback(
     async (text: string, fresh = false) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      if (!trimmed || sendingRef.current) return;
+      sendingRef.current = true;
+      setSending(true);
       try {
-        const id = await ensureSession(fresh);
+        const id = await ensureSession(fresh || isNewDeck);
         setDraft('');
-        await sendMessage(id, trimmed, contextRef.current);
+        await sendMessage(
+          id,
+          trimmed,
+          isNewDeck ? { ...contextRef.current, newDeck: true } : contextRef.current,
+        );
+        if (isNewDeck) clearNewDeck();
       } catch (err) {
         toast.error(t.agent.toastSendFailed, {
           description: err instanceof Error ? err.message : undefined,
         });
+      } finally {
+        sendingRef.current = false;
+        setSending(false);
       }
     },
-    [ensureSession, t],
+    [ensureSession, isNewDeck, t],
   );
+
+  const createDeck = useCallback(async () => {
+    try {
+      await startBlankDeck();
+    } catch (err) {
+      toast.error(t.agent.toastCreateDeckFailed, {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    }
+  }, [t]);
+
+  useEffect(() => {
+    if (isNewDeck && connected) textareaRef.current?.focus();
+  }, [isNewDeck, connected]);
 
   useEffect(() => {
     if (!request || loading || !connected) return;
@@ -227,11 +257,13 @@ export function AgentPanel({
         <>
           {session && session.items.length > 0 ? (
             <Transcript session={session} onRespond={onRespond} />
+          ) : isNewDeck ? (
+            <NewDeckState providerName={providerName} />
           ) : (
             <EmptyState
               pendingComments={pendingComments}
               hasSlide={Boolean(context?.slideId)}
-              onCreate={() => send(createSlidePrompt(''), true)}
+              onCreate={createDeck}
               onApply={() => context?.slideId && send(applyCommentsPrompt(context.slideId))}
               onTheme={() => send(CREATE_THEME_PROMPT, true)}
               onEdit={() => textareaRef.current?.focus()}
@@ -243,7 +275,12 @@ export function AgentPanel({
             onSend={() => send(draft)}
             onStop={() => session && stopSession(session.id).catch(() => {})}
             running={Boolean(running)}
-            placeholder={format(t.agent.composerPlaceholder, { provider: providerName })}
+            busy={sending}
+            placeholder={
+              isNewDeck
+                ? t.agent.newDeckPlaceholder
+                : format(t.agent.composerPlaceholder, { provider: providerName })
+            }
             chips={chips}
             textareaRef={textareaRef}
           />
@@ -274,14 +311,11 @@ function ProviderMenu({
         type="button"
         className="flex h-7 min-w-0 items-center gap-1.5 rounded-[5px] px-2 text-[12.5px] font-medium outline-none transition-colors duration-100 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30 aria-expanded:bg-muted"
       >
-        <span aria-hidden className="relative flex size-1.5 items-center justify-center">
-          <span
-            className={cn(
-              'relative inline-flex size-1.5 rounded-full',
-              providerId ? 'bg-emerald-500' : 'bg-muted-foreground/50',
-            )}
-          />
-        </span>
+        {providerId ? (
+          <ProviderLogo provider={providerId} className="size-3.5 shrink-0" />
+        ) : (
+          <span aria-hidden className="size-1.5 rounded-full bg-muted-foreground/50" />
+        )}
         <span className="truncate">{providerName}</span>
         <ChevronDown className="size-3 text-muted-foreground" aria-hidden />
       </DropdownMenuTrigger>
@@ -296,6 +330,7 @@ function ProviderMenu({
             >
               {ready.map((p) => (
                 <DropdownMenuRadioItem key={p.id} value={p.id}>
+                  <ProviderLogo provider={p.id} className="size-3.5" />
                   {p.name}
                 </DropdownMenuRadioItem>
               ))}
@@ -386,6 +421,20 @@ function SessionsMenu({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function NewDeckState({ providerName }: { providerName: string }) {
+  const t = useLocale();
+  return (
+    <div className="flex min-h-0 flex-1 flex-col justify-end overflow-y-auto px-4 py-5">
+      <h2 className="font-heading text-[15px] font-semibold tracking-tight">
+        {t.agent.newDeckTitle}
+      </h2>
+      <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+        {format(t.agent.newDeckHint, { provider: providerName })}
+      </p>
+    </div>
   );
 }
 

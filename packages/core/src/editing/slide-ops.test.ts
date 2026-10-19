@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  createBlankSlideDir,
   duplicateNotesElementInSource,
   duplicatePageInDefaultExportInSource,
   duplicateSlideDir,
@@ -32,6 +33,20 @@ async function writeSlide(root: string, id: string, title = id): Promise<void> {
   );
   await fs.writeFile(path.join(root, id, 'assets', 'hero.txt'), 'hero', 'utf8');
 }
+
+describe('createBlankSlideDir', () => {
+  it('creates untitled decks with the next free id', async () => {
+    await withSlidesRoot(async (root) => {
+      await writeSlide(root, 'Untitled');
+      const first = await createBlankSlideDir(root);
+      expect(first).toMatchObject({ ok: true, slideId: 'untitled-2' });
+      expect(await createBlankSlideDir(root)).toMatchObject({ ok: true, slideId: 'untitled-3' });
+      const source = await fs.readFile(path.join(root, 'untitled-2', 'index.tsx'), 'utf8');
+      expect(source).toContain("export const meta: SlideMeta = { title: \"Untitled\" };");
+      expect(source).toContain('export default [Blank] satisfies Page[];');
+    });
+  });
+});
 
 describe('duplicateSlideDir', () => {
   it('duplicates a slide directory with an automatic copy id', async () => {

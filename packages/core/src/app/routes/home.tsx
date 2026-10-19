@@ -8,13 +8,13 @@ import {
   MoreHorizontal,
   Palette,
   Pencil,
+  Plus,
   Search,
-  Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -31,10 +31,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { requestAgent, useAgentStatus } from '@/lib/agent/use-agent';
+import { startBlankDeck, useAgentStatus } from '@/lib/agent/use-agent';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
-import { createSlidePrompt } from '../../agent/prompt';
+import { ProviderLogo } from '../components/agent/provider-logo';
 import { FolderIconChip, SLIDE_DND_MIME, SystemViewIcon } from '../components/sidebar/folder-item';
 import { ALL_SLIDES_ID, DRAFT_ID } from '../components/sidebar/sidebar';
 import { SlideCanvas } from '../components/slide-canvas';
@@ -326,14 +326,19 @@ function SortControl({ value, onChange }: { value: SortKey; onChange: (next: Sor
 // Only shows once an agent is connected; without one the empty state keeps
 // pointing at the terminal workflow.
 function useCreateDeckWithAgent() {
-  const navigate = useNavigate();
-  const { connected, providerName } = useAgentStatus();
-  if (!connected) return null;
+  const t = useLocale();
+  const { connected, provider } = useAgentStatus();
+  if (!provider || !connected) return null;
   return {
-    providerName: providerName ?? '',
-    start: () => {
-      requestAgent({ text: createSlidePrompt(''), send: true, newSession: true });
-      navigate('/agent');
+    provider,
+    start: async () => {
+      try {
+        await startBlankDeck();
+      } catch (err) {
+        toast.error(t.agent.toastCreateDeckFailed, {
+          description: err instanceof Error ? err.message : undefined,
+        });
+      }
     },
   };
 }
@@ -347,9 +352,9 @@ function NewDeckButton() {
       size="sm"
       className="h-8 shrink-0"
       onClick={agent.start}
-      title={format(t.agent.createDeckWith, { provider: agent.providerName })}
+      title={format(t.agent.createDeckWith, { provider: agent.provider.name })}
     >
-      <Sparkles />
+      <Plus />
       {t.agent.createDeck}
     </Button>
   );
@@ -412,8 +417,8 @@ function EmptyState({ isDraft, folderName }: { isDraft: boolean; folderName?: st
             </p>
             {agent ? (
               <Button size="sm" className="mt-4" onClick={agent.start}>
-                <Sparkles />
-                {format(t.agent.createDeckWith, { provider: agent.providerName })}
+                <ProviderLogo provider={agent.provider.id} />
+                {format(t.agent.createDeckWith, { provider: agent.provider.name })}
               </Button>
             ) : (
               <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">

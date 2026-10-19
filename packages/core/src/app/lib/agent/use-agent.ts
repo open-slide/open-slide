@@ -35,12 +35,14 @@ type State = {
   dockOpen: boolean;
   request: AgentRequest | null;
   installing: AgentProviderId | null;
+  newDeck: string | null;
 };
 
 const ACTIVE_KEY = 'open-slide:agent-session';
 const PROVIDER_KEY = 'open-slide:agent-provider';
 const AUTO_APPROVE_KEY = 'open-slide:agent-auto-approve';
 const DOCK_KEY = 'open-slide:agent-dock';
+const NEW_DECK_KEY = 'open-slide:agent-new-deck';
 
 function readStorage(key: string): string | null {
   try {
@@ -78,6 +80,7 @@ let state: State = {
   dockOpen: readStorage(DOCK_KEY) === '1',
   request: null,
   installing: null,
+  newDeck: readStorage(NEW_DECK_KEY),
 };
 
 const listeners = new Set<() => void>();
@@ -111,6 +114,7 @@ function ensureSocket() {
   socketBound = true;
   import.meta.hot.on(AGENT_WS_EVENT, (event: AgentWsEvent) => applyEvent(event));
   import.meta.hot.on('vite:ws:connect', () => {
+    void refreshStatus();
     if (state.sessionsLoaded) void loadSessions();
     for (const id of Object.keys(state.full)) void loadSession(id);
   });
@@ -306,6 +310,23 @@ export function requestAgent(req: AgentRequest): void {
   writeStorage(DOCK_KEY, '1');
 }
 
+// The blank deck is created up front and the user lands in it with the dock
+// open; their first message there becomes the brief the agent drafts from.
+export async function startBlankDeck(): Promise<void> {
+  const { slideId } = await request<{ slideId: string }>('/__slides', post());
+  writeStorage(NEW_DECK_KEY, slideId);
+  setActiveSession(null);
+  setDockOpen(true);
+  window.location.assign(
+    `${import.meta.env.BASE_URL.replace(/\/$/, '')}/s/${encodeURIComponent(slideId)}`,
+  );
+}
+
+export function clearNewDeck(): void {
+  writeStorage(NEW_DECK_KEY, null);
+  setState({ newDeck: null });
+}
+
 export function consumeRequest(): AgentRequest | null {
   const req = state.request;
   if (req) setState({ request: null });
@@ -362,6 +383,11 @@ export function useAgentSession(id: string | null): AgentSession | null {
     void loadSession(id);
   }, [id, session]);
   return session;
+}
+
+export function useAgentWriting(slideId: string): boolean {
+  const { sessions } = useAgentSessions();
+  return sessions.some((s) => s.slideId === slideId && s.status === 'running');
 }
 
 export function useAgentDock() {

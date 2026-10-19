@@ -5,6 +5,7 @@ import { useLocale } from '@/lib/use-locale';
 import type { AgentTurnContext } from '../../../agent/types';
 import { PANEL_TRANSITION_MS, usePanelMount } from '../panel/panel-shell';
 import { AgentPanel } from './agent-panel';
+import { ProviderLogo } from './provider-logo';
 
 export const AGENT_DOCK_W = 380;
 
@@ -33,7 +34,7 @@ export function AgentDock({ context }: { context?: AgentTurnContext }) {
 export function AgentToggleButton() {
   const t = useLocale();
   const { open, toggle } = useAgentDock();
-  const { connected } = useAgentStatus();
+  const { provider } = useAgentStatus();
   if (import.meta.env.PROD) return null;
   return (
     <Button
@@ -45,15 +46,11 @@ export function AgentToggleButton() {
       title={t.agent.openTitle}
       data-agent-ui
     >
-      <span className="relative grid place-items-center">
+      {provider ? (
+        <ProviderLogo provider={provider.id} className="size-3.5" />
+      ) : (
         <Sparkles className="size-3.5" />
-        {connected && !open && (
-          <span
-            aria-hidden
-            className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-500"
-          />
-        )}
-      </span>
+      )}
       <span className="hidden lg:inline">{t.agent.open}</span>
       <kbd className="ml-1 hidden rounded-[3px] bg-foreground/10 px-1 font-mono text-[9.5px] tracking-[0.04em] lg:inline">
         A
