@@ -149,6 +149,7 @@ export function createSessionStore(opts: { file: string | null }) {
     for (const stale of idle.slice(MAX_SESSIONS)) {
       sessions.delete(stale.id);
       order.delete(stale.id);
+      emit({ type: 'session-removed', sessionId: stale.id });
     }
     touch(session);
     return session;

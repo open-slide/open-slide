@@ -189,4 +189,29 @@ describe('createAgentRunner', () => {
     expect(items.map((i) => i.kind)).toEqual(['user', 'error', 'result']);
     expect(items[1]).toMatchObject({ text: 'not connected' });
   });
+
+  it('survives the session being deleted mid-turn', async () => {
+    const { store, runner } = setup(async (opts) => {
+      opts.emit({ type: 'text-start', id: 't1' });
+      await new Promise<void>((resolve) => opts.signal.addEventListener('abort', () => resolve()));
+    });
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'go' });
+    await settle();
+    runner.stop(session.id);
+    store.remove(session.id);
+    await settle();
+    await settle();
+    expect(runner.isRunning(session.id)).toBe(false);
+  });
+
+  it('announces sessions evicted by the idle cap', () => {
+    const events: string[] = [];
+    const store = createSessionStore({ file: null });
+    store.subscribe((e) => events.push(e.type));
+    const first = store.create('claude', null);
+    for (let i = 0; i < 40; i++) store.create('claude', null);
+    expect(store.get(first.id)).toBeNull();
+    expect(events).toContain('session-removed');
+  });
 });

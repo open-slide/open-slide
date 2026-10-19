@@ -177,13 +177,15 @@ export function createAgentRunner(opts: {
       });
 
     const finish = () => {
+      running.delete(sessionId);
+      if (!store.get(sessionId)) return;
       for (const id of openText) {
         store.updateItem(sessionId, id, 'assistant', { streaming: false });
       }
       for (const id of openTools) {
         store.updateItem(sessionId, id, 'tool', { status: 'error' });
       }
-      if (!resultSeen && store.get(sessionId)) {
+      if (!resultSeen) {
         store.appendItem(sessionId, {
           kind: 'result',
           id: newId('r'),
@@ -193,8 +195,7 @@ export function createAgentRunner(opts: {
           aborted: controller.signal.aborted,
         });
       }
-      running.delete(sessionId);
-      if (store.get(sessionId)) store.patch(sessionId, { status: 'idle' });
+      store.patch(sessionId, { status: 'idle' });
     };
 
     const prompt = buildTurnPrompt(text, options.context);

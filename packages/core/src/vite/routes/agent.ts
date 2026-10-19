@@ -95,7 +95,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
     void store.flush();
   });
 
-  let installInFlight: Promise<void> | null = null;
+  const installsInFlight = new Map<string, Promise<void>>();
 
   server.middlewares.use('/__agent', async (req, res, next) => {
     const url = new URL(req.url ?? '/', 'http://local');
@@ -118,10 +118,13 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
         if (!isProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
         const provider = providers[body.provider];
         const pm = await detectPackageManager(ctx.userCwd);
-        installInFlight ??= installSdk(pm, provider.sdkPackage, ctx.userCwd).finally(() => {
-          installInFlight = null;
-        });
-        await installInFlight;
+        const pkg = provider.sdkPackage;
+        let install = installsInFlight.get(pkg);
+        if (!install) {
+          install = installSdk(pm, pkg, ctx.userCwd).finally(() => installsInFlight.delete(pkg));
+          installsInFlight.set(pkg, install);
+        }
+        await install;
         return json(res, 200, { ok: true });
       }
 
