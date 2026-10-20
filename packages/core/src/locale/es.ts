@@ -631,6 +631,13 @@ export const es: Locale = {
     toastCreateDeckFailed: 'No se pudo crear la presentación',
     steps: { one: '{count} paso', other: '{count} pasos' },
     questionSkip: 'Omitir',
+    copyMessage: 'Copiar',
+    copied: 'Copiado',
+    editMessage: 'Editar',
+    cancelEdit: 'Cancelar',
+    sendEdit: 'Enviar',
+    editHint:
+      'Al enviar se reemplaza la conversación posterior a este mensaje. Los cambios en archivos se mantienen.',
     modelDefault: 'Predeterminado',
     reasoning: 'Razonamiento',
     effortAuto: 'Auto',

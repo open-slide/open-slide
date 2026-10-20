@@ -149,6 +149,34 @@ describe('createClaudeMapper', () => {
     expect((events[1] as { text: string }).text).toBe('Done.');
   });
 
+  it('marks top-level history entries as rewind checkpoints', () => {
+    const { events, mapper } = collect();
+    mapper.handle({
+      type: 'assistant',
+      uuid: 'a-1',
+      session_id: 's',
+      parent_tool_use_id: null,
+      message: { content: [{ type: 'tool_use', id: 'tool-1', name: 'Read', input: {} }] },
+    });
+    mapper.handle({
+      type: 'user',
+      uuid: 'u-1',
+      parent_tool_use_id: null,
+      message: { content: [{ type: 'tool_result', tool_use_id: 'tool-1' }] },
+    });
+    mapper.handle({
+      type: 'assistant',
+      uuid: 'sub-1',
+      session_id: 's',
+      parent_tool_use_id: 'tool-1',
+      message: { content: [] },
+    });
+    expect(events.filter((e) => e.type === 'checkpoint')).toEqual([
+      { type: 'checkpoint', id: 'a-1' },
+      { type: 'checkpoint', id: 'u-1' },
+    ]);
+  });
+
   it('surfaces error results', () => {
     const { events, mapper } = collect();
     mapper.handle({

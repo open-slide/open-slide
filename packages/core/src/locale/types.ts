@@ -666,6 +666,12 @@ export type Locale = {
     toastCreateDeckFailed: string;
     steps: Plural;
     questionSkip: string;
+    copyMessage: string;
+    copied: string;
+    editMessage: string;
+    cancelEdit: string;
+    sendEdit: string;
+    editHint: string;
     modelDefault: string;
     reasoning: string;
     effortAuto: string;

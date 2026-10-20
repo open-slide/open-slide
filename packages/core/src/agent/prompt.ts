@@ -127,3 +127,9 @@ export function answersPrompt(
   const lines = questions.map((q) => `- ${q.question} ${answers[q.question] || '(no answer)'}`);
   return `My answers:\n${lines.join('\n')}\n\nContinue the task with these answers.`;
 }
+
+// For agents whose history can't be rewound: the edited message goes on top
+// of the old conversation, so the agent is told to set that part aside.
+export function editedPrompt(original: string, text: string): string {
+  return `I went back and edited an earlier message of mine. Treat everything after it in this conversation, including your replies, as discarded, and respond to the edited version instead. Files keep whatever changes were already made.\n\n<original-message>\n${escapeTag(original)}\n</original-message>\n\n${text}`;
+}

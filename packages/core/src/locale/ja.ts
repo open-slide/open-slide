@@ -630,6 +630,13 @@ export const ja: Locale = {
     toastCreateDeckFailed: 'デッキを作成できませんでした',
     steps: { one: '{count} ステップ', other: '{count} ステップ' },
     questionSkip: 'スキップ',
+    copyMessage: 'コピー',
+    copied: 'コピーしました',
+    editMessage: '編集',
+    cancelEdit: 'キャンセル',
+    sendEdit: '送信',
+    editHint:
+      '送信すると、このメッセージ以降の会話が置き換わります。ファイルへの変更は元に戻りません。',
     modelDefault: 'デフォルト',
     reasoning: '推論',
     effortAuto: '自動',

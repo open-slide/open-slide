@@ -41,7 +41,7 @@ import { detectPackageManager } from './update.ts';
 // POST   /__agent/sessions                    { provider, slideId? } → AgentSession
 // GET    /__agent/sessions/:id                → AgentSession
 // DELETE /__agent/sessions/:id                → { ok }
-// POST   /__agent/sessions/:id/messages       { text, context?, autoApprove?, model?, effort? } → { ok }
+// POST   /__agent/sessions/:id/messages       { text, context?, autoApprove?, model?, effort?, edit? } → { ok }
 // POST   /__agent/sessions/:id/stop           → { ok }
 // POST   /__agent/sessions/:id/respond        { itemId, answers? | allow? | cancel? } → { ok }
 //
@@ -265,6 +265,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
             autoApprove?: unknown;
             model?: unknown;
             effort?: unknown;
+            edit?: unknown;
           };
           if (typeof body.text !== 'string' || !body.text.trim()) {
             return json(res, 400, { error: 'missing text' });
@@ -276,6 +277,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
             autoApprove: body.autoApprove === true,
             model: parseModel(body.model),
             effort: parseEffort(body.effort),
+            edit: typeof body.edit === 'string' ? body.edit : undefined,
           });
           return json(res, 202, { ok: true });
         }

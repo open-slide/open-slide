@@ -3,13 +3,14 @@ import type { AgentProvider, ProviderRunOptions } from './provider.ts';
 import { createAgentRunner, type TurnEnd } from './runner.ts';
 import { createSessionStore } from './store.ts';
 
-function fakeProvider(run: AgentProvider['run']): AgentProvider {
+function fakeProvider(run: AgentProvider['run'], canRewind = true): AgentProvider {
   return {
     id: 'claude',
     name: 'Fake',
     sdkPackage: 'fake',
     cliCommand: 'fake',
     askInstruction: 'Ask with the fake tool.',
+    canRewind,
     models: async () => [],
     run,
   };
@@ -31,9 +32,9 @@ function itemOf(store: ReturnType<typeof createSessionStore>, id: string, kind: 
   return item;
 }
 
-function setup(run: AgentProvider['run'], onTurnEnd?: (turn: TurnEnd) => void) {
+function setup(run: AgentProvider['run'], onTurnEnd?: (turn: TurnEnd) => void, canRewind = true) {
   const store = createSessionStore({ file: null });
-  const provider = fakeProvider(run);
+  const provider = fakeProvider(run, canRewind);
   const runner = createAgentRunner({
     userCwd: '/ws',
     store,
@@ -284,6 +285,82 @@ describe('createAgentRunner', () => {
     await settle();
     await settle();
     expect(runner.isRunning(session.id)).toBe(false);
+  });
+
+  describe('editing a sent message', () => {
+    function twoTurns(canRewind: boolean) {
+      const runs: ProviderRunOptions[] = [];
+      let turn = 0;
+      const { store, runner } = setup(
+        async (opts) => {
+          runs.push(opts);
+          turn++;
+          opts.emit({ type: 'session-id', id: 'native-1' });
+          opts.emit({ type: 'text-end', id: `t${turn}`, text: `reply ${turn}` });
+          opts.emit({ type: 'checkpoint', id: `c${turn}` });
+        },
+        undefined,
+        canRewind,
+      );
+      return { runs, store, runner };
+    }
+
+    async function prime(canRewind: boolean) {
+      const ctx = twoTurns(canRewind);
+      const session = ctx.store.create('claude', null);
+      await ctx.runner.send(session.id, { text: 'one' });
+      await settle();
+      await ctx.runner.send(session.id, { text: 'two' });
+      await settle();
+      const users = sessionOf(ctx.store, session.id).items.filter((i) => i.kind === 'user');
+      return { ...ctx, sessionId: session.id, users };
+    }
+
+    it('rewinds the provider history to just before the edited message', async () => {
+      const { runs, store, runner, sessionId, users } = await prime(true);
+      await runner.send(sessionId, { text: 'two, edited', edit: users[1].id });
+      await settle();
+      expect(runs[2]).toMatchObject({ resume: 'native-1', resumeAt: 'c1', prompt: 'two, edited' });
+      const items = sessionOf(store, sessionId).items;
+      expect(items.filter((i) => i.kind === 'user').map((i) => i.text)).toEqual([
+        'one',
+        'two, edited',
+      ]);
+      expect(items.some((i) => i.id === users[1].id)).toBe(false);
+      expect(items.filter((i) => i.kind === 'assistant').map((i) => i.text)).toEqual([
+        'reply 1',
+        'reply 3',
+      ]);
+    });
+
+    it('starts the provider conversation over when the first message is edited', async () => {
+      const { runs, store, runner, sessionId, users } = await prime(true);
+      await runner.send(sessionId, { text: 'uno', edit: users[0].id });
+      await settle();
+      expect(runs[2]).toMatchObject({ resume: null, resumeAt: null, prompt: 'uno' });
+      const after = sessionOf(store, sessionId);
+      expect(after.title).toBe('uno');
+      expect(after.items.map((i) => i.kind)).toEqual(['user', 'assistant', 'result']);
+    });
+
+    it('tells an agent that cannot rewind to set the old reply aside', async () => {
+      const { runs, runner, sessionId, users } = await prime(false);
+      await runner.send(sessionId, { text: 'two, edited', edit: users[1].id });
+      await settle();
+      expect(runs[2]?.resumeAt).toBeNull();
+      expect(runs[2]?.resume).toBe('native-1');
+      expect(runs[2]?.prompt).toContain('<original-message>\ntwo\n</original-message>');
+      expect(runs[2]?.prompt.endsWith('two, edited')).toBe(true);
+    });
+
+    it('rejects edits of anything but a user message', async () => {
+      const { runner, store, sessionId } = await prime(true);
+      const reply = sessionOf(store, sessionId).items.find((i) => i.kind === 'assistant');
+      await expect(runner.send(sessionId, { text: 'x', edit: reply?.id })).rejects.toThrow(
+        'unknown message',
+      );
+      expect(runner.isRunning(sessionId)).toBe(false);
+    });
   });
 
   it('announces sessions evicted by the idle cap', () => {

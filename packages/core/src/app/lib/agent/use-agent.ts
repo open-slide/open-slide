@@ -198,6 +198,15 @@ function applyEvent(event: AgentWsEvent) {
         return { full: { ...prev.full, [event.sessionId]: { ...current, items } } };
       });
       return;
+    case 'truncate':
+      setState((prev) => {
+        const current = prev.full[event.sessionId];
+        const index = current?.items.findIndex((i) => i.id === event.itemId) ?? -1;
+        if (!current || index === -1) return {};
+        const items = current.items.slice(0, index);
+        return { full: { ...prev.full, [event.sessionId]: { ...current, items } } };
+      });
+      return;
     case 'slide-renamed':
       followSlideRename(event.from, event.to);
       return;
@@ -308,6 +317,7 @@ export async function sendMessage(
   id: string,
   text: string,
   context: AgentTurnContext | undefined,
+  edit?: string,
 ): Promise<void> {
   const provider = state.full[id]?.provider ?? state.provider;
   const status = state.status?.providers.find((p) => p.id === provider);
@@ -320,6 +330,7 @@ export async function sendMessage(
       autoApprove: state.autoApprove,
       model: choice?.model.id || null,
       effort: choice?.effort ?? null,
+      edit,
     }),
   );
 }

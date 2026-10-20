@@ -623,6 +623,13 @@ export const en: Locale = {
     toastCreateDeckFailed: 'Could not create a deck',
     steps: { one: '{count} step', other: '{count} steps' },
     questionSkip: 'Skip',
+    copyMessage: 'Copy',
+    copied: 'Copied',
+    editMessage: 'Edit',
+    cancelEdit: 'Cancel',
+    sendEdit: 'Send',
+    editHint:
+      'Sending replaces the conversation after this message. Edits already made to files stay.',
     modelDefault: 'Default',
     reasoning: 'Reasoning',
     effortAuto: 'Auto',

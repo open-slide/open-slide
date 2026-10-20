@@ -2,6 +2,8 @@ import type { AgentEffort, AgentModelOption, AgentProviderId, AgentQuestion } fr
 
 export type ProviderEvent =
   | { type: 'session-id'; id: string }
+  // A point in the provider's own history that a later edit can rewind to.
+  | { type: 'checkpoint'; id: string }
   | { type: 'text-start'; id: string }
   | { type: 'text-delta'; id: string; text: string }
   | { type: 'text-end'; id: string; text: string | null }
@@ -20,6 +22,7 @@ export type ProviderRunOptions = {
   prompt: string;
   systemPromptAppend: string;
   resume: string | null;
+  resumeAt: string | null;
   model: string | null;
   effort: AgentEffort | null;
   signal: AbortSignal;
@@ -34,6 +37,7 @@ export interface AgentProvider {
   sdkPackage: string;
   cliCommand: string;
   askInstruction: string;
+  canRewind: boolean;
   models(): Promise<AgentModelOption[]>;
   run(opts: ProviderRunOptions): Promise<void>;
 }

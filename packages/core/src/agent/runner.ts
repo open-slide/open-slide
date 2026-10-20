@@ -1,4 +1,4 @@
-import { answersPrompt, buildTurnPrompt, systemPromptAppend } from './prompt.ts';
+import { answersPrompt, buildTurnPrompt, editedPrompt, systemPromptAppend } from './prompt.ts';
 import type { AgentProvider, PermissionRequest, ProviderEvent } from './provider.ts';
 import { newId, type SessionStore, titleFromPrompt } from './store.ts';
 import type { AgentEffort, AgentProviderId, AgentQuestion, AgentTurnContext } from './types.ts';
@@ -12,6 +12,9 @@ export type SendOptions = {
   // Set when the turn answers questions the agent asked in its last reply:
   // the question item stands in for the user message.
   answering?: string;
+  // A user message to replace: the transcript is cut back to it and the
+  // turn runs again from there with the new text.
+  edit?: string;
 };
 
 export type TurnEnd = { sessionId: string; userItemId: string };
@@ -52,10 +55,30 @@ export function createAgentRunner(opts: {
     if (!text) throw new Error('empty prompt');
 
     const provider = providers[session.provider];
+    let context = options.context;
+    let promptText = text;
+    let resumeAt: string | null = null;
+    if (options.edit) {
+      const index = session.items.findIndex((i) => i.id === options.edit);
+      const target = session.items[index];
+      if (target?.kind !== 'user') throw new Error('unknown message');
+      const first = !session.items.slice(0, index).some((i) => i.kind === 'user');
+      if (first) {
+        store.patch(sessionId, { providerSessionId: null, providerCheckpoint: null });
+        if (target.newDeck && context) context = { ...context, newDeck: true };
+      } else if (provider.canRewind && target.resumeAt) {
+        resumeAt = target.resumeAt;
+        store.patch(sessionId, { providerCheckpoint: resumeAt });
+      } else {
+        promptText = editedPrompt(target.text, text);
+      }
+      store.truncateFrom(sessionId, target.id);
+    }
+
     const controller = new AbortController();
     running.set(sessionId, controller);
 
-    lastOptions.set(sessionId, options);
+    lastOptions.set(sessionId, { ...options, context, edit: undefined });
     if (session.items.length === 0) store.patch(sessionId, { title: titleFromPrompt(text) });
     if (options.context?.slideId && !session.slideId) {
       store.patch(sessionId, { slideId: options.context.slideId });
@@ -67,7 +90,14 @@ export function createAgentRunner(opts: {
     }
     const userItemId = options.answering ?? newId('u');
     if (!options.answering) {
-      store.appendItem(sessionId, { kind: 'user', id: userItemId, ts: now(), text });
+      store.appendItem(sessionId, {
+        kind: 'user',
+        id: userItemId,
+        ts: now(),
+        text,
+        ...(session.providerCheckpoint ? { resumeAt: session.providerCheckpoint } : {}),
+        ...(context?.newDeck ? { newDeck: true } : {}),
+      });
     }
     store.patch(sessionId, { status: 'running' });
 
@@ -81,6 +111,9 @@ export function createAgentRunner(opts: {
       switch (event.type) {
         case 'session-id':
           store.patch(sessionId, { providerSessionId: event.id });
+          return;
+        case 'checkpoint':
+          store.patch(sessionId, { providerCheckpoint: event.id });
           return;
         case 'text-start':
           openText.add(event.id);
@@ -231,13 +264,14 @@ export function createAgentRunner(opts: {
       }
     };
 
-    const prompt = buildTurnPrompt(text, options.context);
+    const prompt = buildTurnPrompt(promptText, context);
     void provider
       .run({
         cwd: userCwd,
         prompt,
         systemPromptAppend: systemPromptAppend(provider.askInstruction),
         resume: session.providerSessionId,
+        resumeAt,
         model: options.model ?? null,
         effort: options.effort ?? null,
         signal: controller.signal,

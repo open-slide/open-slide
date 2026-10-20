@@ -40,7 +40,16 @@ export type AgentQuestion = {
 };
 
 export type AgentItem =
-  | { kind: 'user'; id: string; ts: string; text: string }
+  | {
+      kind: 'user';
+      id: string;
+      ts: string;
+      text: string;
+      // The provider history point just before this message, so editing it
+      // can rewind the agent's conversation there.
+      resumeAt?: string;
+      newDeck?: boolean;
+    }
   | { kind: 'assistant'; id: string; ts: string; text: string; streaming: boolean }
   | {
       kind: 'tool';
@@ -92,6 +101,7 @@ export type AgentSessionSummary = {
 
 export type AgentSession = AgentSessionSummary & {
   providerSessionId: string | null;
+  providerCheckpoint?: string | null;
   items: AgentItem[];
 };
 
@@ -110,11 +120,12 @@ export type AgentWsEvent =
   | { type: 'session-removed'; sessionId: string }
   | { type: 'item'; sessionId: string; item: AgentItem }
   | { type: 'delta'; sessionId: string; itemId: string; text: string }
+  | { type: 'truncate'; sessionId: string; itemId: string }
   | { type: 'slide-renamed'; from: string; to: string };
 
 export const AGENT_WS_EVENT = 'open-slide:agent';
 
 export function sessionSummary(session: AgentSession): AgentSessionSummary {
-  const { providerSessionId: _p, items: _i, ...summary } = session;
+  const { providerSessionId: _p, providerCheckpoint: _c, items: _i, ...summary } = session;
   return summary;
 }

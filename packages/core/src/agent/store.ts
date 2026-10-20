@@ -165,7 +165,12 @@ export function createSessionStore(opts: { file: string | null }) {
 
   function patch(
     id: string,
-    changes: Partial<Pick<AgentSession, 'title' | 'status' | 'providerSessionId' | 'slideId'>>,
+    changes: Partial<
+      Pick<
+        AgentSession,
+        'title' | 'status' | 'providerSessionId' | 'providerCheckpoint' | 'slideId'
+      >
+    >,
   ): AgentSession {
     const session = require(id);
     Object.assign(session, changes);
@@ -198,6 +203,16 @@ export function createSessionStore(opts: { file: string | null }) {
     emit({ type: 'item', sessionId, item: next });
     touch(session);
     return next;
+  }
+
+  function truncateFrom(sessionId: string, itemId: string): boolean {
+    const session = require(sessionId);
+    const index = session.items.findIndex((i) => i.id === itemId);
+    if (index === -1) return false;
+    session.items.splice(index);
+    emit({ type: 'truncate', sessionId, itemId });
+    touch(session);
+    return true;
   }
 
   function appendDelta(sessionId: string, itemId: string, text: string): void {
@@ -233,6 +248,7 @@ export function createSessionStore(opts: { file: string | null }) {
     patch,
     appendItem,
     updateItem,
+    truncateFrom,
     appendDelta,
     subscribe,
     flush,

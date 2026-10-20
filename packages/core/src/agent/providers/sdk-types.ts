@@ -18,6 +18,7 @@ export type ClaudeQueryOptions = {
   settingSources?: ('user' | 'project' | 'local')[];
   systemPrompt?: { type: 'preset'; preset: 'claude_code'; append?: string };
   resume?: string;
+  resumeSessionAt?: string;
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   includePartialMessages?: boolean;
@@ -45,12 +46,14 @@ export type ClaudeSdkMessage =
   | { type: 'system'; subtype: string; session_id?: string }
   | {
       type: 'assistant';
+      uuid?: string;
       session_id: string;
       message: { content: ClaudeContentBlock[] };
       parent_tool_use_id: string | null;
     }
   | {
       type: 'user';
+      uuid?: string;
       session_id?: string;
       message: { content: string | ClaudeContentBlock[] };
       parent_tool_use_id: string | null;

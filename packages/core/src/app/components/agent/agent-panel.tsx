@@ -164,6 +164,20 @@ export function AgentPanel({
   );
 
   const providerName = provider?.name ?? '';
+  const onEdit = useCallback(
+    async (itemId: string, text: string) => {
+      if (!session) return;
+      try {
+        await sendMessage(session.id, text, contextRef.current, itemId);
+      } catch (err) {
+        toast.error(t.agent.toastSendFailed, {
+          description: err instanceof Error ? err.message : undefined,
+        });
+      }
+    },
+    [session, t],
+  );
+
   const pendingComments = context?.pendingComments ?? 0;
 
   const chips: ReactNode = context?.slideId ? (
@@ -294,7 +308,7 @@ export function AgentPanel({
       ) : (
         <>
           {session && session.items.length > 0 ? (
-            <Transcript session={session} onRespond={onRespond} />
+            <Transcript session={session} onRespond={onRespond} onEdit={onEdit} />
           ) : isNewDeck ? (
             <NewDeckState providerName={providerName} />
           ) : (

@@ -170,6 +170,69 @@ test.describe('agent panel', () => {
     expect(requested).toEqual(['claude']);
   });
 
+  test('transcript messages can be copied, and sent ones edited', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await mockStatus(page, (p) =>
+      p.id === 'claude'
+        ? { cliFound: true, sdkInstalled: true, ready: true, sdkVersion: '0.0.0' }
+        : { cliFound: false, sdkInstalled: false },
+    );
+    const ts = new Date().toISOString();
+    const session = {
+      id: 's-edit',
+      provider: 'claude',
+      title: 'Make the cover bolder',
+      createdAt: ts,
+      updatedAt: ts,
+      status: 'idle',
+      slideId: 'alpha',
+      providerSessionId: null,
+      items: [
+        { kind: 'user', id: 'u-1', ts, text: 'Make the cover bolder' },
+        { kind: 'assistant', id: 'a-1', ts, text: 'Bolded the **cover** title.', streaming: false },
+        { kind: 'result', id: 'r-1', ts, durationMs: 1000, costUsd: null, aborted: false },
+      ],
+    };
+    const { items: _items, providerSessionId: _p, ...summary } = session;
+    await page.route('**/__agent/sessions', (route) =>
+      route.fulfill({ json: { sessions: [summary] } }),
+    );
+    await page.route('**/__agent/sessions/s-edit', (route) => route.fulfill({ json: session }));
+    const sent: Record<string, unknown>[] = [];
+    await page.route('**/__agent/sessions/s-edit/messages', (route) => {
+      sent.push(route.request().postDataJSON());
+      return route.fulfill({ status: 202, json: { ok: true } });
+    });
+    await page.addInitScript(() => localStorage.setItem('open-slide:agent-session', 's-edit'));
+
+    await openSlide(page, 'alpha');
+    await page.keyboard.press('a');
+    const dock = page.locator('[data-agent-dock]');
+    const reply = dock.getByText('Bolded the');
+    await reply.hover();
+    await dock.getByRole('button', { name: 'Copy' }).last().click();
+    await expect(dock.getByRole('button', { name: 'Copied' })).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      'Bolded the **cover** title.',
+    );
+
+    await dock.getByText('Make the cover bolder').hover();
+    await dock.getByRole('button', { name: 'Edit', exact: true }).click();
+    const editor = dock.getByRole('textbox', { name: 'Edit', exact: true });
+    await expect(editor).toBeFocused();
+    await expect(editor).toHaveValue('Make the cover bolder');
+    await page.keyboard.press('Escape');
+    await expect(editor).toHaveCount(0);
+    await expect(dock).toBeVisible();
+
+    await dock.getByText('Make the cover bolder').hover();
+    await dock.getByRole('button', { name: 'Edit', exact: true }).click();
+    await editor.fill('Make the cover title red');
+    await editor.press('Enter');
+    await expect.poll(() => sent.length).toBe(1);
+    expect(sent[0]).toMatchObject({ text: 'Make the cover title red', edit: 'u-1' });
+  });
+
   test('New deck opens a blank deck with the agent dock asking for a brief', async ({
     page,
     request,

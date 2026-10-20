@@ -1,5 +1,5 @@
-import { Check, ChevronRight, CircleAlert } from 'lucide-react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { Check, ChevronRight, CircleAlert, Copy, Pencil } from 'lucide-react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { AgentItem, AgentSession, RespondPayload } from '@/lib/agent/use-agent';
 import { format, plural, useLocale } from '@/lib/use-locale';
@@ -11,9 +11,11 @@ import { AgentMarkdown } from './agent-markdown';
 export function Transcript({
   session,
   onRespond,
+  onEdit,
 }: {
   session: AgentSession;
   onRespond: (itemId: string, payload: RespondPayload) => Promise<void>;
+  onEdit: (itemId: string, text: string) => Promise<void>;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
@@ -46,7 +48,9 @@ export function Transcript({
             ) : (
               <TranscriptItem
                 item={block.item}
+                running={session.status === 'running'}
                 onRespond={(payload) => onRespond(block.item.id, payload)}
+                onEdit={(text) => onEdit(block.item.id, text)}
               />
             )}
           </li>
@@ -73,20 +77,21 @@ function WorkingIndicator() {
 
 function TranscriptItem({
   item,
+  running,
   onRespond,
+  onEdit,
 }: {
   item: AgentItem;
+  running: boolean;
   onRespond: (payload: RespondPayload) => Promise<void>;
+  onEdit: (text: string) => Promise<void>;
 }) {
   switch (item.kind) {
     case 'user':
-      return <UserItem text={item.text} />;
+      return <UserItem text={item.text} running={running} onEdit={onEdit} />;
     case 'assistant':
-      return item.text || !item.streaming ? (
-        <AgentMarkdown text={stripDeckSlug(item.text)} />
-      ) : (
-        <WorkingIndicator />
-      );
+      if (!item.text && item.streaming) return <WorkingIndicator />;
+      return <AssistantItem text={stripDeckSlug(item.text)} streaming={item.streaming} />;
     case 'question':
       return <QuestionItem item={item} onRespond={onRespond} />;
     case 'permission':
@@ -100,11 +105,183 @@ function TranscriptItem({
   }
 }
 
-function UserItem({ text }: { text: string }) {
+function ActionButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex justify-end">
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="grid size-6 place-items-center rounded-[5px] text-muted-foreground outline-none transition-colors duration-100 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 [&_svg]:size-3"
+    >
+      {children}
+    </button>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const t = useLocale();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return (
+    <ActionButton
+      label={copied ? t.agent.copied : t.agent.copyMessage}
+      onClick={() => {
+        navigator.clipboard.writeText(text).then(
+          () => setCopied(true),
+          () => {},
+        );
+      }}
+    >
+      {copied ? <Check /> : <Copy />}
+    </ActionButton>
+  );
+}
+
+const ACTIONS_REVEAL =
+  'flex opacity-0 transition-opacity duration-100 focus-within:opacity-100 group-hover/message:opacity-100 motion-reduce:transition-none';
+
+function AssistantItem({ text, streaming }: { text: string; streaming: boolean }) {
+  return (
+    <div className="group/message">
+      <AgentMarkdown text={text} />
+      {!streaming && text.trim() && (
+        <div className={cn(ACTIONS_REVEAL, '-mb-2 -ml-1.5')}>
+          <CopyButton text={text} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UserItem({
+  text,
+  running,
+  onEdit,
+}: {
+  text: string;
+  running: boolean;
+  onEdit: (text: string) => Promise<void>;
+}) {
+  const t = useLocale();
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return (
+      <UserEditor
+        text={text}
+        running={running}
+        onCancel={() => setEditing(false)}
+        onSend={onEdit}
+      />
+    );
+  }
+
+  return (
+    <div className="group/message flex flex-col items-end">
       <div className="max-w-[88%] whitespace-pre-wrap rounded-[8px] rounded-br-[3px] bg-muted px-3 py-2 text-[12.5px] leading-[1.5]">
         {text}
+      </div>
+      <div className={cn(ACTIONS_REVEAL, '-mr-1.5 -mb-2 mt-0.5')}>
+        <CopyButton text={text} />
+        {!running && (
+          <ActionButton label={t.agent.editMessage} onClick={() => setEditing(true)}>
+            <Pencil />
+          </ActionButton>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UserEditor({
+  text,
+  running,
+  onCancel,
+  onSend,
+}: {
+  text: string;
+  running: boolean;
+  onCancel: () => void;
+  onSend: (text: string) => Promise<void>;
+}) {
+  const t = useLocale();
+  const [value, setValue] = useState(text);
+  const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const canSend = !running && !busy && value.trim().length > 0 && value.trim() !== text.trim();
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the text changes
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    node.style.height = '0px';
+    node.style.height = `${Math.min(200, Math.max(40, node.scrollHeight))}px`;
+  }, [value]);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    node.focus();
+    node.setSelectionRange(node.value.length, node.value.length);
+  }, []);
+
+  const submit = async () => {
+    if (!canSend) return;
+    setBusy(true);
+    try {
+      await onSend(value.trim());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      data-agent-message-editor
+      className="rounded-[8px] border border-border bg-background shadow-edge transition-colors duration-100 focus-within:border-foreground/40 focus-within:ring-2 focus-within:ring-ring/30"
+    >
+      <textarea
+        ref={ref}
+        value={value}
+        rows={1}
+        aria-label={t.agent.editMessage}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            onCancel();
+          } else if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+        className="w-full resize-none bg-transparent px-3 pt-2.5 text-[12.5px] leading-[1.5] outline-none"
+      />
+      <p className="px-3 pt-0.5 text-[11px] leading-snug text-muted-foreground">
+        {t.agent.editHint}
+      </p>
+      <div className="flex justify-end gap-1 px-2 pt-2 pb-2">
+        <Button size="xs" variant="ghost" disabled={busy} onClick={onCancel}>
+          {t.agent.cancelEdit}
+        </Button>
+        <Button size="xs" disabled={!canSend} onClick={() => void submit()}>
+          {t.agent.sendEdit}
+        </Button>
       </div>
     </div>
   );

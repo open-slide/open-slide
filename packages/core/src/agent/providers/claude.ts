@@ -136,11 +136,13 @@ export function createClaudeMapper(emit: (event: ProviderEvent) => void, cwd: st
         const m = msg as Extract<ClaudeSdkMessage, { type: 'assistant' }>;
         if (m.parent_tool_use_id) return;
         handleBlocks(m.message?.content ?? []);
+        if (m.uuid) emit({ type: 'checkpoint', id: m.uuid });
         return;
       }
       if (msg.type === 'user') {
         const m = msg as Extract<ClaudeSdkMessage, { type: 'user' }>;
         if (m.parent_tool_use_id) return;
+        if (m.uuid) emit({ type: 'checkpoint', id: m.uuid });
         const content = m.message?.content;
         if (!Array.isArray(content)) return;
         for (const block of content) {
@@ -179,6 +181,7 @@ export function createClaudeProvider(): AgentProvider {
     sdkPackage: CLAUDE_SDK_PACKAGE,
     cliCommand: 'claude',
     askInstruction: 'Ask the user questions with the AskUserQuestion tool, never as plain text.',
+    canRewind: true,
     async models() {
       return CLAUDE_MODELS;
     },
@@ -223,6 +226,7 @@ export function createClaudeProvider(): AgentProvider {
           abortController,
           canUseTool,
           ...(opts.resume ? { resume: opts.resume } : {}),
+          ...(opts.resume && opts.resumeAt ? { resumeSessionAt: opts.resumeAt } : {}),
           ...(opts.model ? { model: opts.model } : {}),
           ...(effort ? { effort } : {}),
           ...(localCli ? { pathToClaudeCodeExecutable: localCli } : {}),

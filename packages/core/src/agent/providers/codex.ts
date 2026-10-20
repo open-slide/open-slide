@@ -177,6 +177,7 @@ export function createCodexProvider(): AgentProvider {
     // `codex exec`, which the SDK drives, rejects request_user_input, so
     // questions travel as a tagged block in the final reply instead.
     askInstruction: TEXT_QUESTIONS_INSTRUCTION,
+    canRewind: false,
     cliCommand: 'codex',
     models: readCodexModels,
     async run(opts: ProviderRunOptions): Promise<void> {
