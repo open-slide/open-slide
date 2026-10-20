@@ -196,7 +196,11 @@ export function AgentPanel({
       className={cn('relative flex h-full min-h-0 flex-col bg-sidebar', className)}
     >
       {running && <span aria-hidden className="agent-progress z-10" />}
-      <header className="flex h-9 shrink-0 items-center justify-between gap-1 border-b border-hairline px-2">
+      <header className="relative z-10 flex h-9 shrink-0 items-center justify-between gap-1 bg-sidebar px-2">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-full h-5 bg-gradient-to-b from-sidebar to-transparent"
+        />
         <div className="flex min-w-0 items-center gap-0.5">
           {showConnect && connected ? (
             <Button size="xs" variant="ghost" onClick={() => setManage(false)}>
