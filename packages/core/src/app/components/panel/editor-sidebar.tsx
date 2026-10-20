@@ -63,7 +63,7 @@ export function EditorSidebar({
     >
       {agentMounted && (
         <div
-          className="sidebar-swap h-full shrink-0 border-l border-hairline"
+          className="sidebar-swap h-full shrink-0"
           style={{ width: AGENT_DOCK_W }}
           hidden={shown !== 'agent'}
         >
