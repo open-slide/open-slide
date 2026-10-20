@@ -8,7 +8,10 @@ export type ProviderEvent =
   | { type: 'tool-start'; id: string; name: string; title: string; detail: string | null }
   | { type: 'tool-end'; id: string; ok: boolean }
   | { type: 'error'; text: string }
-  | { type: 'result'; durationMs: number | null; costUsd: number | null };
+  | { type: 'result'; durationMs: number | null; costUsd: number | null }
+  // Questions the agent wrote into its reply instead of asking through a
+  // tool: the turn ends, and the answers arrive as the next prompt.
+  | { type: 'questions'; questions: AgentQuestion[] };
 
 export type PermissionRequest = { tool: string; title: string; detail: string | null };
 
@@ -30,6 +33,7 @@ export interface AgentProvider {
   name: string;
   sdkPackage: string;
   cliCommand: string;
+  askInstruction: string;
   models(): Promise<AgentModelOption[]>;
   run(opts: ProviderRunOptions): Promise<void>;
 }
@@ -69,4 +73,34 @@ export function relativeToCwd(cwd: string, file: unknown): string | null {
     return rest || '.';
   }
   return file;
+}
+
+export function parseQuestions(input: Record<string, unknown>): AgentQuestion[] {
+  const raw = Array.isArray(input.questions) ? input.questions : [];
+  const questions: AgentQuestion[] = [];
+  for (const q of raw) {
+    if (!q || typeof q !== 'object') continue;
+    const r = q as Record<string, unknown>;
+    const options = Array.isArray(r.options)
+      ? r.options
+          .map((o) => {
+            if (!o || typeof o !== 'object') return null;
+            const opt = o as Record<string, unknown>;
+            if (typeof opt.label !== 'string') return null;
+            return {
+              label: opt.label,
+              description: typeof opt.description === 'string' ? opt.description : undefined,
+            };
+          })
+          .filter((o): o is { label: string; description: string | undefined } => o !== null)
+      : [];
+    if (typeof r.question !== 'string') continue;
+    questions.push({
+      header: typeof r.header === 'string' ? r.header : '',
+      question: r.question,
+      options,
+      multiSelect: r.multiSelect === true,
+    });
+  }
+  return questions;
 }

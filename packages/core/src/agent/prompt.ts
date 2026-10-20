@@ -1,5 +1,6 @@
 import { UNTITLED_SLIDE_ID_RE } from '../editing/placeholder-id.ts';
-import type { AgentTurnContext } from './types.ts';
+import { parseQuestions } from './provider.ts';
+import type { AgentQuestion, AgentTurnContext } from './types.ts';
 
 const PAGE_BY_PAGE =
   'Write a new deck page by page so the user can follow along on the canvas: first replace the file with the imports, meta, design and the cover page only, then add each remaining page with its own separate edit, keeping the file compiling after every write.';
@@ -7,13 +8,16 @@ const PAGE_BY_PAGE =
 const DECK_SLUG =
   "This deck's folder still has a placeholder name. Never rename or move the folder yourself: once the deck has content, end your final reply with a slug for it on a line of its own as <deck-slug>short-kebab-case-english-slug</deck-slug>, and open-slide renames the folder from it.";
 
-export const SYSTEM_PROMPT_APPEND = [
-  'You are running inside the open-slide dev server, driven from its in-app agent panel in the browser rather than a terminal.',
-  'The workspace is an open-slide project: decks live under slides/<id>/index.tsx and the dev server hot-reloads every edit, so the user sees changes immediately.',
-  'Use the project skills: create-slide to draft a new deck, apply-comments to resolve @slide-comment markers left by the inspector, create-theme for themes, and slide-authoring as the technical reference before writing a page.',
-  PAGE_BY_PAGE,
-  'Keep replies short and concrete: the panel is narrow. Prefer doing the work over describing it, and finish with a one-line summary of what changed.',
-].join(' ');
+export function systemPromptAppend(askInstruction: string): string {
+  return [
+    'You are running inside the open-slide dev server, driven from its in-app agent panel in the browser rather than a terminal.',
+    'The workspace is an open-slide project: decks live under slides/<id>/index.tsx and the dev server hot-reloads every edit, so the user sees changes immediately.',
+    'Use the project skills: create-slide to draft a new deck, apply-comments to resolve @slide-comment markers left by the inspector, create-theme for themes, and slide-authoring as the technical reference before writing a page.',
+    PAGE_BY_PAGE,
+    'Keep replies short and concrete: the panel is narrow. Prefer doing the work over describing it, and finish with a one-line summary of what changed.',
+    askInstruction,
+  ].join(' ');
+}
 
 export function buildTurnPrompt(text: string, context: AgentTurnContext | undefined): string {
   const lines = contextLines(context);
@@ -32,7 +36,7 @@ function contextLines(context: AgentTurnContext | undefined): string[] {
   if (context.newDeck) {
     lines.push(
       `${file} is a blank deck created for this request. Draft the deck the user describes into it with the create-slide skill: replace the placeholder page, keep the slide id, and do not create another folder.`,
-      'Ask the create-slide scoping questions in a single AskUserQuestion call only for what the request leaves unclear; skip any it already answers.',
+      'Ask the create-slide scoping questions in a single round, only for what the request leaves unclear; skip any it already answers.',
       PAGE_BY_PAGE,
       DECK_SLUG,
     );
@@ -82,4 +86,44 @@ export function stripDeckSlug(text: string): string {
 
 export function applyCommentsPrompt(slideId: string): string {
   return `Use the apply-comments skill to apply every pending @slide-comment marker in slides/${slideId}/index.tsx, then remove the markers.`;
+}
+
+const QUESTIONS_RE = /<open-slide-questions>([\s\S]*?)<\/open-slide-questions>/i;
+
+export const TEXT_QUESTIONS_INSTRUCTION =
+  'You cannot ask the user anything interactively here, and nothing you print in the middle of a turn can be answered. When you need answers before continuing, stop working and end your turn with a final message holding only an <open-slide-questions> block: a JSON array of at most 4 questions shaped like [{"header":"Pages","question":"How many pages?","multiSelect":false,"options":[{"label":"6-10 (Recommended)","description":"Standard length"}]}], each with 2 to 4 options, written in the user\'s language. The panel shows them as a form and sends the answers back as your next message. Write nothing after the block and do not continue the task in the same turn.';
+
+// Splits a reply written under TEXT_QUESTIONS_INSTRUCTION into its prose and
+// questions. Returns null when the reply holds no usable block.
+export function extractQuestionBlock(
+  text: string,
+): { text: string; questions: AgentQuestion[] } | null {
+  const match = QUESTIONS_RE.exec(text);
+  if (!match) return null;
+  const body = match[1]
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '');
+  let raw: unknown;
+  try {
+    raw = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  const questions = parseQuestions({
+    questions: Array.isArray(raw) ? raw : (raw as { questions?: unknown } | null)?.questions,
+  });
+  if (questions.length === 0) return null;
+  return { text: text.replace(QUESTIONS_RE, '').trim(), questions };
+}
+
+export function answersPrompt(
+  questions: AgentQuestion[],
+  answers: Record<string, string> | null,
+): string {
+  if (!answers) {
+    return 'I skipped your questions. Continue the task with your best judgement and sensible defaults.';
+  }
+  const lines = questions.map((q) => `- ${q.question} ${answers[q.question] || '(no answer)'}`);
+  return `My answers:\n${lines.join('\n')}\n\nContinue the task with these answers.`;
 }

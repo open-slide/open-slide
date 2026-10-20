@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { findOnPath, importWorkspacePackage } from '../detect.ts';
+import { extractQuestionBlock, TEXT_QUESTIONS_INSTRUCTION } from '../prompt.ts';
 import {
   type AgentProvider,
   clipDetail,
@@ -98,8 +99,13 @@ export function createCodexMapper(emit: (event: ProviderEvent) => void) {
     switch (item.type) {
       case 'agent_message': {
         if (phase !== 'completed' || !item.text.trim()) return;
-        emit({ type: 'text-start', id: item.id });
-        emit({ type: 'text-end', id: item.id, text: item.text });
+        const asked = extractQuestionBlock(item.text);
+        const text = asked ? asked.text : item.text;
+        if (text) {
+          emit({ type: 'text-start', id: item.id });
+          emit({ type: 'text-end', id: item.id, text });
+        }
+        if (asked) emit({ type: 'questions', questions: asked.questions });
         return;
       }
       case 'error':
@@ -168,6 +174,9 @@ export function createCodexProvider(): AgentProvider {
     id: 'codex',
     name: 'Codex',
     sdkPackage: CODEX_SDK_PACKAGE,
+    // `codex exec`, which the SDK drives, rejects request_user_input, so
+    // questions travel as a tagged block in the final reply instead.
+    askInstruction: TEXT_QUESTIONS_INSTRUCTION,
     cliCommand: 'codex',
     models: readCodexModels,
     async run(opts: ProviderRunOptions): Promise<void> {

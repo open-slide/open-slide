@@ -78,6 +78,55 @@ describe('createCodexMapper', () => {
   });
 });
 
+describe('createCodexMapper questions', () => {
+  it('turns a questions block into a question event and keeps the prose', () => {
+    const { events, mapper } = collect();
+    const block = JSON.stringify([
+      {
+        header: 'Pages',
+        question: 'How many pages?',
+        options: [{ label: '3-5', description: 'Short' }, { label: '6-10' }],
+      },
+    ]);
+    mapper.handle({
+      type: 'item.completed',
+      item: {
+        type: 'agent_message',
+        id: 'm1',
+        text: `A few questions first.\n<open-slide-questions>\n${block}\n</open-slide-questions>`,
+      },
+    });
+    expect(events).toEqual([
+      { type: 'text-start', id: 'm1' },
+      { type: 'text-end', id: 'm1', text: 'A few questions first.' },
+      {
+        type: 'questions',
+        questions: [
+          {
+            header: 'Pages',
+            question: 'How many pages?',
+            options: [
+              { label: '3-5', description: 'Short' },
+              { label: '6-10', description: undefined },
+            ],
+            multiSelect: false,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('leaves a malformed block as plain text', () => {
+    const { events, mapper } = collect();
+    const text = '<open-slide-questions>not json</open-slide-questions>';
+    mapper.handle({ type: 'item.completed', item: { type: 'agent_message', id: 'm1', text } });
+    expect(events).toEqual([
+      { type: 'text-start', id: 'm1' },
+      { type: 'text-end', id: 'm1', text },
+    ]);
+  });
+});
+
 describe('parseCodexModelsCache', () => {
   it('lists the models the Codex picker shows, in its order', () => {
     const models = parseCodexModelsCache({

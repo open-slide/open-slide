@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommentsPrompt, buildTurnPrompt, extractDeckSlug, stripDeckSlug } from './prompt.ts';
+import {
+  answersPrompt,
+  applyCommentsPrompt,
+  buildTurnPrompt,
+  extractDeckSlug,
+  extractQuestionBlock,
+  stripDeckSlug,
+} from './prompt.ts';
 
 describe('buildTurnPrompt', () => {
   it('returns the text untouched without slide context', () => {
@@ -79,5 +86,27 @@ describe('deck slug marker', () => {
 describe('quick-action prompts', () => {
   it('names the skills explicitly', () => {
     expect(applyCommentsPrompt('deck')).toContain('slides/deck/index.tsx');
+  });
+});
+
+describe('text questions', () => {
+  it('reads a fenced JSON block and an object wrapper', () => {
+    const fenced = extractQuestionBlock(
+      '<open-slide-questions>```json\n[{"question":"Theme?","options":[{"label":"Dark"}]}]\n```</open-slide-questions>',
+    );
+    expect(fenced?.questions[0]).toMatchObject({ question: 'Theme?', header: '' });
+    expect(fenced?.text).toBe('');
+    const wrapped = extractQuestionBlock(
+      '<open-slide-questions>{"questions":[{"question":"Pages?","options":[]}]}</open-slide-questions>',
+    );
+    expect(wrapped?.questions).toHaveLength(1);
+    expect(extractQuestionBlock('no block')).toBeNull();
+    expect(extractQuestionBlock('<open-slide-questions>[]</open-slide-questions>')).toBeNull();
+  });
+
+  it('formats answers and a skip for the next turn', () => {
+    const questions = [{ header: '', question: 'Pages?', options: [], multiSelect: false }];
+    expect(answersPrompt(questions, { 'Pages?': '6-10' })).toContain('- Pages? 6-10');
+    expect(answersPrompt(questions, null)).toContain('skipped');
   });
 });

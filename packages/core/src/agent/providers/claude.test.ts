@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProviderEvent } from '../provider.ts';
-import { createClaudeMapper, describeClaudeTool, parseQuestions } from './claude.ts';
+import { parseQuestions } from '../provider.ts';
+import { createClaudeMapper, describeClaudeTool } from './claude.ts';
 import type { ClaudeSdkMessage } from './sdk-types.ts';
 
 const CWD = '/ws/project';

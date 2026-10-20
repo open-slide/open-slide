@@ -9,6 +9,7 @@ function fakeProvider(run: AgentProvider['run']): AgentProvider {
     name: 'Fake',
     sdkPackage: 'fake',
     cliCommand: 'fake',
+    askInstruction: 'Ask with the fake tool.',
     models: async () => [],
     run,
   };
@@ -165,6 +166,57 @@ describe('createAgentRunner', () => {
       status: 'denied',
     });
     expect(runner.respond(session.id, permission.id, { allow: true })).toBe(false);
+  });
+
+  it('answers questions written into a reply with a follow-up turn', async () => {
+    const captured: ProviderRunOptions[] = [];
+    const { store, runner } = setup(async (opts) => {
+      captured.push(opts);
+      if (captured.length === 1) {
+        opts.emit({
+          type: 'questions',
+          questions: [{ header: 'Pages', question: 'How many?', options: [], multiSelect: false }],
+        });
+      }
+      opts.emit({ type: 'result', durationMs: 1, costUsd: null });
+    });
+    const session = store.create('codex', null);
+    await runner.send(session.id, {
+      text: 'new deck',
+      context: { slideId: 'untitled', newDeck: true },
+      model: 'gpt-x',
+    });
+    await settle();
+    expect(captured[0].systemPromptAppend).toContain('Ask with the fake tool.');
+    const question = itemOf(store, session.id, 'question');
+    expect(question).toMatchObject({ status: 'pending' });
+    expect(sessionOf(store, session.id).status).toBe('idle');
+
+    expect(runner.respond(session.id, question.id, { answers: { 'How many?': '6' } })).toBe(true);
+    await settle();
+    expect(captured).toHaveLength(2);
+    expect(captured[1].prompt).toContain('- How many? 6');
+    expect(captured[1].prompt).not.toContain('blank deck');
+    expect(captured[1].model).toBe('gpt-x');
+    expect(itemOf(store, session.id, 'question')).toMatchObject({ status: 'answered' });
+    expect(sessionOf(store, session.id).items.filter((i) => i.kind === 'user')).toHaveLength(1);
+    expect(runner.respond(session.id, question.id, { cancel: true })).toBe(false);
+  });
+
+  it('drops an unanswered question when the user sends a new message', async () => {
+    const { store, runner } = setup(async (opts) => {
+      opts.emit({
+        type: 'questions',
+        questions: [{ header: '', question: 'Theme?', options: [], multiSelect: false }],
+      });
+    });
+    const session = store.create('codex', null);
+    await runner.send(session.id, { text: 'go' });
+    await settle();
+    await runner.send(session.id, { text: 'never mind' });
+    await settle();
+    const questions = sessionOf(store, session.id).items.filter((i) => i.kind === 'question');
+    expect(questions[0]).toMatchObject({ status: 'cancelled' });
   });
 
   it('auto-approves permissions when asked to', async () => {

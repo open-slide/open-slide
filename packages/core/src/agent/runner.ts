@@ -1,4 +1,4 @@
-import { buildTurnPrompt, SYSTEM_PROMPT_APPEND } from './prompt.ts';
+import { answersPrompt, buildTurnPrompt, systemPromptAppend } from './prompt.ts';
 import type { AgentProvider, PermissionRequest, ProviderEvent } from './provider.ts';
 import { newId, type SessionStore, titleFromPrompt } from './store.ts';
 import type { AgentEffort, AgentProviderId, AgentQuestion, AgentTurnContext } from './types.ts';
@@ -9,6 +9,9 @@ export type SendOptions = {
   autoApprove?: boolean;
   model?: string | null;
   effort?: AgentEffort | null;
+  // Set when the turn answers questions the agent asked in its last reply:
+  // the question item stands in for the user message.
+  answering?: string;
 };
 
 export type TurnEnd = { sessionId: string; userItemId: string };
@@ -33,6 +36,7 @@ export function createAgentRunner(opts: {
   const { userCwd, store, providers, onTurnEnd } = opts;
   const running = new Map<string, AbortController>();
   const pending = new Map<string, PendingPrompt>();
+  const lastOptions = new Map<string, SendOptions>();
 
   const now = () => new Date().toISOString();
 
@@ -51,12 +55,20 @@ export function createAgentRunner(opts: {
     const controller = new AbortController();
     running.set(sessionId, controller);
 
+    lastOptions.set(sessionId, options);
     if (session.items.length === 0) store.patch(sessionId, { title: titleFromPrompt(text) });
     if (options.context?.slideId && !session.slideId) {
       store.patch(sessionId, { slideId: options.context.slideId });
     }
-    const userItemId = newId('u');
-    store.appendItem(sessionId, { kind: 'user', id: userItemId, ts: now(), text });
+    for (const item of session.items) {
+      if (item.kind === 'question' && item.status === 'pending' && item.id !== options.answering) {
+        store.updateItem(sessionId, item.id, 'question', { status: 'cancelled' });
+      }
+    }
+    const userItemId = options.answering ?? newId('u');
+    if (!options.answering) {
+      store.appendItem(sessionId, { kind: 'user', id: userItemId, ts: now(), text });
+    }
     store.patch(sessionId, { status: 'running' });
 
     const openText = new Set<string>();
@@ -117,6 +129,16 @@ export function createAgentRunner(opts: {
             id: newId('e'),
             ts: now(),
             text: event.text,
+          });
+          return;
+        case 'questions':
+          store.appendItem(sessionId, {
+            kind: 'question',
+            id: newId('q'),
+            ts: now(),
+            questions: event.questions,
+            answers: null,
+            status: 'pending',
           });
           return;
         case 'result':
@@ -214,7 +236,7 @@ export function createAgentRunner(opts: {
       .run({
         cwd: userCwd,
         prompt,
-        systemPromptAppend: SYSTEM_PROMPT_APPEND,
+        systemPromptAppend: systemPromptAppend(provider.askInstruction),
         resume: session.providerSessionId,
         model: options.model ?? null,
         effort: options.effort ?? null,
@@ -250,7 +272,7 @@ export function createAgentRunner(opts: {
     const session = store.get(sessionId);
     if (!session?.items.some((i) => i.id === itemId)) return false;
     const prompt = pending.get(itemId);
-    if (!prompt) return false;
+    if (!prompt) return answerInNextTurn(sessionId, itemId, payload);
     if ('cancel' in payload) {
       if (prompt.kind === 'question') prompt.resolve(null);
       else prompt.resolve(false);
@@ -265,6 +287,28 @@ export function createAgentRunner(opts: {
       return true;
     }
     return false;
+  }
+
+  function answerInNextTurn(sessionId: string, itemId: string, payload: RespondPayload): boolean {
+    const item = store.get(sessionId)?.items.find((i) => i.id === itemId);
+    if (item?.kind !== 'question' || item.status !== 'pending' || running.has(sessionId)) {
+      return false;
+    }
+    if (!('answers' in payload) && !('cancel' in payload)) return false;
+    const answers = 'answers' in payload ? payload.answers : null;
+    store.updateItem(sessionId, itemId, 'question', {
+      answers,
+      status: answers ? 'answered' : 'cancelled',
+    });
+    const previous = lastOptions.get(sessionId);
+    const context = previous?.context ? { ...previous.context, newDeck: undefined } : undefined;
+    void send(sessionId, {
+      ...previous,
+      context,
+      text: answersPrompt(item.questions, answers),
+      answering: itemId,
+    }).catch(() => {});
+    return true;
   }
 
   function stopAll(): void {

@@ -5,9 +5,10 @@ import {
   type ProviderEvent,
   type ProviderRunOptions,
   ProviderUnavailableError,
+  parseQuestions,
   relativeToCwd,
 } from '../provider.ts';
-import type { AgentEffort, AgentModelOption, AgentQuestion } from '../types.ts';
+import type { AgentEffort, AgentModelOption } from '../types.ts';
 import type {
   ClaudeCanUseTool,
   ClaudeContentBlock,
@@ -65,36 +66,6 @@ export function describeClaudeTool(
     default:
       return { title: name, detail: clipDetail(input) };
   }
-}
-
-export function parseQuestions(input: Record<string, unknown>): AgentQuestion[] {
-  const raw = Array.isArray(input.questions) ? input.questions : [];
-  const questions: AgentQuestion[] = [];
-  for (const q of raw) {
-    if (!q || typeof q !== 'object') continue;
-    const r = q as Record<string, unknown>;
-    const options = Array.isArray(r.options)
-      ? r.options
-          .map((o) => {
-            if (!o || typeof o !== 'object') return null;
-            const opt = o as Record<string, unknown>;
-            if (typeof opt.label !== 'string') return null;
-            return {
-              label: opt.label,
-              description: typeof opt.description === 'string' ? opt.description : undefined,
-            };
-          })
-          .filter((o): o is { label: string; description: string | undefined } => o !== null)
-      : [];
-    if (typeof r.question !== 'string') continue;
-    questions.push({
-      header: typeof r.header === 'string' ? r.header : '',
-      question: r.question,
-      options,
-      multiSelect: r.multiSelect === true,
-    });
-  }
-  return questions;
 }
 
 // Folds the SDK's message stream into provider events. Partial messages
@@ -207,6 +178,7 @@ export function createClaudeProvider(): AgentProvider {
     name: 'Claude Code',
     sdkPackage: CLAUDE_SDK_PACKAGE,
     cliCommand: 'claude',
+    askInstruction: 'Ask the user questions with the AskUserQuestion tool, never as plain text.',
     async models() {
       return CLAUDE_MODELS;
     },
