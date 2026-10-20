@@ -15,7 +15,6 @@ export const ALL_SLIDES_ID = '__all__';
 export const DRAFT_ID = 'draft';
 export const THEMES_ID = '__themes__';
 export const ASSETS_ID = '__assets__';
-export const AGENT_ID = '__agent__';
 
 export const FOLDER_DND_MIME = 'application/x-folder-id';
 
@@ -25,7 +24,6 @@ export function Sidebar({
   allCount,
   themesCount,
   assetsCount,
-  agentCount,
   selectedId,
   onSelect,
   onCreate,
@@ -42,7 +40,6 @@ export function Sidebar({
   allCount: number;
   themesCount: number;
   assetsCount: number;
-  agentCount: number;
   selectedId: string;
   onSelect: (id: string) => void;
   onCreate: (name: string, icon: FolderIcon) => Promise<Folder> | undefined;
@@ -187,15 +184,6 @@ export function Sidebar({
             count={assetsCount}
             selected={selectedId === ASSETS_ID}
             onSelect={() => onSelect(ASSETS_ID)}
-            onDropSlide={() => {}}
-          />
-        )}
-        {import.meta.env.DEV && (
-          <FolderItem
-            row={{ kind: 'agent' }}
-            count={agentCount}
-            selected={selectedId === AGENT_ID}
-            onSelect={() => onSelect(AGENT_ID)}
             onDropSlide={() => {}}
           />
         )}

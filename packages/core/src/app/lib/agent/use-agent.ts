@@ -49,6 +49,7 @@ type State = {
   dockOpen: boolean;
   request: AgentRequest | null;
   installing: AgentProviderId | null;
+  connectErrors: Partial<Record<AgentProviderId, string>>;
   newDeck: string | null;
 };
 
@@ -114,6 +115,7 @@ let state: State = {
   dockOpen: readStorage(DOCK_KEY) === '1',
   request: null,
   installing: null,
+  connectErrors: {},
   newDeck: readStorage(NEW_DECK_KEY),
 };
 
@@ -334,13 +336,43 @@ export async function respond(id: string, itemId: string, payload: RespondPayloa
 }
 
 export async function installProvider(provider: AgentProviderId): Promise<void> {
-  setState({ installing: provider });
+  setState((prev) => ({
+    installing: provider,
+    connectErrors: { ...prev.connectErrors, [provider]: undefined },
+  }));
   try {
     await request('/__agent/install', post({ provider }));
     await refreshStatus();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setState((prev) => ({ connectErrors: { ...prev.connectErrors, [provider]: message } }));
+    throw err;
   } finally {
     setState({ installing: null });
   }
+}
+
+let autoConnecting: Promise<void> | null = null;
+
+// Installs the SDK for every agent whose CLI is already on this machine, the
+// first time the panel needs one. Agents without a CLI are left for the
+// panel to explain.
+export function autoConnect(): Promise<void> {
+  if (autoConnecting) return autoConnecting;
+  const status = state.status;
+  if (!status?.enabled) return Promise.resolve();
+  const pending = status.providers.filter(
+    (p) => p.cliFound && !p.ready && !state.connectErrors[p.id],
+  );
+  if (pending.length === 0) return Promise.resolve();
+  autoConnecting = (async () => {
+    for (const p of pending) {
+      await installProvider(p.id).catch(() => {});
+    }
+  })().finally(() => {
+    autoConnecting = null;
+  });
+  return autoConnecting;
 }
 
 export function setActiveSession(id: string | null): void {

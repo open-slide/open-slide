@@ -3,7 +3,6 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
 import { useLocale } from './lib/use-locale';
-import { AgentPage } from './routes/agent';
 import { AssetsPage } from './routes/assets';
 import { Home } from './routes/home';
 import { HomeShell } from './routes/home-shell';
@@ -25,7 +24,6 @@ export function App() {
               <Route path="/themes" element={<ThemesGalleryPage />} />
               <Route path="/themes/:themeId" element={<ThemeDetailPage />} />
               <Route path="/assets" element={<AssetsPage />} />
-              {import.meta.env.DEV && <Route path="/agent" element={<AgentPage />} />}
             </Route>
           )}
           <Route path="/s/:slideId" element={<Slide />} />

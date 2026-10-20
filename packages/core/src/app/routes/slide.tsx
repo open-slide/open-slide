@@ -28,7 +28,8 @@ import {
 } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AgentDock, AgentToggleButton } from '@/components/agent/agent-dock';
+import { AgentToggleButton } from '@/components/agent/agent-dock';
+import { AgentPanel } from '@/components/agent/agent-panel';
 import { AgentPresence } from '@/components/agent/agent-presence';
 import { AssetView } from '@/components/asset-view';
 import { HistoryProvider } from '@/components/history-provider';
@@ -905,16 +906,18 @@ export function Slide() {
                   <EditorSidebar
                     designOpen={designOpen}
                     onCloseDesign={() => setDesignOpen(false)}
-                    hidden={agentOpen}
+                    agentOpen={agentOpen}
+                    agent={
+                      import.meta.env.DEV && (
+                        <SlideAgentDock
+                          slideId={slideId}
+                          slideTitle={title}
+                          pageNumber={index + 1}
+                          totalPages={pageCount}
+                        />
+                      )
+                    }
                   />
-                  {import.meta.env.DEV && (
-                    <SlideAgentDock
-                      slideId={slideId}
-                      slideTitle={title}
-                      pageNumber={index + 1}
-                      totalPages={pageCount}
-                    />
-                  )}
                 </div>
                 {import.meta.env.DEV && (
                   <NotesDrawer
@@ -1166,7 +1169,7 @@ function SlideAgentDock({
     }),
     [slideId, slideTitle, pageNumber, totalPages, comments.length, selected],
   );
-  return <AgentDock context={context} />;
+  return <AgentPanel context={context} onClose={() => setDockOpen(false)} />;
 }
 
 function AgentConnectedBadge() {

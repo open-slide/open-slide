@@ -1,26 +1,50 @@
-import { Check, Loader2, Terminal } from 'lucide-react';
+import { Check, Loader2, RotateCw, Terminal } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { installProvider, useAgentState, useAgentStatus } from '@/lib/agent/use-agent';
+import {
+  installProvider,
+  refreshStatus,
+  useAgentState,
+  useAgentStatus,
+} from '@/lib/agent/use-agent';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
-import type { AgentProviderStatus } from '../../../agent/types';
+import type { AgentProviderId, AgentProviderStatus } from '../../../agent/types';
 import { ProviderLogo } from './provider-logo';
+
+const CLI_INSTALL: Record<AgentProviderId, string> = {
+  claude: 'npm install -g @anthropic-ai/claude-code',
+  codex: 'npm install -g @openai/codex',
+};
 
 export function ConnectView({ className }: { className?: string }) {
   const t = useLocale();
   const { status, loading, enabled } = useAgentStatus();
-  const { installing } = useAgentState();
+  const { installing, connectErrors } = useAgentState();
+  const [checking, setChecking] = useState(false);
+  const providers = status?.providers ?? [];
+  const needCli = providers.length > 0 && providers.every((p) => !p.cliFound && !p.ready);
+  const anyMissing = providers.some((p) => !p.cliFound && !p.ready);
+
+  const checkAgain = async () => {
+    setChecking(true);
+    try {
+      await refreshStatus();
+    } finally {
+      setChecking(false);
+    }
+  };
 
   return (
     <div className={cn('flex flex-col gap-4 px-4 py-5', className)}>
       <div>
         <span className="eyebrow">{t.agent.title}</span>
         <h2 className="mt-1.5 font-heading text-[15px] font-semibold tracking-tight">
-          {t.agent.connectTitle}
+          {needCli ? t.agent.needCliTitle : t.agent.connectTitle}
         </h2>
         <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted-foreground">
-          {t.agent.connectDescription}
+          {needCli ? t.agent.needCliDescription : t.agent.connectDescription}
         </p>
       </div>
 
@@ -30,13 +54,14 @@ export function ConnectView({ className }: { className?: string }) {
         <p className="text-[12px] text-muted-foreground">{t.agent.disabled}</p>
       ) : (
         <div className="flex flex-col gap-2.5">
-          {status?.providers.map((provider) => (
+          {providers.map((provider) => (
             <ProviderCard
               key={provider.id}
               provider={provider}
-              packageManager={status.packageManager}
+              packageManager={status?.packageManager ?? 'npm'}
               installing={installing === provider.id}
               busy={installing !== null}
+              error={connectErrors[provider.id]}
               onConnect={async () => {
                 try {
                   await installProvider(provider.id);
@@ -49,6 +74,21 @@ export function ConnectView({ className }: { className?: string }) {
               }}
             />
           ))}
+          {anyMissing && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="self-start"
+              disabled={checking}
+              onClick={checkAgain}
+            >
+              <RotateCw
+                className={cn('size-3.5', checking && 'animate-spin motion-reduce:animate-none')}
+                aria-hidden
+              />
+              {t.agent.checkAgain}
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -60,15 +100,18 @@ function ProviderCard({
   packageManager,
   installing,
   busy,
+  error,
   onConnect,
 }: {
   provider: AgentProviderStatus;
   packageManager: string;
   installing: boolean;
   busy: boolean;
+  error: string | undefined;
   onConnect: () => void;
 }) {
   const t = useLocale();
+  const missing = !provider.cliFound && !provider.ready;
   const cliLabel = provider.cliFound
     ? provider.cliVersion
       ? format(t.agent.cliFound, { version: provider.cliVersion })
@@ -98,21 +141,40 @@ function ProviderCard({
             <Check className="size-3" aria-hidden />
             {t.agent.connected}
           </span>
-        ) : (
-          <Button size="sm" disabled={busy} onClick={onConnect}>
-            {installing ? (
-              <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden />
-            ) : null}
-            {installing ? t.agent.connecting : t.agent.connect}
+        ) : installing ? (
+          <span className="inline-flex items-center gap-1.5 px-1 text-[11.5px] text-muted-foreground">
+            <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
+            {t.agent.connecting}
+          </span>
+        ) : missing ? null : (
+          <Button
+            size="sm"
+            variant={error ? 'outline' : 'default'}
+            disabled={busy}
+            onClick={onConnect}
+          >
+            {error ? t.agent.retry : t.agent.connect}
           </Button>
         )}
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-        {provider.ready
-          ? `${provider.sdkPackage} v${provider.sdkVersion}`
-          : format(t.agent.connectInstallHint, { pkg: provider.sdkPackage, pm: packageManager })}
-        {!provider.cliFound && ` ${format(t.agent.cliHint, { name: provider.name })}`}
-      </p>
+      {missing ? (
+        <div className="mt-2.5 flex flex-col gap-1.5">
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {format(t.agent.cliHint, { name: provider.name })}
+          </p>
+          <code className="block overflow-x-auto rounded-[5px] bg-muted px-2 py-1.5 font-mono text-[11px] whitespace-nowrap select-all">
+            {CLI_INSTALL[provider.id]}
+          </code>
+        </div>
+      ) : error && !installing ? (
+        <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-destructive">{error}</p>
+      ) : (
+        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+          {provider.ready
+            ? `${provider.sdkPackage} v${provider.sdkVersion}`
+            : format(t.agent.connectInstallHint, { pkg: provider.sdkPackage, pm: packageManager })}
+        </p>
+      )}
     </div>
   );
 }

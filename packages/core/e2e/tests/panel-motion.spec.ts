@@ -152,6 +152,33 @@ test.describe('editor sidebar motion', () => {
     await expect(arrange).toHaveAttribute('aria-selected', 'true');
   });
 
+  test('Format and the agent panel resize one sidebar without collapsing it', async ({
+    page,
+    request,
+  }) => {
+    await page.route('**/__agent/status', async (route) => {
+      const body = (await (await route.fetch()).json()) as { providers: object[] };
+      await route.fulfill({
+        json: { ...body, providers: body.providers.map((p) => ({ ...p, cliFound: false })) },
+      });
+    });
+    await openEditor(page, request, 'motion-agent-switch');
+    const sidebar = page.locator('[data-editor-sidebar]');
+    const toAgent = await captureSidebarFrames(page, async () => {
+      await page.keyboard.press('a');
+      await expect(sidebar).toHaveCSS('width', '380px');
+    });
+    expect(toAgent.every(({ width }) => width >= 319.5)).toBe(true);
+    expect(toAgent.some(({ width }) => width > 320.5 && width < 379.5)).toBe(true);
+
+    const toFormat = await captureSidebarFrames(page, async () => {
+      await page.getByTitle('Format', { exact: true }).click();
+      await expect(sidebar).toHaveCSS('width', '320px');
+      await expect(page.locator('aside[data-inspector-ui]')).toBeVisible();
+    });
+    expect(toFormat.every(({ width }) => width >= 319.5)).toBe(true);
+  });
+
   test('reduced motion changes sidebar width without sliding', async ({ page, request }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await openEditor(page, request, 'motion-reduced');

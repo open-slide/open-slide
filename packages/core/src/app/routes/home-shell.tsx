@@ -10,7 +10,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useAgentSessions } from '@/lib/agent/use-agent';
 import { GLOBAL_ASSET_SCOPE, useAssets } from '@/lib/assets';
 import { useFolders } from '@/lib/folders';
 import { rememberHomeLocation } from '@/lib/last-home-location';
@@ -19,13 +18,7 @@ import { cn, pad2 } from '@/lib/utils';
 import { CommandMenuTrigger } from '../components/command/command-menu';
 import { HomeCommandMenu } from '../components/command/home-command-menu';
 import { SystemViewIcon } from '../components/sidebar/folder-item';
-import {
-  AGENT_ID,
-  ALL_SLIDES_ID,
-  ASSETS_ID,
-  Sidebar,
-  THEMES_ID,
-} from '../components/sidebar/sidebar';
+import { ALL_SLIDES_ID, ASSETS_ID, Sidebar, THEMES_ID } from '../components/sidebar/sidebar';
 import type { FoldersManifest } from '../lib/sdk';
 import { slideIds } from '../lib/slides';
 import { themes as themeRegistry } from '../lib/themes';
@@ -49,7 +42,6 @@ export type HomeOutletContext = {
 function pathToSelectedId(pathname: string, search: URLSearchParams): string {
   if (pathname === '/themes' || pathname.startsWith('/themes/')) return THEMES_ID;
   if (pathname === '/assets') return ASSETS_ID;
-  if (pathname === '/agent') return AGENT_ID;
   return search.get('f') ?? ALL_SLIDES_ID;
 }
 
@@ -91,7 +83,6 @@ export function HomeShell() {
     (id: string) => {
       if (id === THEMES_ID) navigate('/themes', { replace: true });
       else if (id === ASSETS_ID) navigate('/assets', { replace: true });
-      else if (id === AGENT_ID) navigate('/agent', { replace: true });
       else if (id === ALL_SLIDES_ID) navigate('/', { replace: true });
       else navigate(`/?f=${encodeURIComponent(id)}`, { replace: true });
     },
@@ -99,9 +90,7 @@ export function HomeShell() {
   );
 
   const { assets: globalAssets } = useAssets(GLOBAL_ASSET_SCOPE);
-  const { sessions: agentSessions } = useAgentSessions();
   const isAssetsRoute = selectedId === ASSETS_ID;
-  const isAgentRoute = selectedId === AGENT_ID;
 
   const { draftSlides, slidesByFolder } = useMemo(() => {
     const byFolder: Record<string, string[]> = {};
@@ -164,7 +153,6 @@ export function HomeShell() {
           allCount={slideIds.length}
           themesCount={themeRegistry.length}
           assetsCount={globalAssets.length}
-          agentCount={agentSessions.length}
           selectedId={selectedId}
           onSelect={selectFolder}
           onCreate={(name, icon) => create(name, icon)}
@@ -219,7 +207,6 @@ export function HomeShell() {
                     className={cn(
                       selectedId !== THEMES_ID &&
                         selectedId !== ASSETS_ID &&
-                        selectedId !== AGENT_ID &&
                         'bg-muted text-foreground',
                     )}
                   >
@@ -245,16 +232,6 @@ export function HomeShell() {
                       <span className="folio">{pad2(globalAssets.length)}</span>
                     </DropdownMenuItem>
                   )}
-                  {import.meta.env.DEV && (
-                    <DropdownMenuItem
-                      onClick={() => selectFolder(AGENT_ID)}
-                      className={cn(selectedId === AGENT_ID && 'bg-muted text-foreground')}
-                    >
-                      <SystemViewIcon kind="agent" className="text-muted-foreground" />
-                      <span className="flex-1 truncate">{t.agent.title}</span>
-                      <span className="folio">{pad2(agentSessions.length)}</span>
-                    </DropdownMenuItem>
-                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -262,7 +239,7 @@ export function HomeShell() {
 
           <div
             className={cn(
-              isAssetsRoute || isAgentRoute
+              isAssetsRoute
                 ? 'flex min-h-0 flex-1 flex-col'
                 : 'mx-auto w-full max-w-[1180px] px-5 py-8 md:px-10 md:py-12',
             )}

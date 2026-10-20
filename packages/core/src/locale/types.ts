@@ -585,6 +585,10 @@ export type Locale = {
     sessions: string;
     noSessions: string;
     deleteSession: string;
+    historyThisDeck: string;
+    historyOtherDecks: string;
+    historyEmptyHint: string;
+    sessionRunning: string;
     switchProvider: string;
     /** template: "Ask {provider} to create or edit slides…" */
     composerPlaceholder: string;
@@ -643,8 +647,12 @@ export type Locale = {
     cliFound: string;
     cliFoundNoVersion: string;
     cliMissing: string;
-    /** template: "Install and sign in to the {name} CLI first; the panel reuses its login." */
+    /** template: "Install the {name} CLI and sign in once; the panel reuses its login." */
     cliHint: string;
+    needCliTitle: string;
+    needCliDescription: string;
+    checkAgain: string;
+    retry: string;
     /** template: "{name} connected" */
     toastConnected: string;
     /** template: "Could not install {pkg}" */

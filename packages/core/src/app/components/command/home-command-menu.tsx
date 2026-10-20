@@ -6,7 +6,7 @@ import { useSlideTitles } from '@/lib/use-slide-titles';
 import type { Folder } from '../../lib/sdk';
 import { slideIds } from '../../lib/slides';
 import { FolderIconChip, SystemViewIcon } from '../sidebar/folder-item';
-import { AGENT_ID, ALL_SLIDES_ID, ASSETS_ID, DRAFT_ID, THEMES_ID } from '../sidebar/sidebar';
+import { ALL_SLIDES_ID, ASSETS_ID, DRAFT_ID, THEMES_ID } from '../sidebar/sidebar';
 import { type CommandGroupSpec, CommandMenu, type CommandSpec } from './command-menu';
 
 export function HomeCommandMenu({
@@ -75,13 +75,6 @@ export function HomeCommandMenu({
         icon: <SystemViewIcon kind="assets" />,
         keywords: ['assets', 'images', 'files'],
         run: () => onSelectView(ASSETS_ID),
-      });
-      navigation.push({
-        id: `view-${AGENT_ID}`,
-        label: t.agent.title,
-        icon: <SystemViewIcon kind="agent" />,
-        keywords: ['agent', 'claude', 'codex', 'chat', 'ai'],
-        run: () => onSelectView(AGENT_ID),
       });
     }
 

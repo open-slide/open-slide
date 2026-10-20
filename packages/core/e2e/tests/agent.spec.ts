@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import { openSlide } from './helpers.ts';
 
 type ProviderStatus = {
@@ -6,7 +6,9 @@ type ProviderStatus = {
   name: string;
   sdkPackage: string;
   sdkInstalled: boolean;
+  sdkVersion?: string | null;
   cliCommand: string;
+  cliFound: boolean;
   ready: boolean;
 };
 
@@ -16,6 +18,19 @@ type Session = {
   status: string;
   items: { id: string; kind: string; text?: string; aborted?: boolean }[];
 };
+
+async function mockStatus(
+  page: Page,
+  patch: (provider: ProviderStatus) => Partial<ProviderStatus>,
+): Promise<void> {
+  await page.route('**/__agent/status', async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { providers: ProviderStatus[] };
+    await route.fulfill({
+      json: { ...body, providers: body.providers.map((p) => ({ ...p, ...patch(p) })) },
+    });
+  });
+}
 
 test.describe('agent panel', () => {
   test('status lists both providers and whether they are connected', async ({ request }) => {
@@ -102,29 +117,57 @@ test.describe('agent panel', () => {
     );
   });
 
-  test('home exposes the agent view and the panel offers connections', async ({ page }) => {
+  test('home no longer has an agent view', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Agent', exact: true }).first().click();
-    await expect(page).toHaveURL(/\/agent$/);
-    await expect(page.getByRole('heading', { name: 'Connect an agent' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Claude Code' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Codex' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Themes', exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Agent', exact: true })).toHaveCount(0);
   });
 
-  test('the slide toolbar toggles the agent dock with the A shortcut', async ({ page }) => {
+  test('the panel asks for a CLI when neither agent is installed', async ({ page }) => {
+    await mockStatus(page, () => ({ cliFound: false, sdkInstalled: false }));
+    let installs = 0;
+    await page.route('**/__agent/install', (route) => {
+      installs += 1;
+      return route.fulfill({ json: { ok: true } });
+    });
     await openSlide(page, 'alpha');
     const dock = page.locator('[data-agent-dock]');
     await expect(dock).toHaveCount(0);
 
     await page.keyboard.press('a');
     await expect(dock).toBeVisible();
-    await expect(dock.getByRole('heading', { name: 'Connect an agent' })).toBeVisible();
+    await expect(
+      dock.getByRole('heading', { name: 'Install Claude Code or Codex first' }),
+    ).toBeVisible();
+    await expect(dock.getByText('npm install -g @anthropic-ai/claude-code')).toBeVisible();
+    await expect(dock.getByText('npm install -g @openai/codex')).toBeVisible();
+    expect(installs).toBe(0);
 
     await page.getByRole('button', { name: 'Close agent panel' }).click();
     await expect(dock).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Open the agent panel' }).click();
     await expect(dock).toBeVisible();
+  });
+
+  test('the panel connects an installed CLI on first use', async ({ page }) => {
+    let installed = false;
+    const requested: string[] = [];
+    await mockStatus(page, (p) =>
+      p.id === 'claude'
+        ? { cliFound: true, sdkInstalled: installed, ready: installed, sdkVersion: '0.0.0' }
+        : { cliFound: false, sdkInstalled: false },
+    );
+    await page.route('**/__agent/install', async (route) => {
+      requested.push(route.request().postDataJSON().provider);
+      installed = true;
+      await route.fulfill({ json: { ok: true } });
+    });
+    await openSlide(page, 'alpha');
+    await page.keyboard.press('a');
+    const dock = page.locator('[data-agent-dock]');
+    await expect(dock.getByPlaceholder(/Ask Claude Code/)).toBeVisible();
+    expect(requested).toEqual(['claude']);
   });
 
   test('New deck opens a blank deck with the agent dock asking for a brief', async ({
@@ -141,7 +184,9 @@ test.describe('agent panel', () => {
         json: {
           ...status,
           providers: status.providers.map((p) =>
-            p.id === 'claude' ? { ...p, sdkInstalled: true, ready: true } : p,
+            p.id === 'claude'
+              ? { ...p, sdkInstalled: true, ready: true }
+              : { ...p, cliFound: false },
           ),
         },
       }),

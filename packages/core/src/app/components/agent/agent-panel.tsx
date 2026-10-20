@@ -1,5 +1,6 @@
 import {
   ChevronDown,
+  ChevronLeft,
   History,
   MessageSquare,
   Palette,
@@ -7,10 +8,10 @@ import {
   Plus,
   Presentation,
   Settings2,
-  Trash2,
   X,
 } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,6 +30,7 @@ import {
   type AgentEffort,
   type AgentModelOption,
   type AgentProviderId,
+  autoConnect,
   clearNewDeck,
   consumeRequest,
   createSession,
@@ -53,6 +55,7 @@ import { applyCommentsPrompt } from '../../../agent/prompt';
 import type { AgentTurnContext } from '../../../agent/types';
 import { Composer, ContextChip } from './composer';
 import { ConnectView } from './connect-view';
+import { HistoryView } from './history-view';
 import { ProviderLogo } from './provider-logo';
 import { Transcript } from './transcript';
 
@@ -77,9 +80,15 @@ export function AgentPanel({
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
   const [manage, setManage] = useState(false);
+  const [view, setView] = useState<'chat' | 'history'>('chat');
+  const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const running = session?.status === 'running';
   const showConnect = !loading && (!connected || manage);
+
+  useEffect(() => {
+    if (status) void autoConnect();
+  }, [status]);
 
   const contextRef = useRef(context);
   contextRef.current = context;
@@ -202,6 +211,11 @@ export function AgentPanel({
             <Button size="xs" variant="ghost" onClick={() => setManage(false)}>
               {t.agent.backToChat}
             </Button>
+          ) : view === 'history' ? (
+            <Button size="xs" variant="ghost" onClick={() => setView('chat')}>
+              <ChevronLeft className="size-3.5" />
+              {t.agent.sessions}
+            </Button>
           ) : (
             <ModelMenu
               status={status}
@@ -217,18 +231,17 @@ export function AgentPanel({
         <div className="flex shrink-0 items-center gap-0.5">
           {connected && !showConnect && (
             <>
-              <SessionsMenu
-                sessions={sessions}
-                activeId={activeId}
-                onSelect={(id) => setActiveSession(id)}
-                onDelete={async (id) => {
-                  try {
-                    await deleteSession(id);
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : String(err));
-                  }
-                }}
-              />
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label={t.agent.sessions}
+                aria-pressed={view === 'history'}
+                title={t.agent.sessions}
+                className="aria-pressed:bg-muted aria-pressed:text-foreground"
+                onClick={() => setView((v) => (v === 'history' ? 'chat' : 'history'))}
+              >
+                <History className="size-3.5" />
+              </Button>
               <Button
                 size="icon-sm"
                 variant="ghost"
@@ -236,6 +249,7 @@ export function AgentPanel({
                 title={t.agent.newSession}
                 onClick={() => {
                   setActiveSession(null);
+                  setView('chat');
                   setDraft('');
                   queueMicrotask(() => textareaRef.current?.focus());
                 }}
@@ -264,6 +278,24 @@ export function AgentPanel({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <ConnectView />
         </div>
+      ) : view === 'history' ? (
+        <HistoryView
+          sessions={sessions}
+          activeId={activeId}
+          slideId={context?.slideId ?? null}
+          onSelect={(s) => {
+            setActiveSession(s.id);
+            setView('chat');
+            if (s.slideId && s.slideId !== context?.slideId) navigate(`/s/${s.slideId}`);
+          }}
+          onDelete={async (id) => {
+            try {
+              await deleteSession(id);
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : String(err));
+            }
+          }}
+        />
       ) : (
         <>
           {session && session.items.length > 0 ? (
@@ -417,74 +449,6 @@ function ModelMenu({
           <Settings2 />
           {t.agent.manageConnections}
         </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function SessionsMenu({
-  sessions,
-  activeId,
-  onSelect,
-  onDelete,
-}: {
-  sessions: ReturnType<typeof useAgentSessions>['sessions'];
-  activeId: string | null;
-  onSelect: (id: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  const t = useLocale();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        type="button"
-        aria-label={t.agent.sessions}
-        title={t.agent.sessions}
-        className="flex size-7 items-center justify-center rounded-[5px] text-foreground/75 outline-none transition-colors duration-100 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 aria-expanded:bg-muted aria-expanded:text-foreground"
-      >
-        <History className="size-3.5" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-[320px] min-w-[240px] overflow-y-auto">
-        {sessions.length === 0 ? (
-          <div className="px-2 py-1.5 text-[12px] text-muted-foreground">{t.agent.noSessions}</div>
-        ) : (
-          <DropdownMenuGroup>
-            {sessions.map((s) => (
-              <DropdownMenuItem
-                key={s.id}
-                onClick={() => onSelect(s.id)}
-                className={cn('group/session', s.id === activeId && 'bg-muted text-foreground')}
-              >
-                <MessageSquare className="text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate">{s.title}</span>
-                {s.status === 'running' && (
-                  <span aria-hidden className="size-1.5 rounded-full bg-emerald-500" />
-                )}
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  aria-label={t.agent.deleteSession}
-                  title={t.agent.deleteSession}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    onDelete(s.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      onDelete(s.id);
-                    }
-                  }}
-                  className="ml-1 grid size-5 shrink-0 place-items-center rounded-[4px] text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover/session:opacity-100 group-focus/session:opacity-100"
-                >
-                  <Trash2 className="size-3" />
-                </button>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

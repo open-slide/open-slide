@@ -547,3 +547,13 @@
     opacity: 0.6;
   }
 }
+
+.sidebar-swap {
+  animation: agent-fade-in 160ms var(--ease-swift, ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-swap {
+    animation: none;
+  }
+}
