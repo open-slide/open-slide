@@ -202,8 +202,19 @@ test.describe('agent panel', () => {
     await expect(dock.getByPlaceholder('A 10-minute talk on…')).toBeFocused();
 
     await dock.getByRole('button', { name: /^Opus/ }).click();
-    await page.getByRole('menuitemradio', { name: 'Sonnet' }).click();
-    await page.getByRole('menuitemradio', { name: 'High', exact: true }).click();
+    const menu = page.locator('[data-agent-model-menu]');
+    await expect(menu.getByRole('tab', { name: 'Claude Code' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await menu.getByRole('button', { name: 'Sonnet', exact: true }).click();
+    await menu.getByRole('button', { name: 'High', exact: true }).click();
+    await expect(menu.getByRole('button', { name: 'High', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await menu.getByRole('tab', { name: 'Codex' }).click();
+    await expect(menu.getByRole('button', { name: 'Connect' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dock.getByRole('button', { name: 'Sonnet High' })).toBeVisible();
 

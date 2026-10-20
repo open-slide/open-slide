@@ -1,4 +1,5 @@
 import {
+  Check,
   ChevronDown,
   ChevronLeft,
   History,
@@ -14,18 +15,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   type AgentEffort,
   type AgentModelOption,
@@ -37,6 +27,7 @@ import {
   deleteSession,
   type RespondPayload,
   readyProviders,
+  resolveModelChoice,
   respond,
   sendMessage,
   setActiveSession,
@@ -355,12 +346,24 @@ function ModelMenu({
   onManage: () => void;
 }) {
   const t = useLocale();
+  const [open, setOpen] = useState(false);
   const providers = status?.enabled ? status.providers : [];
-  const ready = readyProviders(status);
-  const value = providerId && model ? `${providerId}:${model.id}` : '';
+  const [tab, setTab] = useState<AgentProviderId | null>(providerId);
+  const shownId = tab ?? providerId ?? providers[0]?.id ?? null;
+  const shown = providers.find((p) => p.id === shownId) ?? null;
+  const choice = shown?.ready ? resolveModelChoice(shown.models, modelChoices[shown.id]) : null;
+  const selectedModel = shown?.id === providerId ? (model ?? choice?.model) : choice?.model;
+  const selectedEffort = shown?.id === providerId ? effort : (choice?.effort ?? null);
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setTab(providerId);
+      }}
+    >
+      <PopoverTrigger
         type="button"
         className="flex h-7 min-w-0 items-center gap-1.5 rounded-[5px] px-2 text-[12.5px] font-medium outline-none transition-colors duration-100 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30 aria-expanded:bg-muted"
       >
@@ -376,81 +379,146 @@ function ModelMenu({
           </span>
         )}
         <ChevronDown className="size-3 text-muted-foreground" aria-hidden />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-[232px]">
-        {ready.length > 0 && (
-          <>
-            <DropdownMenuRadioGroup
-              value={value}
-              onValueChange={(next) => {
-                const [id, ...rest] = String(next).split(':');
-                if (id !== 'claude' && id !== 'codex') return;
-                const prev = modelChoices[id];
-                setModelChoice(id, { model: rest.join(':'), effort: prev?.effort ?? null });
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[272px] p-1.5" data-agent-model-menu>
+        {providers.length > 1 && (
+          <div role="tablist" className="mb-1.5 flex gap-0.5 rounded-[6px] bg-muted p-0.5">
+            {providers.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                role="tab"
+                aria-selected={p.id === shownId}
+                onClick={() => setTab(p.id)}
+                className={cn(
+                  'flex h-7 flex-1 items-center justify-center gap-1.5 rounded-[5px] text-[12px] font-medium text-muted-foreground outline-none transition-colors duration-100 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30',
+                  p.id === shownId && 'bg-background text-foreground shadow-edge',
+                )}
+              >
+                <ProviderLogo provider={p.id} className="size-3.5 shrink-0" />
+                {p.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {shown && !shown.ready ? (
+          <div className="flex flex-col items-start gap-2 px-2 py-2.5">
+            <p className="text-[12px] leading-relaxed text-muted-foreground">
+              {shown.cliFound
+                ? format(t.agent.connectInstallHint, {
+                    pkg: shown.sdkPackage,
+                    pm: status?.packageManager ?? 'npm',
+                  })
+                : format(t.agent.cliHint, { name: shown.name })}
+            </p>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => {
+                setOpen(false);
+                onManage();
               }}
             >
-              {providers.map((p) => (
-                <DropdownMenuGroup key={p.id}>
-                  <DropdownMenuLabel className="flex items-center gap-1.5">
-                    <ProviderLogo provider={p.id} className="size-3" />
-                    {p.name}
-                  </DropdownMenuLabel>
-                  {p.ready ? (
-                    p.models.map((m) => (
-                      <DropdownMenuRadioItem key={m.id} value={`${p.id}:${m.id}`}>
-                        {modelLabel(m, t)}
-                      </DropdownMenuRadioItem>
-                    ))
-                  ) : (
-                    <DropdownMenuItem onClick={onManage} className="pl-8 text-muted-foreground">
-                      {t.agent.connect}
-                    </DropdownMenuItem>
+              {t.agent.connect}
+            </Button>
+          </div>
+        ) : shown ? (
+          <div className="flex flex-col gap-px">
+            {shown.models.map((m) => {
+              const checked = m.id === selectedModel?.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  aria-pressed={checked}
+                  onClick={() =>
+                    setModelChoice(shown.id, {
+                      model: m.id,
+                      effort: modelChoices[shown.id]?.effort ?? null,
+                    })
+                  }
+                  className={cn(
+                    'flex h-7 items-center justify-between gap-2 rounded-[5px] px-2 text-left text-[12.5px] outline-none transition-colors duration-100 hover:bg-muted focus-visible:bg-muted',
+                    checked && 'font-medium',
                   )}
-                </DropdownMenuGroup>
-              ))}
-            </DropdownMenuRadioGroup>
-            {providerId && model && model.efforts.length > 0 && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>{t.agent.reasoning}</DropdownMenuLabel>
-                  <DropdownMenuRadioGroup
-                    value={effort ?? ''}
-                    onValueChange={(next) =>
-                      setModelChoice(providerId, {
-                        model: model.id,
-                        effort: next ? (next as AgentEffort) : null,
-                      })
-                    }
+                >
+                  <span className="truncate">{modelLabel(m, t)}</span>
+                  {checked && <Check className="size-3.5 shrink-0" aria-hidden />}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {shown?.ready && selectedModel && selectedModel.efforts.length > 0 && (
+          <div className="mt-1.5 border-t border-hairline px-1 pt-2 pb-1">
+            <div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">
+              {t.agent.reasoning}
+            </div>
+            <div className="flex gap-0.5 rounded-[6px] bg-muted p-0.5">
+              {([null, ...selectedModel.efforts] as (AgentEffort | null)[]).map((e) => {
+                const checked = e === selectedEffort;
+                return (
+                  <button
+                    key={e ?? 'auto'}
+                    type="button"
+                    aria-pressed={checked}
+                    onClick={() => setModelChoice(shown.id, { model: selectedModel.id, effort: e })}
+                    className={cn(
+                      'h-6 min-w-0 flex-1 truncate rounded-[4px] px-1 text-[11.5px] text-muted-foreground outline-none transition-colors duration-100 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30',
+                      checked && 'bg-background font-medium text-foreground shadow-edge',
+                    )}
                   >
-                    <DropdownMenuRadioItem value="">{t.agent.effortAuto}</DropdownMenuRadioItem>
-                    {model.efforts.map((e) => (
-                      <DropdownMenuRadioItem key={e} value={e}>
-                        {t.agent.efforts[e]}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuGroup>
-              </>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem checked={autoApprove} onCheckedChange={setAutoApprove}>
-              <div className="flex flex-col">
-                <span>{t.agent.autoApprove}</span>
-                <span className="text-[11px] leading-snug text-muted-foreground">
-                  {t.agent.autoApproveHint}
-                </span>
-              </div>
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuSeparator />
-          </>
+                    {e ? t.agent.efforts[e] : t.agent.effortAuto}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
-        <DropdownMenuItem onClick={onManage}>
-          <Settings2 />
-          {t.agent.manageConnections}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+
+        <div className="mt-1.5 flex flex-col gap-px border-t border-hairline pt-1.5">
+          {readyProviders(status).length > 0 && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoApprove}
+              title={t.agent.autoApproveHint}
+              onClick={() => setAutoApprove(!autoApprove)}
+              className="flex h-7 items-center justify-between gap-2 rounded-[5px] px-2 text-[12.5px] outline-none transition-colors duration-100 hover:bg-muted focus-visible:bg-muted"
+            >
+              {t.agent.autoApprove}
+              <span
+                aria-hidden
+                className={cn(
+                  'relative h-4 w-7 shrink-0 rounded-full transition-colors duration-150',
+                  autoApprove ? 'bg-foreground' : 'bg-foreground/15',
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 left-0.5 size-3 rounded-full bg-background shadow-sm transition-transform duration-150',
+                    autoApprove && 'translate-x-3',
+                  )}
+                />
+              </span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onManage();
+            }}
+            className="flex h-7 items-center gap-2 rounded-[5px] px-2 text-[12.5px] text-muted-foreground outline-none transition-colors duration-100 hover:bg-muted hover:text-foreground focus-visible:bg-muted"
+          >
+            <Settings2 className="size-3.5" />
+            {t.agent.manageConnections}
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
