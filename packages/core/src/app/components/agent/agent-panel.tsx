@@ -64,7 +64,7 @@ export function AgentPanel({
 }) {
   const t = useLocale();
   const { status, loading, connected, provider, model, effort, modelChoices } = useAgentStatus();
-  const { sessions, activeId } = useAgentSessions();
+  const { sessions, loaded: sessionsLoaded, activeId } = useAgentSessions();
   const session = useAgentSession(activeId);
   const { request, autoApprove, newDeck } = useAgentState();
   const [draft, setDraft] = useState('');
@@ -83,6 +83,18 @@ export function AgentPanel({
 
   const contextRef = useRef(context);
   contextRef.current = context;
+
+  // Arriving at another deck starts a new conversation; the previous one stays
+  // in history. Picking a chat from history navigates to its own deck, so it
+  // survives this check.
+  const slideId = context?.slideId ?? null;
+  const checkedSlideRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!sessionsLoaded || checkedSlideRef.current === slideId) return;
+    checkedSlideRef.current = slideId;
+    const active = activeId ? sessions.find((s) => s.id === activeId) : null;
+    if (active?.slideId && active.slideId !== slideId) setActiveSession(null);
+  }, [slideId, sessionsLoaded, activeId, sessions]);
   const isNewDeck = Boolean(context?.slideId) && newDeck === context?.slideId;
 
   const ensureSession = useCallback(

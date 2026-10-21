@@ -252,6 +252,48 @@ test.describe('agent panel', () => {
     expect(sent[0]).toMatchObject({ text: 'Make the cover title red', edit: 'u-1' });
   });
 
+  test('opening the panel on another deck starts a new conversation', async ({ page }) => {
+    await mockStatus(page, (p) =>
+      p.id === 'claude'
+        ? { cliFound: true, sdkInstalled: true, ready: true, sdkVersion: '0.0.0' }
+        : { cliFound: false, sdkInstalled: false },
+    );
+    const ts = new Date().toISOString();
+    const session = {
+      id: 's-alpha',
+      provider: 'claude',
+      title: 'Tighten the alpha cover',
+      createdAt: ts,
+      updatedAt: ts,
+      status: 'idle',
+      slideId: 'alpha',
+      providerSessionId: null,
+      items: [{ kind: 'user', id: 'u-1', ts, text: 'Tighten the alpha cover' }],
+    };
+    const { items: _items, providerSessionId: _p, ...summary } = session;
+    await page.route('**/__agent/sessions', (route) =>
+      route.fulfill({ json: { sessions: [summary] } }),
+    );
+    await page.route('**/__agent/sessions/s-alpha', (route) => route.fulfill({ json: session }));
+    await page.addInitScript(() => {
+      localStorage.setItem('open-slide:agent-session', 's-alpha');
+      localStorage.setItem('open-slide:agent-dock', '1');
+    });
+
+    await openSlide(page, 'alpha');
+    const dock = page.locator('[data-agent-dock]');
+    await expect(dock.getByText('Tighten the alpha cover')).toBeVisible();
+
+    await openSlide(page, 'steps');
+    await expect(dock.getByPlaceholder(/Ask Claude Code/)).toBeVisible();
+    await expect(dock.getByText('Tighten the alpha cover')).toHaveCount(0);
+
+    await dock.getByRole('button', { name: 'History', exact: true }).click();
+    await dock.getByRole('button', { name: /Tighten the alpha cover/ }).click();
+    await expect(page).toHaveURL(/\/s\/alpha$/);
+    await expect(dock.getByText('Tighten the alpha cover')).toBeVisible();
+  });
+
   test('New deck opens a blank deck with the agent dock asking for a brief', async ({
     page,
     request,
