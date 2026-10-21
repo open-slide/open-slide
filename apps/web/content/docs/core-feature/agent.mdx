@@ -68,6 +68,9 @@ current step. Edits inside the slides and assets folders are applied directly.
 Other actions, such as editing a config file or running a shell command that
 changes state, pause for approval in the panel unless you turn on **Auto-approve** in the provider
 menu. Codex runs inside its own `workspace-write` sandbox and never prompts.
+Claude Code also loads the project's `.claude/settings.json`, so hooks and
+permission rules defined there apply without the trust prompt the CLI shows.
+Only open the panel in projects you trust.
 
 The history button in the panel header lists past conversations, newest
 first, with this deck's chats above the ones from other decks. Picking one from
