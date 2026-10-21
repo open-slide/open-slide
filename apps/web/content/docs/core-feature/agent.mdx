@@ -99,4 +99,6 @@ The panel is a thin client over `/__agent/*`:
 | `POST` | `/__agent/sessions/:id/stop` | Abort the running turn. |
 
 All mutating routes carry the same origin checks as the rest of the dev API
-and are only available while the dev server runs.
+and are only available while the dev server runs. The agent only answers
+requests from the machine running the dev server, so other devices on the
+network see the panel as disabled even with `--host`.

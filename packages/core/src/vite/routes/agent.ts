@@ -29,7 +29,7 @@ import {
   slugifyTitle,
 } from '../../editing/slide-ops.ts';
 import { readManifest, writeManifest } from '../../files/folders.ts';
-import { validateMutationRequest } from '../../http/request-guard.ts';
+import { isLoopbackRequest, validateMutationRequest } from '../../http/request-guard.ts';
 import { invalidateSlidesModule } from '../open-slide-plugin.ts';
 import { recordWrite } from '../recent-writes.ts';
 import { type ApiContext, json, readBody } from './context.ts';
@@ -196,14 +196,18 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
     const method = req.method ?? 'GET';
     const segments = url.pathname.split('/').filter(Boolean);
 
+    // The agent runs commands in the workspace, so only this machine may drive
+    // it, even when the dev server listens on the network.
+    const enabled = ctx.agentEnabled && isLoopbackRequest(req);
+
     try {
       if (method === 'GET' && url.pathname === '/status') {
         const pm = await detectPackageManager(ctx.userCwd);
         res.setHeader('cache-control', 'no-store');
-        return json(res, 200, await agentStatus(ctx.userCwd, providers, pm, ctx.agentEnabled));
+        return json(res, 200, await agentStatus(ctx.userCwd, providers, pm, enabled));
       }
 
-      if (!ctx.agentEnabled) return json(res, 404, { error: 'agent panel disabled' });
+      if (!enabled) return json(res, 404, { error: 'agent panel disabled' });
 
       if (method === 'POST' && url.pathname === '/install') {
         const guard = validateMutationRequest(req, { requireJsonBody: true });
