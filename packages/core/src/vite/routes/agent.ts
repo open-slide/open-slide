@@ -44,9 +44,7 @@ import { detectPackageManager } from './update.ts';
 // POST   /__agent/sessions/:id/messages       { text, context?, autoApprove?, model?, effort?, edit? } → { ok }
 // POST   /__agent/sessions/:id/stop           → { ok }
 // POST   /__agent/sessions/:id/respond        { itemId, answers? | allow? | cancel? } → { ok }
-//
-// Turn progress streams to the browser over Vite's HMR socket as
-// `open-slide:agent` custom events; the REST surface only mutates.
+// GET    /__agent/events                      → server-sent turn progress
 
 const PROVIDER_IDS: AgentProviderId[] = ['claude', 'codex'];
 
