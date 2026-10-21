@@ -94,7 +94,7 @@ The panel is a thin client over `/__agent/*`:
 | `POST` | `/__agent/install` | Install an agent SDK into the workspace. |
 | `GET` / `POST` | `/__agent/sessions` | List sessions / start one. |
 | `GET` / `DELETE` | `/__agent/sessions/:id` | Read a session's transcript / delete it. |
-| `POST` | `/__agent/sessions/:id/messages` | Send a prompt, or pass `edit` with a message id to replace that message. Progress streams over the HMR socket as `open-slide:agent` events. |
+| `POST` | `/__agent/sessions/:id/messages` | Send a prompt, or pass `edit` with a message id to replace that message. Progress streams from `GET /__agent/events` as server-sent events. |
 | `POST` | `/__agent/sessions/:id/respond` | Answer a question or approve a command. |
 | `POST` | `/__agent/sessions/:id/stop` | Abort the running turn. |
 

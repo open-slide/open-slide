@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import {
   AGENT_EFFORTS,
-  AGENT_WS_EVENT,
   type AgentEffort,
   type AgentItem,
   type AgentModelOption,
@@ -129,7 +128,6 @@ function setState(patch: Partial<State> | ((prev: State) => Partial<State>)) {
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
-  ensureSocket();
   return () => {
     listeners.delete(listener);
   };
@@ -143,17 +141,28 @@ export function useAgentState(): State {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-let socketBound = false;
+let stream: EventSource | null = null;
+let streamOpened = false;
 
-function ensureSocket() {
-  if (socketBound || !available || !import.meta.hot) return;
-  socketBound = true;
-  import.meta.hot.on(AGENT_WS_EVENT, (event: AgentWsEvent) => applyEvent(event));
-  import.meta.hot.on('vite:ws:connect', () => {
+function syncStream(enabled: boolean) {
+  if (!enabled) {
+    stream?.close();
+    stream = null;
+    return;
+  }
+  if (stream) return;
+  stream = new EventSource('/__agent/events');
+  stream.onmessage = (message) => applyEvent(JSON.parse(message.data) as AgentWsEvent);
+  stream.onopen = () => {
+    // Anything streamed while disconnected is gone, so reload what is on screen.
+    if (!streamOpened) {
+      streamOpened = true;
+      return;
+    }
     void refreshStatus();
     if (state.sessionsLoaded) void loadSessions();
     for (const id of Object.keys(state.full)) void loadSession(id);
-  });
+  };
 }
 
 function upsertSummary(list: AgentSessionSummary[], summary: AgentSessionSummary) {
@@ -260,6 +269,7 @@ export async function refreshStatus(): Promise<void> {
   try {
     const status = await request<AgentStatus>('/__agent/status');
     setState({ status, statusError: false });
+    syncStream(status.enabled);
   } catch {
     setState({ statusError: true });
   }

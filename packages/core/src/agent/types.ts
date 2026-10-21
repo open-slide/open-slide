@@ -123,8 +123,6 @@ export type AgentWsEvent =
   | { type: 'truncate'; sessionId: string; itemId: string }
   | { type: 'slide-renamed'; from: string; to: string };
 
-export const AGENT_WS_EVENT = 'open-slide:agent';
-
 export function sessionSummary(session: AgentSession): AgentSessionSummary {
   const { providerSessionId: _p, providerCheckpoint: _c, items: _i, ...summary } = session;
   return summary;

@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import type { ServerResponse } from 'node:http';
 import path from 'node:path';
 import type { ViteDevServer } from 'vite';
 import { extractDeckSlug, stripDeckSlug } from '../../agent/prompt.ts';
@@ -13,7 +14,6 @@ import { agentStatus, installSdk } from '../../agent/status.ts';
 import { createSessionStore, type SessionStore } from '../../agent/store.ts';
 import {
   AGENT_EFFORTS,
-  AGENT_WS_EVENT,
   type AgentEffort,
   type AgentProviderId,
   type AgentTurnContext,
@@ -104,6 +104,7 @@ async function renamePlaceholderDeck(
   server: ViteDevServer,
   ctx: ApiContext,
   store: SessionStore,
+  broadcast: (event: AgentWsEvent) => void,
   turn: TurnEnd,
 ): Promise<void> {
   const session = store.get(turn.sessionId);
@@ -150,8 +151,7 @@ async function renamePlaceholderDeck(
     if (s.slideId === slideId) store.patch(s.id, { slideId: renamed.slideId });
   }
   invalidateSlidesModule(server);
-  const event: AgentWsEvent = { type: 'slide-renamed', from: slideId, to: renamed.slideId };
-  server.ws.send({ type: 'custom', event: AGENT_WS_EVENT, data: event });
+  broadcast({ type: 'slide-renamed', from: slideId, to: renamed.slideId });
 }
 
 function parseRespond(raw: unknown): RespondPayload | null {
@@ -174,17 +174,29 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
   const store = createSessionStore({
     file: path.join(ctx.userCwd, 'node_modules', '.open-slide', 'agent-sessions.json'),
   });
+  // Agent output goes over its own stream rather than the HMR socket, which
+  // every network client can subscribe to when the server runs with --host.
+  const streams = new Set<ServerResponse>();
+  const broadcast = (event: AgentWsEvent) => {
+    const frame = `data: ${JSON.stringify(event)}\n\n`;
+    for (const stream of streams) stream.write(frame);
+  };
+  const heartbeat = setInterval(() => {
+    for (const stream of streams) stream.write(': ping\n\n');
+  }, 25_000);
+  heartbeat.unref();
+
   const runner: AgentRunner = createAgentRunner({
     userCwd: ctx.userCwd,
     store,
     providers,
-    onTurnEnd: (turn) => renamePlaceholderDeck(server, ctx, store, turn),
+    onTurnEnd: (turn) => renamePlaceholderDeck(server, ctx, store, broadcast, turn),
   });
 
-  store.subscribe((event: AgentWsEvent) => {
-    server.ws.send({ type: 'custom', event: AGENT_WS_EVENT, data: event });
-  });
+  store.subscribe(broadcast);
   server.httpServer?.on('close', () => {
+    clearInterval(heartbeat);
+    for (const stream of streams) stream.end();
     runner.stopAll();
     void store.flush();
   });
@@ -208,6 +220,18 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
       }
 
       if (!enabled) return json(res, 404, { error: 'agent panel disabled' });
+
+      if (method === 'GET' && url.pathname === '/events') {
+        res.writeHead(200, {
+          'content-type': 'text/event-stream',
+          'cache-control': 'no-store',
+          connection: 'keep-alive',
+        });
+        res.write(': connected\n\n');
+        streams.add(res);
+        req.on('close', () => streams.delete(res));
+        return;
+      }
 
       if (method === 'POST' && url.pathname === '/install') {
         const guard = validateMutationRequest(req, { requireJsonBody: true });
