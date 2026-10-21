@@ -189,6 +189,16 @@ test.describe('agent panel', () => {
       providerSessionId: null,
       items: [
         { kind: 'user', id: 'u-1', ts, text: 'Make the cover bolder' },
+        { kind: 'assistant', id: 'a-0', ts, text: 'Reading the cover first.', streaming: false },
+        {
+          kind: 'tool',
+          id: 't-1',
+          ts,
+          name: 'Read',
+          title: 'Read',
+          detail: 'slides/alpha/index.tsx',
+          status: 'done',
+        },
         { kind: 'assistant', id: 'a-1', ts, text: 'Bolded the **cover** title.', streaming: false },
         { kind: 'result', id: 'r-1', ts, durationMs: 1000, costUsd: null, aborted: false },
       ],
@@ -210,10 +220,19 @@ test.describe('agent panel', () => {
     const dock = page.locator('[data-agent-dock]');
     const reply = dock.getByText('Bolded the');
     await reply.hover();
-    await dock.getByRole('button', { name: 'Copy' }).last().click();
+    const replyCopy = dock
+      .getByRole('listitem')
+      .filter({ hasText: 'Bolded the' })
+      .getByRole('button', {
+        name: 'Copy',
+      });
+    await expect(
+      dock.getByRole('listitem').filter({ hasText: 'Reading the cover' }).getByRole('button'),
+    ).toHaveCount(0);
+    await replyCopy.click();
     await expect(dock.getByRole('button', { name: 'Copied' })).toBeVisible();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-      'Bolded the **cover** title.',
+      'Reading the cover first.\n\nBolded the **cover** title.',
     );
 
     await dock.getByText('Make the cover bolder').hover();

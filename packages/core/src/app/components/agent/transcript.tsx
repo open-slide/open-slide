@@ -21,6 +21,8 @@ export function Transcript({
   const stickRef = useRef(true);
   const lastItem = session.items.at(-1);
   const lastText = lastItem?.kind === 'assistant' ? lastItem.text.length : 0;
+  const running = session.status === 'running';
+  const replies = replyTexts(session.items, running);
 
   // Follow the stream while the user is parked at the bottom; stop once they
   // scroll up to read, like a terminal.
@@ -48,19 +50,19 @@ export function Transcript({
             ) : (
               <TranscriptItem
                 item={block.item}
-                running={session.status === 'running'}
+                running={running}
+                replyText={replies.get(block.item.id)}
                 onRespond={(payload) => onRespond(block.item.id, payload)}
                 onEdit={(text) => onEdit(block.item.id, text)}
               />
             )}
           </li>
         ))}
-        {session.status === 'running' &&
-          !(lastItem?.kind === 'assistant' && lastItem.streaming) && (
-            <li>
-              <WorkingIndicator />
-            </li>
-          )}
+        {running && !(lastItem?.kind === 'assistant' && lastItem.streaming) && (
+          <li>
+            <WorkingIndicator />
+          </li>
+        )}
       </ol>
     </div>
   );
@@ -75,14 +77,38 @@ function WorkingIndicator() {
   );
 }
 
+// One reply spans every assistant text between a user message and the turn's
+// result. Its copy button sits on the last of them and copies them all.
+function replyTexts(items: AgentItem[], running: boolean): Map<string, string> {
+  const replies = new Map<string, string>();
+  let parts: { id: string; text: string }[] = [];
+  const flush = () => {
+    const last = parts.at(-1);
+    const text = parts
+      .map((p) => p.text.trim())
+      .filter(Boolean)
+      .join('\n\n');
+    if (last && text) replies.set(last.id, text);
+    parts = [];
+  };
+  for (const item of items) {
+    if (item.kind === 'assistant') parts.push({ id: item.id, text: stripDeckSlug(item.text) });
+    else if (item.kind === 'user' || item.kind === 'result') flush();
+  }
+  if (!running) flush();
+  return replies;
+}
+
 function TranscriptItem({
   item,
   running,
+  replyText,
   onRespond,
   onEdit,
 }: {
   item: AgentItem;
   running: boolean;
+  replyText?: string;
   onRespond: (payload: RespondPayload) => Promise<void>;
   onEdit: (text: string) => Promise<void>;
 }) {
@@ -91,7 +117,7 @@ function TranscriptItem({
       return <UserItem text={item.text} running={running} onEdit={onEdit} />;
     case 'assistant':
       if (!item.text && item.streaming) return <WorkingIndicator />;
-      return <AssistantItem text={stripDeckSlug(item.text)} streaming={item.streaming} />;
+      return <AssistantItem text={stripDeckSlug(item.text)} replyText={replyText} />;
     case 'question':
       return <QuestionItem item={item} onRespond={onRespond} />;
     case 'permission':
@@ -153,13 +179,13 @@ function CopyButton({ text }: { text: string }) {
 const ACTIONS_REVEAL =
   'flex opacity-0 transition-opacity duration-100 focus-within:opacity-100 group-hover/message:opacity-100 motion-reduce:transition-none';
 
-function AssistantItem({ text, streaming }: { text: string; streaming: boolean }) {
+function AssistantItem({ text, replyText }: { text: string; replyText?: string }) {
   return (
     <div className="group/message">
       <AgentMarkdown text={text} />
-      {!streaming && text.trim() && (
+      {replyText && (
         <div className={cn(ACTIONS_REVEAL, '-mb-2 -ml-1.5')}>
-          <CopyButton text={text} />
+          <CopyButton text={replyText} />
         </div>
       )}
     </div>
