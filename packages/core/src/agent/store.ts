@@ -65,7 +65,7 @@ export function createSessionStore(opts: { file: string | null }) {
   const sessions = new Map<string, AgentSession>();
   const listeners = new Set<Listener>();
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
-  // Creation order breaks ties between sessions touched in the same millisecond.
+  // Touch order breaks ties between sessions updated in the same millisecond.
   let seq = 0;
   const order = new Map<string, number>();
 
@@ -117,6 +117,7 @@ export function createSessionStore(opts: { file: string | null }) {
 
   const touch = (session: AgentSession) => {
     session.updatedAt = new Date().toISOString();
+    order.set(session.id, seq++);
     emit({ type: 'session', session: sessionSummary(session) });
     scheduleSave();
   };
