@@ -102,3 +102,6 @@ All mutating routes carry the same origin checks as the rest of the dev API
 and are only available while the dev server runs. The agent only answers
 requests from the machine running the dev server, so other devices on the
 network see the panel as disabled even with `--host`.
+A tunnel or reverse proxy on that machine makes remote requests look local,
+and the rest of the dev API is equally reachable through it, so only expose
+the dev server that way to people you would trust with your workspace.
