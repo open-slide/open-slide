@@ -550,6 +550,9 @@ export const ja: Locale = {
   },
   agent: {
     title: 'エージェント',
+    beta: 'Beta',
+    betaHint:
+      'エージェントパネルはベータ版です。返答・編集・ツール実行が失敗したり、予期しない動作をすることがあります。',
     open: 'エージェント',
     openTitle: 'エージェントパネルを開く',
     close: 'エージェントパネルを閉じる',

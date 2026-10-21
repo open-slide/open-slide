@@ -540,6 +540,8 @@ export const zhTW: Locale = {
   },
   agent: {
     title: 'Agent',
+    beta: 'Beta',
+    betaHint: 'Agent 面板目前仍是 Beta 版，回覆、編輯和工具呼叫都可能出錯或出現預期外的行為。',
     open: 'Agent',
     openTitle: '開啟 agent 面板',
     close: '關閉 agent 面板',

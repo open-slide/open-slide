@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   autoConnect,
   clearNewDeck,
@@ -236,6 +237,7 @@ export function AgentPanel({
               onManage={() => setManage(true)}
             />
           )}
+          <BetaBadge />
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {connected && !showConnect && (
@@ -652,5 +654,26 @@ function QuickAction({
         <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{hint}</span>
       </span>
     </button>
+  );
+}
+
+function BetaBadge() {
+  const t = useLocale();
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            className="ml-1 shrink-0 cursor-default rounded-[3px] border border-border px-1 py-px font-medium text-[9px] text-muted-foreground uppercase leading-none tracking-wider outline-none focus-visible:ring-1 focus-visible:ring-brand"
+          >
+            {t.agent.beta}
+          </button>
+        }
+      />
+      <TooltipContent side="bottom" sideOffset={6} className="max-w-60 text-left">
+        {t.agent.betaHint}
+      </TooltipContent>
+    </Tooltip>
   );
 }

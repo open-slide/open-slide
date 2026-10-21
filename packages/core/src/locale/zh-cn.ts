@@ -540,6 +540,8 @@ export const zhCN: Locale = {
   },
   agent: {
     title: 'Agent',
+    beta: 'Beta',
+    betaHint: 'Agent 面板目前仍是 Beta 版，回复、编辑和工具调用都可能出错或出现预期外的行为。',
     open: 'Agent',
     openTitle: '打开 agent 面板',
     close: '关闭 agent 面板',

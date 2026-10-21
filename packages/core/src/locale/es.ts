@@ -550,6 +550,9 @@ export const es: Locale = {
   },
   agent: {
     title: 'Agente',
+    beta: 'Beta',
+    betaHint:
+      'El panel del agente está en beta. Puede haber errores: las respuestas, ediciones y acciones pueden fallar o comportarse de forma inesperada.',
     open: 'Agente',
     openTitle: 'Abrir el panel del agente',
     close: 'Cerrar el panel del agente',
