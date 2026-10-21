@@ -96,6 +96,7 @@ export const zhCN: Locale = {
   },
 
   slide: {
+    resizeSidePanel: '调整侧栏宽度',
     agentConnected: 'Agent 已连接',
     agentConnectedTooltip: '目前的 slide 与 Inspector 选择会即时同步给 agent。',
     agentDisconnected: 'Agent 已断开',

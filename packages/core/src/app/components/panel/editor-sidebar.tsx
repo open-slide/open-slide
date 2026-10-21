@@ -4,9 +4,15 @@ import { InspectorPanel } from '@/components/inspector/inspector-panel';
 import { useInspector } from '@/components/inspector/inspector-provider';
 import { useDesignPanelState } from '@/components/style-panel/design-provider';
 import { DesignPanel } from '@/components/style-panel/style-panel';
+import { useLocale } from '@/lib/use-locale';
 import { PANEL_TRANSITION_MS, PANEL_W, usePanelMount } from './panel-shell';
+import { ResizeHandle, useStoredWidth } from './resize-handle';
 
 type Mode = 'format' | 'design' | 'agent';
+
+const AGENT_MIN_W = 300;
+const EDITOR_MAX_W = 480;
+const AGENT_MAX_W = 720;
 
 // The agent shares this container with Format and Design so switching between
 // them only retargets one width transition instead of collapsing one column
@@ -22,7 +28,21 @@ export function EditorSidebar({
   agentOpen?: boolean;
   agent?: ReactNode;
 }) {
+  const t = useLocale();
   const { active, panelOpen } = useInspector();
+  const [editorWidth, setEditorWidth] = useStoredWidth(
+    'open-slide:editor-panel-width',
+    PANEL_W,
+    PANEL_W,
+    EDITOR_MAX_W,
+  );
+  const [agentWidth, setAgentWidth] = useStoredWidth(
+    'open-slide:agent-panel-width',
+    AGENT_DOCK_W,
+    AGENT_MIN_W,
+    AGENT_MAX_W,
+  );
+  const [resizing, setResizing] = useState(false);
   const { loaded, draft } = useDesignPanelState();
   const [preferredTab, setPreferredTab] = useState<'format' | 'arrange'>('format');
   const mode: Mode | null =
@@ -47,7 +67,8 @@ export function EditorSidebar({
 
   if (!mounted) return null;
 
-  const width = shown === 'agent' ? AGENT_DOCK_W : PANEL_W;
+  const isAgent = shown === 'agent';
+  const width = isAgent ? agentWidth : editorWidth;
 
   return (
     <div
@@ -55,23 +76,37 @@ export function EditorSidebar({
       data-agent-dock={shown === 'agent' ? '' : undefined}
       inert={!open}
       aria-hidden={!open}
-      className="flex h-full max-h-1/2 shrink-0 justify-end overflow-hidden bg-sidebar transition-[width] ease-swift motion-reduce:transition-none md:max-h-none"
+      className="relative flex h-full max-h-1/2 shrink-0 justify-end overflow-hidden bg-sidebar transition-[width] ease-swift motion-reduce:transition-none md:max-h-none"
       style={{
         width: animVisible ? width : 0,
-        transitionDuration: `${PANEL_TRANSITION_MS}ms`,
+        transitionDuration: resizing ? '0ms' : `${PANEL_TRANSITION_MS}ms`,
       }}
     >
+      {open && (
+        <ResizeHandle
+          key={isAgent ? 'agent' : 'editor'}
+          width={width}
+          min={isAgent ? AGENT_MIN_W : PANEL_W}
+          max={isAgent ? AGENT_MAX_W : EDITOR_MAX_W}
+          defaultWidth={isAgent ? AGENT_DOCK_W : PANEL_W}
+          edge="left"
+          label={t.slide.resizeSidePanel}
+          onResize={isAgent ? setAgentWidth : setEditorWidth}
+          onResizingChange={setResizing}
+          className="left-0 hidden md:block"
+        />
+      )}
       {agentMounted && (
         <div
           className="sidebar-swap h-full shrink-0"
-          style={{ width: AGENT_DOCK_W }}
-          hidden={shown !== 'agent'}
+          style={{ width: agentWidth }}
+          hidden={!isAgent}
         >
           {agent}
         </div>
       )}
-      {shown !== 'agent' && (
-        <div className="sidebar-swap flex h-full">
+      {!isAgent && (
+        <div className="sidebar-swap flex h-full shrink-0" style={{ width: editorWidth }}>
           {lastEditor === 'design' ? (
             <DesignPanel onClose={onCloseDesign} />
           ) : (

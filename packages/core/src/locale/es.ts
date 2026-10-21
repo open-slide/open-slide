@@ -98,6 +98,7 @@ export const es: Locale = {
   },
 
   slide: {
+    resizeSidePanel: 'Redimensionar panel lateral',
     home: 'Inicio',
     backToHome: 'Volver al inicio',
     agentConnected: 'Agente conectado',

@@ -1,4 +1,4 @@
-import { findOnPath, importWorkspacePackage } from '../detect.ts';
+import { findSpawnableCli, importWorkspacePackage } from '../detect.ts';
 import {
   type AgentProvider,
   clipDetail,
@@ -212,7 +212,7 @@ export function createClaudeProvider(): AgentProvider {
             };
       };
 
-      const localCli = findOnPath('claude');
+      const localCli = findSpawnableCli('claude');
       const effort = claudeEffort(opts.effort);
       let stderr = '';
       const stream = sdk.query({

@@ -117,6 +117,17 @@ describe('createSessionStore', () => {
     expect(again?.items[2]).toMatchObject({ streaming: false });
   });
 
+  it('keeps the latest snapshot when saves overlap', async () => {
+    const file = path.join(dir, 'sessions.json');
+    const store = createSessionStore({ file });
+    const s = store.create('claude', 'deck');
+    const first = store.flush();
+    store.patch(s.id, { title: 'Latest' });
+    await Promise.all([first, store.flush(), store.flush()]);
+
+    expect(createSessionStore({ file }).get(s.id)?.title).toBe('Latest');
+  });
+
   it('removes sessions and caps the idle backlog', () => {
     const store = createSessionStore({ file: null });
     for (let i = 0; i < 35; i++) store.create('claude', null);

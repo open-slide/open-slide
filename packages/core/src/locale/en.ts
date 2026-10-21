@@ -96,6 +96,7 @@ export const en: Locale = {
   },
 
   slide: {
+    resizeSidePanel: 'Resize side panel',
     home: 'Home',
     backToHome: 'Back to home',
     agentConnected: 'Agent connected',

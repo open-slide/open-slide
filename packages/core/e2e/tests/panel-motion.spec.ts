@@ -179,6 +179,56 @@ test.describe('editor sidebar motion', () => {
     expect(toFormat.every(({ width }) => width >= 319.5)).toBe(true);
   });
 
+  test('Design and the agent panel never stay open together', async ({ page, request }) => {
+    await page.route('**/__agent/status', async (route) => {
+      const body = (await (await route.fetch()).json()) as { providers: object[] };
+      await route.fulfill({
+        json: { ...body, providers: body.providers.map((p) => ({ ...p, cliFound: false })) },
+      });
+    });
+    await openEditor(page, request, 'motion-agent-design');
+    const design = page.locator('aside[data-design-ui]');
+    const dock = page.locator('[data-agent-dock]');
+
+    await page.keyboard.press('a');
+    await expect(dock).toBeVisible();
+    await page.getByTitle('Design tokens', { exact: true }).click();
+    await expect(design).toBeVisible();
+    await expect(dock).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Open the agent panel' }).click();
+    await expect(dock).toBeVisible();
+    await expect(design).toHaveCount(0);
+  });
+
+  test('the side panel resizes from its inner edge and keeps its width', async ({
+    page,
+    request,
+  }) => {
+    await openEditor(page, request, 'motion-sidebar-resize');
+    const sidebar = page.locator('[data-editor-sidebar]');
+    const handle = page.getByRole('separator', { name: 'Resize side panel' });
+    const box = await handle.boundingBox();
+    if (!box) throw new Error('missing resize handle');
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + box.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 - 60, y, { steps: 4 });
+    await page.mouse.move(box.x + box.width / 2 - 100, y, { steps: 4 });
+    await page.mouse.up();
+    await expect(sidebar).toHaveCSS('width', '420px');
+
+    await handle.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(sidebar).toHaveCSS('width', '412px');
+
+    await page.reload();
+    await expect(page.locator('[data-inspector-ready]')).toBeVisible();
+    await expect(sidebar).toHaveCSS('width', '412px');
+    await page.getByRole('separator', { name: 'Resize side panel' }).dblclick();
+    await expect(sidebar).toHaveCSS('width', '320px');
+  });
+
   test('reduced motion changes sidebar width without sliding', async ({ page, request }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await openEditor(page, request, 'motion-reduced');

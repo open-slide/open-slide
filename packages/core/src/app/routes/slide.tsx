@@ -22,6 +22,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -44,6 +45,7 @@ import {
 } from '@/components/inspector/inspector-provider';
 import { SaveBar } from '@/components/inspector/save-bar';
 import { EditorSidebar } from '@/components/panel/editor-sidebar';
+import { ResizeHandle, useStoredWidth } from '@/components/panel/resize-handle';
 import { DesignProvider } from '@/components/style-panel/design-provider';
 import { DesignToggleButton } from '@/components/style-panel/style-panel';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -139,6 +141,13 @@ export function Slide() {
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const { open: agentOpen } = useAgentDock();
+  // Agent and Design share the sidebar, so opening one closes the other.
+  useLayoutEffect(() => {
+    if (agentOpen) setDesignOpen(false);
+  }, [agentOpen]);
+  useLayoutEffect(() => {
+    if (designOpen) setDockOpen(false);
+  }, [designOpen]);
   const [, setWarmedTick] = useState(0);
   const handleAssetsWarmed = useCallback(() => {
     markDeckWarmed(slideId);
@@ -978,14 +987,6 @@ const DEFAULT_RAIL_WIDTH = 264;
 const MIN_RAIL_WIDTH = 200;
 const MAX_RAIL_WIDTH = 480;
 
-function readStoredRailWidth(): number {
-  if (typeof window === 'undefined') return DEFAULT_RAIL_WIDTH;
-  const raw = window.localStorage.getItem(RAIL_WIDTH_STORAGE_KEY);
-  const parsed = raw == null ? Number.NaN : Number(raw);
-  if (!Number.isFinite(parsed)) return DEFAULT_RAIL_WIDTH;
-  return Math.min(MAX_RAIL_WIDTH, Math.max(MIN_RAIL_WIDTH, parsed));
-}
-
 function ResizableRail(props: {
   pages: SlideModule['default'];
   design?: SlideModule['design'];
@@ -997,103 +998,26 @@ function ResizableRail(props: {
   onOverview?: () => void;
 }) {
   const t = useLocale();
-  const [width, setWidth] = useState<number>(readStoredRailWidth);
-  const [resizing, setResizing] = useState(false);
-  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(RAIL_WIDTH_STORAGE_KEY, String(width));
-  }, [width]);
-
-  useEffect(() => {
-    if (!resizing) return;
-    const prev = {
-      cursor: document.body.style.cursor,
-      userSelect: document.body.style.userSelect,
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    return () => {
-      document.body.style.cursor = prev.cursor;
-      document.body.style.userSelect = prev.userSelect;
-    };
-  }, [resizing]);
-
-  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { startX: e.clientX, startWidth: width };
-    setResizing(true);
-  };
-
-  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current) return;
-    const delta = e.clientX - dragRef.current.startX;
-    const next = Math.min(
-      MAX_RAIL_WIDTH,
-      Math.max(MIN_RAIL_WIDTH, dragRef.current.startWidth + delta),
-    );
-    setWidth(next);
-  };
-
-  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
-    dragRef.current = null;
-    setResizing(false);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const step = e.shiftKey ? 32 : 8;
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      e.stopPropagation();
-      setWidth((w) => Math.max(MIN_RAIL_WIDTH, w - step));
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      e.stopPropagation();
-      setWidth((w) => Math.min(MAX_RAIL_WIDTH, w + step));
-    } else if (e.key === 'Home') {
-      e.preventDefault();
-      e.stopPropagation();
-      setWidth(DEFAULT_RAIL_WIDTH);
-    }
-  };
+  const [width, setWidth] = useStoredWidth(
+    RAIL_WIDTH_STORAGE_KEY,
+    DEFAULT_RAIL_WIDTH,
+    MIN_RAIL_WIDTH,
+    MAX_RAIL_WIDTH,
+  );
 
   return (
     <div className="relative hidden shrink-0 md:block" style={{ width }}>
       <ThumbnailRail width={width} {...props} />
-      {/* biome-ignore lint/a11y/useSemanticElements: focusable resize handle (splitter pattern), not a static <hr> */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label={t.thumbnailRail.resizeRail}
-        aria-valuenow={width}
-        aria-valuemin={MIN_RAIL_WIDTH}
-        aria-valuemax={MAX_RAIL_WIDTH}
-        tabIndex={0}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onKeyDown={onKeyDown}
-        onDoubleClick={() => setWidth(DEFAULT_RAIL_WIDTH)}
-        className={cn(
-          'group/resize absolute inset-y-0 right-0 z-20 w-1.5 translate-x-1/2 cursor-col-resize touch-none outline-none',
-          'focus-visible:bg-brand/20',
-        )}
-      >
-        <span
-          aria-hidden
-          className={cn(
-            'pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-brand opacity-0 transition-opacity duration-150',
-            'group-hover/resize:opacity-100 group-focus-visible/resize:opacity-100',
-            resizing && 'opacity-100',
-          )}
-        />
-      </div>
+      <ResizeHandle
+        width={width}
+        min={MIN_RAIL_WIDTH}
+        max={MAX_RAIL_WIDTH}
+        defaultWidth={DEFAULT_RAIL_WIDTH}
+        edge="right"
+        label={t.thumbnailRail.resizeRail}
+        onResize={setWidth}
+        className="right-0 translate-x-1/2"
+      />
     </div>
   );
 }

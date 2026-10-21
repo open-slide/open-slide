@@ -100,6 +100,7 @@ export type Locale = {
   };
 
   slide: {
+    resizeSidePanel: string;
     home: string;
     backToHome: string;
     agentConnected: string;

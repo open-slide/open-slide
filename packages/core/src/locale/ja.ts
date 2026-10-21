@@ -96,6 +96,7 @@ export const ja: Locale = {
   },
 
   slide: {
+    resizeSidePanel: 'サイドパネルの幅を調整',
     agentConnected: 'エージェント接続中',
     agentConnectedTooltip:
       '現在のスライドと Inspector の選択はエージェントにリアルタイムで同期されています。',

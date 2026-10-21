@@ -89,20 +89,29 @@ export function createSessionStore(opts: { file: string | null }) {
     }, SAVE_DEBOUNCE_MS);
   };
 
-  const save = async () => {
-    if (!opts.file) return;
+  const writeSnapshot = async (file: string) => {
     const body: PersistedShape = {
       version: 1,
       sessions: list().flatMap((s) => sessions.get(s.id) ?? []),
     };
-    const tmp = `${opts.file}.tmp`;
+    const tmp = `${file}.tmp`;
     try {
-      await fs.mkdir(path.dirname(opts.file), { recursive: true });
+      await fs.mkdir(path.dirname(file), { recursive: true });
       await fs.writeFile(tmp, JSON.stringify(body), 'utf8');
-      await fs.rename(tmp, opts.file);
+      await fs.rename(tmp, file);
     } catch {
       await fs.rm(tmp, { force: true }).catch(() => {});
     }
+  };
+
+  // Saves share one temp file, so a flush racing a debounced save must wait
+  // for it rather than interleave writes and renames.
+  let saving: Promise<void> = Promise.resolve();
+  const save = () => {
+    const file = opts.file;
+    if (!file) return saving;
+    saving = saving.then(() => writeSnapshot(file));
+    return saving;
   };
 
   const touch = (session: AgentSession) => {

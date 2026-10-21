@@ -26,6 +26,14 @@ export function findOnPath(command: string, env: NodeJS.ProcessEnv = process.env
   return null;
 }
 
+// The SDKs spawn the CLI without a shell, which cannot run a Windows .cmd shim,
+// so only a real executable is worth overriding their bundled default with.
+export function findSpawnableCli(command: string, env: NodeJS.ProcessEnv = process.env) {
+  const found = findOnPath(command, env);
+  if (!found || !IS_WINDOWS) return found;
+  return found.toLowerCase().endsWith('.exe') ? found : null;
+}
+
 const versionCache = new Map<string, Promise<string | null>>();
 
 export function commandVersion(file: string): Promise<string | null> {

@@ -427,14 +427,21 @@ export function requestAgent(req: AgentRequest): void {
 
 // The blank deck is created up front and the user lands in it with the dock
 // open; their first message there becomes the brief the agent drafts from.
-export async function startBlankDeck(): Promise<void> {
-  const { slideId } = await request<{ slideId: string }>('/__slides', post());
-  writeStorage(NEW_DECK_KEY, slideId);
-  setActiveSession(null);
-  setDockOpen(true);
-  window.location.assign(
-    `${import.meta.env.BASE_URL.replace(/\/$/, '')}/s/${encodeURIComponent(slideId)}`,
-  );
+let creatingDeck: Promise<void> | null = null;
+
+export function startBlankDeck(): Promise<void> {
+  creatingDeck ??= (async () => {
+    const { slideId } = await request<{ slideId: string }>('/__slides', post());
+    writeStorage(NEW_DECK_KEY, slideId);
+    setActiveSession(null);
+    setDockOpen(true);
+    window.location.assign(
+      `${import.meta.env.BASE_URL.replace(/\/$/, '')}/s/${encodeURIComponent(slideId)}`,
+    );
+  })().finally(() => {
+    creatingDeck = null;
+  });
+  return creatingDeck;
 }
 
 export function clearNewDeck(): void {

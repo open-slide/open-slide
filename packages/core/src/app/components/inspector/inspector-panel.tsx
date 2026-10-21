@@ -272,7 +272,7 @@ export function InspectorPanel({
         if (value === 'arrange') stopInlineEdit();
         if (value === 'format' || value === 'arrange') onTabChange(value);
       }}
-      className="h-full shrink-0 gap-0"
+      className="h-full w-full min-w-0 shrink-0 gap-0"
       onPointerDownCapture={(event) => {
         if (!inlineEdit || !(event.target instanceof Element)) return;
         const button = event.target.closest('button');
