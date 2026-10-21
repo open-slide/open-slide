@@ -2,6 +2,7 @@ import { findSpawnableCli, importWorkspacePackage } from '../detect.ts';
 import {
   type AgentProvider,
   clipDetail,
+  isInsideRoots,
   type ProviderEvent,
   type ProviderRunOptions,
   ProviderUnavailableError,
@@ -27,6 +28,8 @@ export const CLAUDE_MODELS: AgentModelOption[] = [
   { id: 'sonnet', label: 'Sonnet', efforts: CLAUDE_EFFORTS },
   { id: 'haiku', label: 'Haiku', efforts: [] },
 ];
+
+const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
 
 export function claudeEffort(effort: AgentEffort | null) {
   return effort && effort !== 'minimal' ? effort : undefined;
@@ -202,6 +205,10 @@ export function createClaudeProvider(): AgentProvider {
           }
           return { behavior: 'allow', updatedInput: { ...input, answers } };
         }
+        const target = input.file_path ?? input.notebook_path;
+        if (EDIT_TOOLS.has(toolName) && isInsideRoots(opts.cwd, target, opts.writableRoots)) {
+          return { behavior: 'allow', updatedInput: input };
+        }
         const { title, detail } = describeClaudeTool(toolName, input, opts.cwd);
         const allowed = await opts.requestPermission({ tool: toolName, title, detail });
         return allowed
@@ -219,7 +226,7 @@ export function createClaudeProvider(): AgentProvider {
         prompt: opts.prompt,
         options: {
           cwd: opts.cwd,
-          permissionMode: 'acceptEdits',
+          permissionMode: 'default',
           settingSources: ['user', 'project', 'local'],
           systemPrompt: { type: 'preset', preset: 'claude_code', append: opts.systemPromptAppend },
           includePartialMessages: true,

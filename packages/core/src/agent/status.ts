@@ -35,12 +35,11 @@ export async function agentStatus(
   userCwd: string,
   providers: Record<AgentProviderId, AgentProvider>,
   packageManager: PackageManager,
-  enabled: boolean,
 ): Promise<AgentStatus> {
   const list = await Promise.all(
     Object.values(providers).map((provider) => providerStatus(userCwd, provider)),
   );
-  return { enabled, packageManager, providers: list };
+  return { enabled: true, packageManager, providers: list };
 }
 
 export function installCommandFor(

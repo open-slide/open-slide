@@ -32,7 +32,7 @@ import { readManifest, writeManifest } from '../../files/folders.ts';
 import { isLoopbackRequest, validateMutationRequest } from '../../http/request-guard.ts';
 import { invalidateSlidesModule } from '../open-slide-plugin.ts';
 import { recordWrite } from '../recent-writes.ts';
-import { type ApiContext, json, readBody } from './context.ts';
+import { type ApiContext, BodyTooLargeError, json, readBody } from './context.ts';
 import { detectPackageManager } from './update.ts';
 
 // GET    /__agent/status                      → AgentStatus
@@ -167,6 +167,8 @@ function parseRespond(raw: unknown): RespondPayload | null {
   return null;
 }
 
+const AGENT_BODY_LIMIT = 1024 * 1024;
+
 export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): void {
   const providers = createProviders();
   const store = createSessionStore({
@@ -186,6 +188,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
 
   const runner: AgentRunner = createAgentRunner({
     userCwd: ctx.userCwd,
+    writableRoots: [ctx.slidesRoot, ctx.globalAssetsRoot],
     store,
     providers,
     onTurnEnd: (turn) => renamePlaceholderDeck(server, ctx, store, broadcast, turn),
@@ -212,9 +215,10 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
 
     try {
       if (method === 'GET' && url.pathname === '/status') {
-        const pm = await detectPackageManager(ctx.userCwd);
         res.setHeader('cache-control', 'no-store');
-        return json(res, 200, await agentStatus(ctx.userCwd, providers, pm, enabled));
+        if (!enabled) return json(res, 200, { enabled: false, packageManager: '', providers: [] });
+        const pm = await detectPackageManager(ctx.userCwd);
+        return json(res, 200, await agentStatus(ctx.userCwd, providers, pm));
       }
 
       if (!enabled) return json(res, 404, { error: 'agent panel disabled' });
@@ -234,7 +238,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
       if (method === 'POST' && url.pathname === '/install') {
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
-        const body = (await readBody(req)) as { provider?: unknown };
+        const body = (await readBody(req, AGENT_BODY_LIMIT)) as { provider?: unknown };
         if (!isProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
         const provider = providers[body.provider];
         const pm = await detectPackageManager(ctx.userCwd);
@@ -256,7 +260,10 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
       if (method === 'POST' && url.pathname === '/sessions') {
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
-        const body = (await readBody(req)) as { provider?: unknown; slideId?: unknown };
+        const body = (await readBody(req, AGENT_BODY_LIMIT)) as {
+          provider?: unknown;
+          slideId?: unknown;
+        };
         if (!isProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
         const slideId =
           typeof body.slideId === 'string' && SLIDE_ID_RE.test(body.slideId) ? body.slideId : null;
@@ -285,7 +292,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
         if (method === 'POST' && action === 'messages') {
           const guard = validateMutationRequest(req, { requireJsonBody: true });
           if (!guard.ok) return json(res, guard.status, { error: guard.error });
-          const body = (await readBody(req)) as {
+          const body = (await readBody(req, AGENT_BODY_LIMIT)) as {
             text?: unknown;
             context?: unknown;
             autoApprove?: unknown;
@@ -317,7 +324,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
         if (method === 'POST' && action === 'respond') {
           const guard = validateMutationRequest(req, { requireJsonBody: true });
           if (!guard.ok) return json(res, guard.status, { error: guard.error });
-          const body = (await readBody(req)) as { itemId?: unknown };
+          const body = (await readBody(req, AGENT_BODY_LIMIT)) as { itemId?: unknown };
           const payload = parseRespond(body);
           if (typeof body.itemId !== 'string' || !payload) {
             return json(res, 400, { error: 'invalid response' });
@@ -329,6 +336,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
 
       next();
     } catch (err) {
+      if (err instanceof BodyTooLargeError) return json(res, 413, { error: err.message });
       json(res, 500, { error: String((err as Error).message ?? err) });
     }
   });

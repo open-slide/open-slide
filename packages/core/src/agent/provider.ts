@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { AgentEffort, AgentModelOption, AgentProviderId, AgentQuestion } from './types.ts';
 
 export type ProviderEvent =
@@ -19,6 +20,9 @@ export type PermissionRequest = { tool: string; title: string; detail: string | 
 
 export type ProviderRunOptions = {
   cwd: string;
+  // Directories the agent may write to without asking: the deck and asset
+  // folders. Edits anywhere else (configs, package.json) need approval.
+  writableRoots: string[];
   prompt: string;
   systemPromptAppend: string;
   resume: string | null;
@@ -67,6 +71,15 @@ function safeJson(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+export function isInsideRoots(cwd: string, file: unknown, roots: string[]): boolean {
+  if (typeof file !== 'string' || !file) return false;
+  const resolved = path.resolve(cwd, file);
+  return roots.some((root) => {
+    const rel = path.relative(root, resolved);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  });
 }
 
 export function relativeToCwd(cwd: string, file: unknown): string | null {

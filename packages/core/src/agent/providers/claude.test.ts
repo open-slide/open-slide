@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProviderEvent } from '../provider.ts';
-import { parseQuestions } from '../provider.ts';
+import { isInsideRoots, parseQuestions } from '../provider.ts';
 import { createClaudeMapper, describeClaudeTool } from './claude.ts';
 import type { ClaudeSdkMessage } from './sdk-types.ts';
 
@@ -27,6 +27,22 @@ describe('describeClaudeTool', () => {
       title: 'Mystery',
       detail: '{"a":1}',
     });
+  });
+});
+
+describe('isInsideRoots', () => {
+  const roots = [`${CWD}/slides`, `${CWD}/assets`];
+
+  it('accepts files inside the deck and asset folders', () => {
+    expect(isInsideRoots(CWD, `${CWD}/slides/deck/index.tsx`, roots)).toBe(true);
+    expect(isInsideRoots(CWD, 'assets/logo.svg', roots)).toBe(true);
+  });
+
+  it('rejects files outside them, including traversal and lookalike prefixes', () => {
+    expect(isInsideRoots(CWD, `${CWD}/package.json`, roots)).toBe(false);
+    expect(isInsideRoots(CWD, `${CWD}/slides/../vite.config.ts`, roots)).toBe(false);
+    expect(isInsideRoots(CWD, `${CWD}/slides-backup/x.tsx`, roots)).toBe(false);
+    expect(isInsideRoots(CWD, undefined, roots)).toBe(false);
   });
 });
 

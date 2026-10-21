@@ -97,7 +97,7 @@ export function createSessionStore(opts: { file: string | null }) {
     const tmp = `${file}.tmp`;
     try {
       await fs.mkdir(path.dirname(file), { recursive: true });
-      await fs.writeFile(tmp, JSON.stringify(body), 'utf8');
+      await fs.writeFile(tmp, JSON.stringify(body), { encoding: 'utf8', mode: 0o600 });
       await fs.rename(tmp, file);
     } catch {
       await fs.rm(tmp, { force: true }).catch(() => {});

@@ -37,6 +37,7 @@ function setup(run: AgentProvider['run'], onTurnEnd?: (turn: TurnEnd) => void, c
   const provider = fakeProvider(run, canRewind);
   const runner = createAgentRunner({
     userCwd: '/ws',
+    writableRoots: ['/ws/slides'],
     store,
     providers: { claude: provider, codex: provider },
     onTurnEnd,

@@ -32,11 +32,12 @@ export type AgentRunner = ReturnType<typeof createAgentRunner>;
 
 export function createAgentRunner(opts: {
   userCwd: string;
+  writableRoots: string[];
   store: SessionStore;
   providers: Record<AgentProviderId, AgentProvider>;
   onTurnEnd?: (turn: TurnEnd) => void | Promise<void>;
 }) {
-  const { userCwd, store, providers, onTurnEnd } = opts;
+  const { userCwd, writableRoots, store, providers, onTurnEnd } = opts;
   const running = new Map<string, AbortController>();
   const pending = new Map<string, PendingPrompt>();
   const lastOptions = new Map<string, SendOptions>();
@@ -268,6 +269,7 @@ export function createAgentRunner(opts: {
     void provider
       .run({
         cwd: userCwd,
+        writableRoots,
         prompt,
         systemPromptAppend: systemPromptAppend(provider.askInstruction),
         resume: session.providerSessionId,
