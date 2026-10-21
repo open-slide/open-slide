@@ -1143,6 +1143,7 @@ function SelectionReporter() {
     if (!import.meta.hot) return;
     const selection = selected
       ? {
+          file: selected.file,
           line: selected.line,
           column: selected.column,
           tagName: selected.anchor.tagName.toLowerCase(),

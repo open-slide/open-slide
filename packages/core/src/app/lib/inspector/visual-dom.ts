@@ -1,5 +1,5 @@
 import type { SelectedTarget } from '@/components/inspector/inspector-provider';
-import { findSlideSource } from './fiber';
+import { findSlideSource, slideLocSelector } from './fiber';
 import {
   type Point,
   type Rect,
@@ -106,7 +106,7 @@ export function canTransform(target: SelectedTarget, canvas: Canvas): boolean {
     rect.width > 0 &&
     rect.height > 0 &&
     (style.display !== 'inline' || target.anchor instanceof HTMLImageElement) &&
-    canvas.root.querySelectorAll(`[data-slide-loc="${target.line}:${target.column}"]`).length === 1
+    canvas.root.querySelectorAll(slideLocSelector(target)).length === 1
   );
 }
 

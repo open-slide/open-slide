@@ -3,7 +3,7 @@ import * as t from '@babel/types';
 import type { Plugin } from 'vite';
 import { tryParse, walkJsx } from '../editing/babel-walk.ts';
 
-// Inject `data-slide-loc="<line>:<col>"` onto every host JSX element in
+// Inject `data-slide-loc="<relpath>:<line>:<col>"` onto every host JSX element in
 // slide source files so the inspector can map a click straight to a
 // source location, sidestepping HMR-stale `_debugSource` on fibers.
 
@@ -23,7 +23,11 @@ function alreadyTagged(opening: t.JSXOpeningElement): boolean {
   );
 }
 
-export function injectLocTags(code: string): string | null {
+export function escapeJsxAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+export function injectLocTags(code: string, relpath: string): string | null {
   const ast = tryParse(code);
   if (!ast) return null;
 
@@ -35,7 +39,7 @@ export function injectLocTags(code: string): string | null {
     if (!isTaggableJsxName(name) || alreadyTagged(opening)) return;
     insertions.push({
       offset: name.end ?? 0,
-      text: ` data-slide-loc="${node.loc.start.line}:${node.loc.start.column}"`,
+      text: ` data-slide-loc="${escapeJsxAttr(relpath)}:${node.loc.start.line}:${node.loc.start.column}"`,
     });
   });
 
@@ -66,6 +70,12 @@ function isSlideSourceFile(id: string, slidesRootPosix: string): boolean {
   return rel.includes('/');
 }
 
+function deckRelativePath(id: string, slidesRootPosix: string): string {
+  const filePath = id.split(/[?#]/)[0].replace(/\\/g, '/');
+  const rel = filePath.slice(slidesRootPosix.length + 1);
+  return rel.slice(rel.indexOf('/') + 1);
+}
+
 export function locTagsPlugin(opts: LocTagsPluginOptions): Plugin {
   const slidesRoot = path.resolve(opts.userCwd, opts.slidesDir ?? 'slides').replace(/\\/g, '/');
   return {
@@ -76,7 +86,7 @@ export function locTagsPlugin(opts: LocTagsPluginOptions): Plugin {
     enforce: 'pre',
     transform(code, id) {
       if (!isSlideSourceFile(id, slidesRoot)) return null;
-      const next = injectLocTags(code);
+      const next = injectLocTags(code, deckRelativePath(id, slidesRoot));
       if (next === null) return null;
       return { code: next, map: null };
     },

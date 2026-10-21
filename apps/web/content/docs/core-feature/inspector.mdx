@@ -107,8 +107,10 @@ expand **Comment** in the Format panel, and type a note:
 
 > use the accent colour on this title
 
-The inspector pins the note as an `@slide-comment` marker in the source. The
-marker travels with the element and is invisible at runtime. Run
+The inspector pins the note as an `@slide-comment` marker in the source file
+that renders the element. In a multi-file deck that is the page file under
+`pages/` (or a file under `shared/`), not `index.tsx`. The marker travels with
+the element and is invisible at runtime. Run
 `/apply-comments` in your agent to turn the notes into edits — see
 [`/apply-comments`](/docs/skills/apply-comments).
 

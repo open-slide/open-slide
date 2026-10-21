@@ -10,6 +10,15 @@ spacing, palette rules, and per-primitive references. `/create-slide` and
 
 You don't usually invoke `slide-authoring` directly. Other skills do.
 
+## File layout
+
+The entry is always `slides/<id>/index.tsx`. Two layouts are valid. The default
+is one `index.tsx`. A deck may instead put each page in
+`pages/<nn>-<slug>.tsx`, shared components in `shared/`, and keep `index.tsx`
+for imports, order, `design`, `meta` and `notes`; this suits large decks and
+pages that are reused between decks. The inspector, comments and
+`/apply-comments` work on every `.tsx` file of the deck in either layout.
+
 ## What it ships
 
 The defaults below are opinionated so an agent doesn't have to reinvent the

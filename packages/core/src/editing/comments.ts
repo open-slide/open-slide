@@ -6,11 +6,12 @@ const MARKER_RE =
   /\{\/\*\s*@slide-comment\s+id="(c-[a-f0-9]+)"\s+ts="([^"]+)"\s+text="([A-Za-z0-9_-]+={0,2})"\s*\*\/\}/;
 
 export type CommentRect = { x: number; y: number; w: number; h: number };
-export type CommentTarget = { line: number; column: number };
+export type CommentTarget = { file: string; line: number; column: number };
 export type CommentPayload = { note: string; hint?: string; rect?: CommentRect; page?: number };
 
 export type Comment = {
   id: string;
+  file: string;
   line: number;
   ts: string;
   note: string;
@@ -21,6 +22,8 @@ export type Comment = {
   // `data-slide-loc` the loc-tags plugin stamps on the rendered element.
   target?: CommentTarget | null;
 };
+
+export type ParsedMarker = Omit<Comment, 'file' | 'target'>;
 
 export function b64urlEncode(s: string): string {
   return Buffer.from(s, 'utf8')
@@ -52,8 +55,8 @@ export function parseCommentPage(value: unknown): number | undefined {
   return isFiniteNumber(value) && value >= 0 ? Math.floor(value) : undefined;
 }
 
-export function parseMarkers(source: string): Comment[] {
-  const comments: Comment[] = [];
+export function parseMarkers(source: string): ParsedMarker[] {
+  const comments: ParsedMarker[] = [];
   const lines = source.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -82,16 +85,20 @@ function markerColumn(source: string, line: number): number {
   return index === -1 ? 0 : index;
 }
 
-export function resolveTargets(source: string, comments: Comment[]): Comment[] {
+export function resolveTargets(source: string, comments: ParsedMarker[], file: string): Comment[] {
   const ast = parseSource(source);
   return comments.map((comment) => {
-    if (!ast) return { ...comment, target: null };
+    if (!ast) return { ...comment, file, target: null };
     const column = markerColumn(source, comment.line);
     const element = findJsxAncestors(ast, comment.line, column).find((node) =>
       t.isJSXElement(node),
     );
     const start = element?.loc?.start;
-    return { ...comment, target: start ? { line: start.line, column: start.column } : null };
+    return {
+      ...comment,
+      file,
+      target: start ? { file, line: start.line, column: start.column } : null,
+    };
   });
 }
 

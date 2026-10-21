@@ -1,6 +1,7 @@
 import { type CSSProperties, type HTMLAttributes, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { uploadWithAutoRename } from '@/lib/assets';
+import { parseSlideLoc } from '@/lib/inspector/fiber';
 import { useLocale } from '@/lib/use-locale';
 import { dragHasFiles } from '../lib/dom';
 
@@ -52,15 +53,10 @@ export function ImagePlaceholder({
           if (!file) return;
           const root = e.currentTarget;
           const slideId = root.closest<HTMLElement>('[data-slide-id]')?.dataset.slideId;
-          const loc = root.dataset.slideLoc;
+          const loc = parseSlideLoc(root.dataset.slideLoc ?? '');
           if (!slideId || !loc) return;
-          const idx = loc.indexOf(':');
-          if (idx <= 0) return;
-          const line = Number(loc.slice(0, idx));
-          const column = Number(loc.slice(idx + 1));
-          if (!Number.isFinite(line) || !Number.isFinite(column)) return;
           setUploading(true);
-          handleDrop(slideId, file, line, column)
+          handleDrop(slideId, file, loc.file, loc.line, loc.column)
             .catch(() => toast.error(t.imagePlaceholder.uploadFailed))
             .finally(() => setUploading(false));
         },
@@ -195,7 +191,13 @@ function pickImageFile(files: FileList): File | null {
   return null;
 }
 
-async function handleDrop(slideId: string, file: File, line: number, column: number) {
+async function handleDrop(
+  slideId: string,
+  file: File,
+  deckFile: string,
+  line: number,
+  column: number,
+) {
   const { ok, entry } = await uploadWithAutoRename(slideId, file);
   if (!ok || !entry) throw new Error('upload failed');
   const res = await fetch('/__edit', {
@@ -203,6 +205,7 @@ async function handleDrop(slideId: string, file: File, line: number, column: num
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       slideId,
+      file: deckFile,
       line,
       column,
       ops: [{ kind: 'replace-placeholder-with-image', assetPath: `./assets/${entry.name}` }],

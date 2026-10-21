@@ -14,7 +14,13 @@ export type EditOp =
   | { kind: 'set-attr-asset'; attr: string; assetPath: string; previewUrl: string }
   | { kind: 'replace-placeholder-with-image'; assetPath: string };
 
-export type Edit = { line: number; column: number; ops: EditOp[]; dependsOn?: number };
+export type Edit = {
+  file: string;
+  line: number;
+  column: number;
+  ops: EditOp[];
+  dependsOn?: number;
+};
 
 export type EditResult = { ok: boolean; error?: string };
 
@@ -29,11 +35,11 @@ export class NoOpEditError extends Error {
 
 export function useEditor(slideId: string) {
   const applyEdit = useCallback(
-    async (line: number, column: number, ops: EditOp[]) => {
+    async (file: string, line: number, column: number, ops: EditOp[]) => {
       const res = await fetch('/__edit', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slideId, line, column, ops }),
+        body: JSON.stringify({ slideId, file, line, column, ops }),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string; changed?: boolean };
       if (!res.ok) {
@@ -52,19 +58,47 @@ export function useEditor(slideId: string) {
   const applyEdits = useCallback(
     async (edits: Edit[]): Promise<EditResult[]> => {
       if (edits.length === 0) return [];
-      const res = await fetch('/__edit/batch', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slideId, edits }),
+      const groups = new Map<string, number[]>();
+      edits.forEach((edit, index) => {
+        const group = groups.get(edit.file);
+        if (group) group.push(index);
+        else groups.set(edit.file, [index]);
       });
-      const body = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        results?: EditResult[];
-      };
-      if (!res.ok) {
-        throw new Error(body.error ?? `POST /__edit/batch → ${res.status}`);
+      const results: EditResult[] = new Array(edits.length);
+      let sent = 0;
+      let lastError: unknown;
+      for (const [file, indices] of groups) {
+        const batch = indices.map((i) => {
+          const { file: _file, ...rest } = edits[i];
+          if (rest.dependsOn === undefined) return rest;
+          const local = indices.indexOf(rest.dependsOn);
+          return { ...rest, dependsOn: local >= 0 ? local : undefined };
+        });
+        try {
+          const res = await fetch('/__edit/batch', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ slideId, file, edits: batch }),
+          });
+          const body = (await res.json().catch(() => ({}))) as {
+            error?: string;
+            results?: EditResult[];
+          };
+          if (!res.ok) {
+            throw new Error(body.error ?? `POST /__edit/batch → ${res.status}`);
+          }
+          sent++;
+          indices.forEach((i, k) => {
+            results[i] = body.results?.[k] ?? { ok: false, error: 'missing result' };
+          });
+        } catch (err) {
+          lastError = err;
+          const error = err instanceof Error ? err.message : String(err);
+          for (const i of indices) results[i] = { ok: false, error };
+        }
       }
-      return body.results ?? [];
+      if (sent === 0) throw lastError;
+      return results;
     },
     [slideId],
   );

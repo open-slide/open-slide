@@ -80,10 +80,15 @@ type RangeStylePreview = {
 function resolveSelectedTarget(target: SelectedTarget, slideId: string): SelectedTarget {
   const hit = findSlideSource(target.anchor, slideId, { hostOnly: true });
   if (!hit) return target;
-  if (hit.line === target.line && hit.column === target.column && hit.anchor === target.anchor) {
+  if (
+    hit.file === target.file &&
+    hit.line === target.line &&
+    hit.column === target.column &&
+    hit.anchor === target.anchor
+  ) {
     return target;
   }
-  return { line: hit.line, column: hit.column, anchor: hit.anchor };
+  return { file: hit.file, line: hit.line, column: hit.column, anchor: hit.anchor };
 }
 
 export function InspectorPanel({
@@ -258,7 +263,8 @@ export function InspectorPanel({
       <CollapsibleSection title={t.inspector.sourceSection}>
         <div className="flex items-center justify-between gap-2">
           <span className="font-mono text-[10.5px] text-muted-foreground">
-            &lt;{selected.anchor.tagName.toLowerCase()}&gt; · {selected.line}:{selected.column}
+            &lt;{selected.anchor.tagName.toLowerCase()}&gt; · {selected.file}:{selected.line}:
+            {selected.column}
           </span>
           <AgentWatchingBadge />
         </div>
@@ -368,6 +374,7 @@ export function InspectorPanel({
                   <PlaceholderField
                     slideId={slideId}
                     hint={snapshot.placeholder.hint}
+                    file={selected.file}
                     line={selected.line}
                     column={selected.column}
                     applyEdit={applyEdit}
@@ -794,15 +801,17 @@ function ImageField({ src, anchor }: { src: string; anchor: HTMLElement }) {
 function PlaceholderField({
   slideId,
   hint,
+  file,
   line,
   column,
   applyEdit,
 }: {
   slideId: string;
   hint: string;
+  file: string;
   line: number;
   column: number;
-  applyEdit: (line: number, column: number, ops: EditOp[]) => Promise<void>;
+  applyEdit: (file: string, line: number, column: number, ops: EditOp[]) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -834,7 +843,7 @@ function PlaceholderField({
             try {
               const assetPath =
                 scope === 'global' ? `@assets/${asset.name}` : `./assets/${asset.name}`;
-              await applyEdit(line, column, [
+              await applyEdit(file, line, column, [
                 {
                   kind: 'replace-placeholder-with-image',
                   assetPath,

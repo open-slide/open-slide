@@ -11,7 +11,7 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
-import { findSlideSource } from '@/lib/inspector/fiber';
+import { findSlideSource, slideLocSelector } from '@/lib/inspector/fiber';
 import { useFreezeSlideMotion } from '@/lib/inspector/freeze-motion';
 import { type Point, type Rect, rectContains } from '@/lib/inspector/geometry';
 import {
@@ -178,9 +178,7 @@ export function CommentLayer() {
         // would match on every page; the stored page index decides.
         if (comment.page !== undefined && comment.page !== pageIndex) continue;
         const anchor = comment.target
-          ? canvas.root.querySelector<HTMLElement>(
-              `[data-slide-loc="${comment.target.line}:${comment.target.column}"]`,
-            )
+          ? canvas.root.querySelector<HTMLElement>(slideLocSelector(comment.target))
           : null;
         if (anchor) {
           pins[comment.id] = {
@@ -394,7 +392,14 @@ export function CommentLayer() {
             }
           : undefined;
       try {
-        await add({ line: target.line, column: target.column, text, rect, page: pageIndex });
+        await add({
+          file: target.file,
+          line: target.line,
+          column: target.column,
+          text,
+          rect,
+          page: pageIndex,
+        });
         setDraft(null);
       } catch (err) {
         toast.error(`${t.inspector.commentAddFailed} ${String((err as Error).message ?? err)}`);
@@ -404,9 +409,9 @@ export function CommentLayer() {
   );
 
   const handleUpdate = useCallback(
-    async (id: string, text: string) => {
+    async (id: string, text: string, file: string) => {
       try {
-        await update(id, text);
+        await update(id, text, file);
         setOpenId(null);
       } catch (err) {
         toast.error(`${t.inspector.commentUpdateFailed} ${String((err as Error).message ?? err)}`);
@@ -416,9 +421,9 @@ export function CommentLayer() {
   );
 
   const handleRemove = useCallback(
-    async (id: string) => {
+    async (id: string, file: string) => {
       try {
-        await remove(id);
+        await remove(id, file);
         setOpenId((current) => (current === id ? null : current));
       } catch (err) {
         toast.error(String((err as Error).message ?? err));
@@ -470,8 +475,8 @@ export function CommentLayer() {
               setOpenId(open ? null : comment.id);
             }}
             onHover={(hovering) => setHoverId(hovering ? comment.id : null)}
-            onSave={(text) => handleUpdate(comment.id, text)}
-            onRemove={() => handleRemove(comment.id)}
+            onSave={(text) => handleUpdate(comment.id, text, comment.file)}
+            onRemove={() => handleRemove(comment.id, comment.file)}
           />
         );
       })}

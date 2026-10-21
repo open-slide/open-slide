@@ -1,4 +1,5 @@
 export type SlideSourceHit = {
+  file: string;
   line: number;
   column: number;
   anchor: HTMLElement;
@@ -17,6 +18,30 @@ type FiberLike = {
   _debugSource?: { fileName?: string; lineNumber?: number; columnNumber?: number };
   memoizedProps?: { __source?: { fileName?: string; lineNumber?: number; columnNumber?: number } };
 };
+
+export const DEFAULT_DECK_FILE = 'index.tsx';
+
+export type SlideLoc = { file: string; line: number; column: number };
+
+export function parseSlideLoc(loc: string): SlideLoc | null {
+  const parts = loc.split(':');
+  if (parts.length < 2) return null;
+  const column = Number(parts[parts.length - 1]);
+  const line = Number(parts[parts.length - 2]);
+  const file = parts.length > 2 ? parts.slice(0, -2).join(':') : DEFAULT_DECK_FILE;
+  if (!file || !Number.isFinite(line) || !Number.isFinite(column)) return null;
+  return { file, line, column };
+}
+
+function escapeAttrValue(value: string): string {
+  return value.replace(/["\\]/g, '\\$&');
+}
+
+export function slideLocSelector(loc: SlideLoc): string {
+  const full = `[data-slide-loc="${escapeAttrValue(`${loc.file}:${loc.line}:${loc.column}`)}"]`;
+  if (loc.file !== DEFAULT_DECK_FILE) return full;
+  return `${full}, [data-slide-loc="${loc.line}:${loc.column}"]`;
+}
 
 function getFiber(el: Element): FiberLike | null {
   const key = Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
@@ -45,32 +70,24 @@ export function findSlideSource(
   if (tagged) {
     const loc = tagged.dataset.slideLoc;
     if (loc) {
-      const idx = loc.indexOf(':');
-      if (idx > 0) {
-        const line = Number(loc.slice(0, idx));
-        const column = Number(loc.slice(idx + 1));
-        if (Number.isFinite(line) && Number.isFinite(column)) {
-          return { line, column, anchor: tagged };
-        }
-      }
+      const parsed = parseSlideLoc(loc);
+      if (parsed) return { ...parsed, anchor: tagged };
     }
   }
 
   // Fallback for JSX rendered from imported component files (which the
   // loc-tags plugin doesn't transform).
-  const needle = `/slides/${slideId}/index.tsx`;
+  const needle = `/slides/${slideId}/`;
   let fiber = getFiber(el);
   let anchor: HTMLElement = el;
   while (fiber) {
     const src = getSource(fiber);
     const isHost = fiber.stateNode instanceof HTMLElement;
-    if (
-      src?.fileName &&
-      normalizeDebugFileName(src.fileName).endsWith(needle) &&
-      src.lineNumber &&
-      (!opts?.hostOnly || isHost)
-    ) {
+    const name = src?.fileName ? normalizeDebugFileName(src.fileName) : '';
+    const at = name.lastIndexOf(needle);
+    if (at >= 0 && name.endsWith('.tsx') && src?.lineNumber && (!opts?.hostOnly || isHost)) {
       return {
+        file: name.slice(at + needle.length),
         line: src.lineNumber,
         column: src.columnNumber ?? 0,
         anchor: isHost ? (fiber.stateNode as HTMLElement) : anchor,

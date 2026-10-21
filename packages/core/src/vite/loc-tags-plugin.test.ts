@@ -29,14 +29,14 @@ function expectTaggedTransform(id: string) {
 describe('injectLocTags', () => {
   it('adds data-slide-loc to host elements with the JSX start position', () => {
     const src = ['export default [() => (', '  <div>hello</div>', ')];', ''].join('\n');
-    const out = injectLocTags(src);
+    const out = injectLocTags(src, 'index.tsx');
     if (out === null) throw new Error('expected transform');
-    expect(out).toContain('<div data-slide-loc="2:2">hello</div>');
+    expect(out).toContain('<div data-slide-loc="index.tsx:2:2">hello</div>');
   });
 
   it('skips capitalized component invocations', () => {
     const src = ['export default [() => (', '  <MyComp>hi</MyComp>', ')];', ''].join('\n');
-    const out = injectLocTags(src);
+    const out = injectLocTags(src, 'index.tsx');
     expect(out).toBeNull();
   });
 
@@ -50,11 +50,11 @@ describe('injectLocTags', () => {
       ')];',
       '',
     ].join('\n');
-    const out = injectLocTags(src);
+    const out = injectLocTags(src, 'index.tsx');
     if (out === null) throw new Error('expected transform');
-    expect(out).toContain('<div data-slide-loc="2:2">');
-    expect(out).toContain('<h1 data-slide-loc="3:4">Hi</h1>');
-    expect(out).toContain('<p data-slide-loc="4:4">World</p>');
+    expect(out).toContain('<div data-slide-loc="index.tsx:2:2">');
+    expect(out).toContain('<h1 data-slide-loc="index.tsx:3:4">Hi</h1>');
+    expect(out).toContain('<p data-slide-loc="index.tsx:4:4">World</p>');
   });
 
   it('skips elements that already have data-slide-loc', () => {
@@ -64,27 +64,27 @@ describe('injectLocTags', () => {
       ')];',
       '',
     ].join('\n');
-    const out = injectLocTags(src);
+    const out = injectLocTags(src, 'index.tsx');
     expect(out).toBeNull();
   });
 
   it('inserts after the tag name, before any other attributes', () => {
     const src = ['export default [() => (', '  <div className="foo">x</div>', ')];', ''].join('\n');
-    const out = injectLocTags(src);
+    const out = injectLocTags(src, 'index.tsx');
     if (out === null) throw new Error('expected transform');
-    expect(out).toContain('<div data-slide-loc="2:2" className="foo">x</div>');
+    expect(out).toContain('<div data-slide-loc="index.tsx:2:2" className="foo">x</div>');
   });
 
   it('handles self-closing host elements', () => {
     const src = ['export default [() => (', '  <img src="x" />', ')];', ''].join('\n');
-    const out = injectLocTags(src);
+    const out = injectLocTags(src, 'index.tsx');
     if (out === null) throw new Error('expected transform');
-    expect(out).toContain('<img data-slide-loc="2:2" src="x" />');
+    expect(out).toContain('<img data-slide-loc="index.tsx:2:2" src="x" />');
   });
 
   it('returns null when source has no host elements', () => {
     const src = 'const x = 1;';
-    expect(injectLocTags(src)).toBeNull();
+    expect(injectLocTags(src, 'index.tsx')).toBeNull();
   });
 
   it('tags only host elements, leaving custom components untouched', () => {
@@ -97,10 +97,10 @@ describe('injectLocTags', () => {
       ')];',
       '',
     ].join('\n');
-    const out = injectLocTags(src);
+    const out = injectLocTags(src, 'index.tsx');
     if (out === null) throw new Error('expected transform');
-    expect(out).toContain('<h1 data-slide-loc="3:4">Title</h1>');
-    expect(out).toContain('<span data-slide-loc="4:12">nested</span>');
+    expect(out).toContain('<h1 data-slide-loc="index.tsx:3:4">Title</h1>');
+    expect(out).toContain('<span data-slide-loc="index.tsx:4:12">nested</span>');
     expect(out).not.toContain('<Layout data-slide-loc');
     expect(out).not.toContain('<SubBox data-slide-loc');
   });
@@ -109,9 +109,9 @@ describe('injectLocTags', () => {
     const src = ['export default [() => (', '  <ImagePlaceholder hint="hero" />', ')];', ''].join(
       '\n',
     );
-    const out = injectLocTags(src);
+    const out = injectLocTags(src, 'index.tsx');
     if (out === null) throw new Error('expected transform');
-    expect(out).toContain('<ImagePlaceholder data-slide-loc="2:2" hint="hero" />');
+    expect(out).toContain('<ImagePlaceholder data-slide-loc="index.tsx:2:2" hint="hero" />');
   });
 
   it('does not tag other PascalCase components alongside ImagePlaceholder', () => {
@@ -124,9 +124,9 @@ describe('injectLocTags', () => {
       ')];',
       '',
     ].join('\n');
-    const out = injectLocTags(src);
+    const out = injectLocTags(src, 'index.tsx');
     if (out === null) throw new Error('expected transform');
-    expect(out).toContain('<ImagePlaceholder data-slide-loc="3:4"');
+    expect(out).toContain('<ImagePlaceholder data-slide-loc="index.tsx:3:4"');
     expect(out).not.toContain('<Layout data-slide-loc');
     expect(out).not.toContain('<CustomThing data-slide-loc');
   });
@@ -159,6 +159,21 @@ describe('locTagsPlugin', () => {
 
   it('skips colocated test files', () => {
     expect(transformWithLocTags('/repo/slides/cover/index.test.tsx')).toBeNull();
+  });
+
+  it('tags page file with relative path', () => {
+    const out = transformWithLocTags('/repo/slides/cover/pages/03-team.tsx?t=1');
+    expect(out?.code).toContain('data-slide-loc="pages/03-team.tsx:1:22"');
+  });
+
+  it('tags index with index.tsx', () => {
+    const out = transformWithLocTags('/repo/slides/cover/index.tsx');
+    expect(out?.code).toContain('data-slide-loc="index.tsx:1:22"');
+  });
+
+  it('skips test and d.ts files', () => {
+    expect(transformWithLocTags('/repo/slides/cover/pages/01-a.test.tsx')).toBeNull();
+    expect(transformWithLocTags('/repo/slides/cover/types.d.ts')).toBeNull();
   });
 });
 
@@ -209,5 +224,12 @@ describe('locTagsPlugin on Windows-style paths', () => {
 
   it('still tags POSIX ids when path.resolve returns a POSIX slidesRoot (regression guard)', () => {
     expectTagged('/repo/slides', '/repo/slides/cover/index.tsx');
+  });
+});
+
+describe('injectLocTags file name escaping', () => {
+  it('encodes a double quote in the relpath as an entity', () => {
+    const out = injectLocTags('const A = () => <div />;', 'pages/a"b.tsx');
+    expect(out).toContain('data-slide-loc="pages/a&quot;b.tsx:1:16"');
   });
 });

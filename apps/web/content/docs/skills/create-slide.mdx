@@ -13,8 +13,11 @@ description: Drafts a deck end-to-end from a one-line prompt.
 2. **Scoping** — asks four questions: aesthetic direction (skipped when a
    theme is picked), page count, text density, motion vs. static.
 3. **ID & structure** — picks a kebab-case id, plans the page list.
-4. **Authoring** — writes `slides/<id>/index.tsx` page by page, deferring
-   to [`/slide-authoring`](/docs/skills/slide-authoring) for the *how*.
+4. **Authoring** — writes the deck page by page, deferring to
+   [`/slide-authoring`](/docs/skills/slide-authoring) for the *how*. The default
+   is one `slides/<id>/index.tsx`; a large deck, or one whose pages will be
+   reused, may put each page in `slides/<id>/pages/<nn>-<slug>.tsx` and keep
+   `index.tsx` for imports, order, `design`, `meta` and `notes`.
 
 ## When to use it
 
@@ -27,6 +30,7 @@ For any new deck. Even if you plan to hand-author, kick off with
 
 ## What you get
 
-A working `slides/<id>/index.tsx` with one component per page, a `meta`
-export, and assets imported from `slides/<id>/assets/`. Drop into the dev
+A working deck under `slides/<id>/` with one component per page, a `meta`
+export, and assets imported from `slides/<id>/assets/`. A multi-file deck keeps
+one page per file under `pages/`. Drop into the dev
 server and iterate from there.

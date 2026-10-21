@@ -8,7 +8,8 @@ the inspector; the skill resolves them into code edits.
 
 ## What it does
 
-1. Scans the workspace for `@slide-comment` markers.
+1. Scans every `.tsx` file of each deck (`index.tsx`, `pages/`, `shared/`) for
+   `@slide-comment` markers.
 2. For each marker, reads the surrounding code and the comment text.
 3. Edits the file to satisfy the comment.
 4. Removes the marker.
@@ -16,6 +17,7 @@ the inspector; the skill resolves them into code edits.
 ```text
 › /apply-comments
 ✓ 3 markers · slides/q2-launch/index.tsx
+✓ 2 markers · slides/q2-launch/pages/03-team.tsx
 ✓ 1 marker  · slides/intro/index.tsx
 ```
 

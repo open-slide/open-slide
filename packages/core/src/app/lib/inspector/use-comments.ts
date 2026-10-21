@@ -4,16 +4,18 @@ export type CommentRect = { x: number; y: number; w: number; h: number };
 
 export type SlideComment = {
   id: string;
+  file: string;
   line: number;
   ts: string;
   note: string;
   hint?: string;
   rect?: CommentRect;
   page?: number;
-  target?: { line: number; column: number } | null;
+  target?: { file: string; line: number; column: number } | null;
 };
 
 export type AddCommentInput = {
+  file: string;
   line: number;
   column: number;
   text: string;
@@ -60,11 +62,11 @@ export function useComments(slideId: string) {
   );
 
   const update = useCallback(
-    async (id: string, text: string) => {
+    async (id: string, text: string, file: string) => {
       const res = await fetch(`/__comments/${id}`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slideId, text }),
+        body: JSON.stringify({ slideId, file, text }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -76,11 +78,13 @@ export function useComments(slideId: string) {
   );
 
   const remove = useCallback(
-    async (id: string) => {
-      const res = await fetch(`/__comments/${id}?slideId=${encodeURIComponent(slideId)}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error(`DELETE /__comments/${id} → ${res.status}`);
+    async (id: string, file: string) => {
+      const query = `slideId=${encodeURIComponent(slideId)}&file=${encodeURIComponent(file)}`;
+      const res = await fetch(`/__comments/${id}?${query}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `DELETE /__comments/${id} → ${res.status}`);
+      }
       await refetch();
     },
     [slideId, refetch],

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { findSlideSource } from './fiber.ts';
+import { findSlideSource, slideLocSelector } from './fiber.ts';
 
 class FakeHTMLElement {
   dataset: Record<string, string> = {};
@@ -66,6 +66,17 @@ describe('findSlideSource primary path', () => {
     expect(hit?.line).toBe(42);
     expect(hit?.column).toBe(7);
     expect(hit?.anchor).toBe(el as unknown as HTMLElement);
+    expect(hit?.file).toBe('index.tsx');
+  });
+
+  it('parses file line col and legacy form', () => {
+    const tagged = findSlideSource(
+      makeEl({ slideLoc: 'pages/03-team.tsx:8:5' }) as unknown as HTMLElement,
+      'cover',
+    );
+    expect(tagged).toMatchObject({ file: 'pages/03-team.tsx', line: 8, column: 5 });
+    const legacy = findSlideSource(makeEl({ slideLoc: '8:5' }) as unknown as HTMLElement, 'cover');
+    expect(legacy).toMatchObject({ file: 'index.tsx', line: 8, column: 5 });
   });
 });
 
@@ -82,6 +93,18 @@ describe('findSlideSource fallback', () => {
     expect(hit).not.toBeNull();
     expect(hit?.line).toBe(10);
     expect(hit?.column).toBe(4);
+    expect(hit?.file).toBe('index.tsx');
+  });
+
+  it('fiber fallback matches page file', () => {
+    const fiber = makeFiber({
+      fileName: '/repo/slides/cover/pages/03-team.tsx?t=1',
+      line: 7,
+      column: 2,
+      host: true,
+    });
+    const hit = findSlideSource(makeEl({ fiber }) as unknown as HTMLElement, 'cover');
+    expect(hit).toMatchObject({ file: 'pages/03-team.tsx', line: 7, column: 2 });
   });
 
   it('matches a Windows-backslash fileName', () => {
@@ -150,5 +173,13 @@ describe('findSlideSource fallback', () => {
     expect(hit).not.toBeNull();
     expect(hit?.line).toBe(99);
     expect(hit?.column).toBe(3);
+  });
+});
+
+describe('slideLocSelector', () => {
+  it('escapes a double quote and a backslash in the file name', () => {
+    expect(slideLocSelector({ file: 'pages/a"b\\c.tsx', line: 3, column: 4 })).toBe(
+      '[data-slide-loc="pages/a\\"b\\\\c.tsx:3:4"]',
+    );
   });
 });

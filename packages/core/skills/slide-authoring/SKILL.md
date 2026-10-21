@@ -34,7 +34,7 @@ Each framework primitive has a full reference file under `references/` in this s
 - Entry is `slides/<id>/index.tsx`. Images/videos/fonts go under `slides/<id>/assets/`.
 - Do **not** touch `package.json`, `open-slide.config.ts`, or other slides.
 - Do not add dependencies. Only `react`, `@open-slide/core`, and standard web APIs are available.
-- A slide is **one `index.tsx` plus `assets/`** — nothing else. Do not create sibling `.tsx`/`.ts` files (`Card.tsx`, `components/`, `helpers.ts`, etc.); helper components and constants go inside `index.tsx`. Do not create `README.md` or other prose files either — speaker notes / a talk script belong in the `notes` export (see **Speaker notes** below), not in a markdown file.
+- Two layouts are valid. The default is one `index.tsx` with its helper components and constants inside it. A deck may instead put each page in `pages/<nn>-<slug>.tsx`, shared components and constants in `shared/`, and keep `index.tsx` for imports, page order, `design`, `meta` and `notes`; use that layout for a large deck, or when pages are reused between decks. The inspector, comments and `/apply-comments` work on every file of the deck in either layout. Do not create other `.tsx`/`.ts` files or folders (`components/`, `helpers.ts`, etc.). Do not create `README.md` or other prose files either — speaker notes / a talk script belong in the `notes` export (see **Speaker notes** below), not in a markdown file.
 
 ## File contract
 
@@ -51,6 +51,36 @@ export const meta: SlideMeta = {
 };
 export default [Cover, Body] satisfies Page[];
 ```
+
+Multi-file layout (optional, for large decks or reused pages):
+
+```tsx
+// slides/<id>/index.tsx
+import type { DesignSystem, Page, SlideMeta } from '@open-slide/core';
+import Cover from './pages/01-cover.tsx';
+import Agenda from './pages/02-agenda.tsx';
+import Closing from './pages/03-closing.tsx';
+
+export const design: DesignSystem = { /* … */ };
+export const meta: SlideMeta = {
+  title: 'My slide',
+  createdAt: '2026-05-16T12:00:00Z',
+};
+export const notes: (string | undefined)[] = ['Open with the quote.'];
+export default [Cover, Agenda, Closing] satisfies Page[];
+```
+
+```tsx
+// slides/<id>/pages/01-cover.tsx
+import type { Page } from '@open-slide/core';
+import { Title } from '../shared/title.tsx';
+
+const Cover: Page = () => <div><Title>My slide</Title></div>;
+export default Cover;
+```
+
+- Each page file exports its `Page` component. `index.tsx` holds no page JSX: it only imports, orders, and holds `design`, `meta` and `notes`.
+- Put a component or constant that several pages use in `shared/` and import it from each page file.
 
 - `export default` is a **non-empty array of zero-prop React components**, one per page, in order.
 - `meta.title` (optional) shows in the slide header. Default is the folder name.
@@ -84,7 +114,7 @@ Pause for questions before moving on.`,
 A finished slide commonly runs 1000–1800 lines. When you only need to touch one page, **don't read the whole file** — locate the page first, then read just that range:
 
 ```bash
-grep -n ": Page = " slides/<id>/index.tsx
+grep -rn --include='*.tsx' ": Page = " slides/<id>
 ```
 
 This lists every `const Foo: Page = …` declaration with its line number. Read the target page with `Read` using `offset` + `limit` (~150 lines is usually enough to capture one page plus its helper components). Read the whole file only when you need cross-page context (palette audit, reordering, design const tweaks).
@@ -288,7 +318,7 @@ Read `references/morph.md` before writing one — the seven rules there (held ex
 
 When a page has visually repeated items — cards, logo rows, gallery tiles, list rows, step indicators — **define a small component and instantiate it once per item**. Do **not** render the group with `array.map` over a data array.
 
-Define the component **in the same `index.tsx`**, alongside the `Page` components. Never split it into a sibling file like `Card.tsx` — a slide is always a single `index.tsx` plus its `assets/`.
+Define the component in the same file as the `Page` that uses it. In a multi-file deck, a component that several pages use goes in `shared/`.
 
 ```tsx
 // ✅ Each card is its own JSX node — inspector edits one at a time.
@@ -367,7 +397,7 @@ Then view the image and fix what you see. The preview hot-reloads like the edito
 
 ## Self-review before finishing
 
-- [ ] `slides/<id>/index.tsx` `export default`s a non-empty `Page[]`.
+- [ ] `slides/<id>/index.tsx` `export default`s a non-empty `Page[]` (pages defined inline, or imported from `pages/` in a multi-file deck).
 - [ ] Every page's root fills `100% × 100%`.
 - [ ] Content lives inside padding (no text kisses the edge).
 - [ ] **For every page, sum (font_size × line_height × lines) + gaps + 2×padding ≤ 1080px.** If close, split the page. No `overflow: auto` escape hatches.

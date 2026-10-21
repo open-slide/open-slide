@@ -1,11 +1,11 @@
 ---
 name: apply-comments
-description: Apply pending @slide-comment markers written by the open-slide inspector tool. Use when the user asks to "apply comments", "process slide comments", "apply the inspector comments", or references markers left inside `slides/<id>/index.tsx`.
+description: Apply pending @slide-comment markers written by the open-slide inspector tool. Use when the user asks to "apply comments", "process slide comments", "apply the inspector comments", or references markers left inside the `.tsx` files of `slides/<id>/`.
 ---
 
 # Apply slide comments
 
-The open-slide editor has a comment mode that lets the user click a rendered page element, or drag across a region of the page, and attach a textual comment (e.g. *"make this red"*, *"change to 'Open Slide Rocks'"*). Each comment is persisted as an in-source JSX marker inside `slides/<slideId>/index.tsx`.
+The open-slide editor has a comment mode that lets the user click a rendered page element, or drag across a region of the page, and attach a textual comment (e.g. *"make this red"*, *"change to 'Open Slide Rocks'"*). Each comment is persisted as an in-source JSX marker inside the `.tsx` file of `slides/<slideId>/` that defines the page.
 
 Your job: read those markers, perform the described edits, and delete the markers.
 
@@ -29,15 +29,17 @@ Your job: read those markers, perform the described edits, and delete the marker
 
 ## Procedure
 
-1. **Identify the target slide(s).**
-   - If the user names one (`getting-started`, `q2-roadmap`, etc.), work on that single `slides/<slideId>/index.tsx`.
-   - If they say "all" or don't specify, scan every `slides/*/index.tsx`. Process each slide one at a time.
+A page can live in any `.tsx` file of the deck: in `index.tsx`, or in `pages/<nn>-<slug>.tsx` with shared components in `shared/` when the deck uses the multi-file layout. Markers can sit in any of these files.
 
-2. **Read the file and find all markers.**
+1. **Identify the target slide(s).**
+   - If the user names one (`getting-started`, `q2-roadmap`, etc.), work on that slide: scan every `.tsx` file under `slides/<slideId>/` (`index.tsx`, `pages/`, `shared/`).
+   - If they say "all" or don't specify, scan every `.tsx` file that `find slides -type f -name '*.tsx'` lists (this includes each `slides/<id>/index.tsx`). Process each slide one at a time, and within a slide one file at a time (steps 2–6 per file).
+
+2. **Read each file and find all markers.**
    - Run the regex above against the whole file.
    - For each match, base64url-decode `text` and `JSON.parse` it to get `{ note, hint?, rect?, page? }`.
    - Record each hit as `{ id, lineIndex (0-based), note, hint, rect, page }`.
-   - If there are no markers, tell the user and stop.
+   - If no file has markers, tell the user and stop.
 
 3. **Understand each comment in context.**
    - The targeted JSX element is the **enclosing** element of the marker — i.e. read upward from the marker line until you reach the unclosed JSX opening tag whose body the marker lives in. That element is the target. (For self-closing elements like `<img />`, the inspector hoists the marker to the nearest non-self-closing ancestor; in that case the comment usually refers to a child of the enclosing element rather than the enclosing element itself — use the `note` text to disambiguate.)
@@ -59,7 +61,7 @@ Your job: read those markers, perform the described edits, and delete the marker
    - If the dev server is running, screenshot each edited page via `/s/<id>/preview?p=N` to confirm the change looks right — see **Previewing a page visually** in `slide-authoring`.
 
 7. **Report.**
-   - Summarise: `N applied, M skipped` plus a one-line description of each change (including the slide id).
+   - Summarise: `N applied, M skipped` plus a one-line description of each change (including the slide id), grouped per file.
 
 ## base64url decoding helper
 

@@ -18,18 +18,23 @@ import { validateMutationRequest } from '../../http/request-guard.ts';
 import {
   type ApiContext,
   json,
+  listDeckFiles,
   readBody,
   readSlideSource,
+  rejectDeckFile,
+  requestedDeckFile,
+  resolveDeckFile,
   resolveSlideEntryPath,
 } from './context.ts';
 
-// GET    /__comments        list markers for ?slideId=…
-// POST   /__comments/add    add marker { slideId, line, column?, text, hint?, rect?, page? }
-// PUT    /__comments/:id    replace note { slideId, text }
-// DELETE /__comments/:id    remove marker
+// GET    /__comments        list markers of every deck file for ?slideId=…
+// POST   /__comments/add    add marker { slideId, file?, line, column?, text, hint?, rect?, page? }
+// PUT    /__comments/:id    replace note { slideId, file?, text }
+// DELETE /__comments/:id    remove marker ?slideId=…&file=…
 
 type AddCommentBody = {
   slideId?: string;
+  file?: unknown;
   line?: number;
   column?: number;
   text?: string;
@@ -46,11 +51,19 @@ export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): v
     try {
       if (method === 'GET' && url.pathname === '/') {
         const slideId = url.searchParams.get('slideId') ?? '';
-        const file = resolveSlideEntryPath(ctx, slideId);
-        if (!file) return json(res, 400, { error: 'invalid slideId' });
-        const source = await readSlideSource(file);
-        if (source === null) return json(res, 404, { error: 'slide not found' });
-        return json(res, 200, { comments: resolveTargets(source, parseMarkers(source)) });
+        const entry = resolveSlideEntryPath(ctx, slideId);
+        if (!entry) return json(res, 400, { error: 'invalid slideId' });
+        const entrySource = await readSlideSource(entry);
+        if (entrySource === null) return json(res, 404, { error: 'slide not found' });
+        const comments = [];
+        for (const rel of await listDeckFiles(ctx, slideId)) {
+          const abs = await resolveDeckFile(ctx, slideId, rel);
+          if (!abs) continue;
+          const source = await readSlideSource(abs);
+          if (source === null) continue;
+          comments.push(...resolveTargets(source, parseMarkers(source), rel));
+        }
+        return json(res, 200, { comments });
       }
 
       if (method === 'POST' && url.pathname === '/add') {
@@ -60,8 +73,11 @@ export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): v
         }
         const body = (await readBody(req)) as AddCommentBody;
         const slideId = body.slideId ?? '';
-        const file = resolveSlideEntryPath(ctx, slideId);
-        if (!file) return json(res, 400, { error: 'invalid slideId' });
+        if (!resolveSlideEntryPath(ctx, slideId))
+          return json(res, 400, { error: 'invalid slideId' });
+        const rel = requestedDeckFile(body.file);
+        const file = await resolveDeckFile(ctx, slideId, rel);
+        if (!file) return rejectDeckFile(res, rel);
         if (!body.line || body.line < 1) return json(res, 400, { error: 'invalid line' });
         if (!body.text || typeof body.text !== 'string') {
           return json(res, 400, { error: 'missing text' });
@@ -103,9 +119,13 @@ export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): v
         }
         const id = url.pathname.slice(1);
         if (!/^c-[a-f0-9]+$/.test(id)) return json(res, 400, { error: 'invalid id' });
-        const body = (await readBody(req)) as { slideId?: string; text?: string };
-        const file = resolveSlideEntryPath(ctx, body.slideId ?? '');
-        if (!file) return json(res, 400, { error: 'invalid slideId' });
+        const body = (await readBody(req)) as { slideId?: string; file?: unknown; text?: string };
+        const slideId = body.slideId ?? '';
+        if (!resolveSlideEntryPath(ctx, slideId))
+          return json(res, 400, { error: 'invalid slideId' });
+        const rel = requestedDeckFile(body.file);
+        const file = await resolveDeckFile(ctx, slideId, rel);
+        if (!file) return rejectDeckFile(res, rel);
         if (!body.text || typeof body.text !== 'string') {
           return json(res, 400, { error: 'missing text' });
         }
@@ -125,8 +145,11 @@ export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): v
         const id = url.pathname.slice(1);
         if (!/^c-[a-f0-9]+$/.test(id)) return json(res, 400, { error: 'invalid id' });
         const slideId = url.searchParams.get('slideId') ?? '';
-        const file = resolveSlideEntryPath(ctx, slideId);
-        if (!file) return json(res, 400, { error: 'invalid slideId' });
+        if (!resolveSlideEntryPath(ctx, slideId))
+          return json(res, 400, { error: 'invalid slideId' });
+        const rel = requestedDeckFile(url.searchParams.get('file'));
+        const file = await resolveDeckFile(ctx, slideId, rel);
+        if (!file) return rejectDeckFile(res, rel);
 
         const source = await readSlideSource(file);
         if (source === null) return json(res, 404, { error: 'slide not found' });

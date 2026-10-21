@@ -16,7 +16,12 @@ import { IconTooltip } from '@/components/icon-tooltip';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { TooltipTrigger } from '@/components/ui/tooltip';
-import { findSlideSource } from '@/lib/inspector/fiber';
+import {
+  DEFAULT_DECK_FILE,
+  findSlideSource,
+  parseSlideLoc,
+  slideLocSelector,
+} from '@/lib/inspector/fiber';
 import {
   appendTextEdit,
   type TextEditOp,
@@ -33,6 +38,7 @@ import { AssetPickerDialog } from './asset-picker-dialog';
 import { ImageCropDialog, type ImageCropRect } from './image-crop-dialog';
 
 export type SelectedTarget = {
+  file: string;
   line: number;
   column: number;
   anchor: HTMLElement;
@@ -72,6 +78,7 @@ function findRememberedTarget(root: HTMLElement, path?: number[]): HTMLElement |
 // Enough to find an edited element again after its page remounts. The path is
 // relative to the page layer, since an outgoing page shifts canvas-level paths.
 type RevealTarget = {
+  file: string;
   line: number;
   column: number;
   anchor: HTMLElement;
@@ -87,6 +94,7 @@ const PAGE_LAYER_ATTR = 'data-osd-current-page';
 function captureRevealTarget(target: SelectedTarget): RevealTarget {
   const layer = target.anchor.closest(`[${PAGE_LAYER_ATTR}]`);
   return {
+    file: target.file,
     line: target.line,
     column: target.column,
     anchor: target.anchor,
@@ -106,7 +114,7 @@ function locateRevealTarget(layer: Element, target: RevealTarget): HTMLElement |
   }
   const byPath = target.pagePath && elementAtPath(layer, target.pagePath);
   if (byPath?.tagName === target.tagName) return byPath;
-  return layer.querySelector<HTMLElement>(`[data-slide-loc="${target.line}:${target.column}"]`);
+  return layer.querySelector<HTMLElement>(slideLocSelector(target));
 }
 
 function sameAnchors(a: SelectedTarget[], b: SelectedTarget[]): boolean {
@@ -131,6 +139,7 @@ type Sequenced<T> = T & { seq: number };
 type StyleOp = { value: string | null; prevText?: string };
 
 type Bucket = {
+  file: string;
   line: number;
   column: number;
   styleOps: Map<string, Sequenced<StyleOp>>;
@@ -149,8 +158,13 @@ type Bucket = {
   origAttrs: Map<string, string | null>;
 };
 
-function createBucket(line: number, column: number): Bucket {
+function locKey(file: string, line: number, column: number): string {
+  return `${file}:${line}:${column}`;
+}
+
+function createBucket(file: string, line: number, column: number): Bucket {
   return {
+    file,
     line,
     column,
     styleOps: new Map(),
@@ -388,8 +402,8 @@ type InspectorCtx = {
   comments: SlideComment[];
   error: string | null;
   add: (input: AddCommentInput) => Promise<void>;
-  update: (id: string, text: string) => Promise<void>;
-  remove: (id: string) => Promise<void>;
+  update: (id: string, text: string, file: string) => Promise<void>;
+  remove: (id: string, file: string) => Promise<void>;
   selection: SelectedTarget[];
   setSelection: (targets: SelectedTarget[]) => void;
   bufferBatch: (edits: VisualEdit[], coalesceKey?: string) => void;
@@ -406,7 +420,7 @@ type InspectorCtx = {
   // Bumped on every buffered-op mutation (including undo/redo restores) so
   // panels can re-read DOM snapshots without polling.
   opsVersion: number;
-  applyEdit: (line: number, column: number, ops: EditOp[]) => Promise<void>;
+  applyEdit: (file: string, line: number, column: number, ops: EditOp[]) => Promise<void>;
   // Mutate the DOM optimistically, snapshot the pre-edit values, and
   // remember the ops. `commitEdits` (manual Save or auto-flush on
   // close) is what actually writes to disk; `cancelEdits` reverts.
@@ -467,13 +481,16 @@ export function InspectorProvider({
       const primary = previous.at(-1);
       if (
         primary?.anchor === target.anchor &&
+        primary.file === target.file &&
         primary.line === target.line &&
         primary.column === target.column
       )
         return previous;
       if (
         primary?.anchor === target.anchor ||
-        (primary?.line === target.line && primary.column === target.column)
+        (primary?.file === target.file &&
+          primary.line === target.line &&
+          primary.column === target.column)
       ) {
         return [...previous.slice(0, -1), rememberTarget(target)];
       }
@@ -547,15 +564,18 @@ export function InspectorProvider({
   // since the original `anchor` reference may have unmounted. With an
   // instance id, prefer the matching DOM node so per-instance text edits
   // round-trip onto the right element.
-  const findAnchor = useCallback((line: number, column: number, instanceId?: string) => {
-    const root = document.querySelector<HTMLElement>('[data-inspector-root]');
-    if (!root) return null;
-    if (instanceId) {
-      const byInstance = root.querySelector<HTMLElement>(`[${INSTANCE_ID_ATTR}="${instanceId}"]`);
-      if (byInstance) return byInstance;
-    }
-    return root.querySelector<HTMLElement>(`[data-slide-loc="${line}:${column}"]`);
-  }, []);
+  const findAnchor = useCallback(
+    (file: string, line: number, column: number, instanceId?: string) => {
+      const root = document.querySelector<HTMLElement>('[data-inspector-root]');
+      if (!root) return null;
+      if (instanceId) {
+        const byInstance = root.querySelector<HTMLElement>(`[${INSTANCE_ID_ATTR}="${instanceId}"]`);
+        if (byInstance) return byInstance;
+      }
+      return root.querySelector<HTMLElement>(slideLocSelector({ file, line, column }));
+    },
+    [],
+  );
 
   const pageIndexRef = useRef(pageIndex);
   pageIndexRef.current = pageIndex;
@@ -571,7 +591,7 @@ export function InspectorProvider({
       if (!target || target.pageIndex !== pageIndexRef.current) return null;
       const anchor =
         findRememberedTarget(root, target.canvasPath) ??
-        root.querySelector<HTMLElement>(`[data-slide-loc="${target.line}:${target.column}"]`);
+        root.querySelector<HTMLElement>(slideLocSelector(target));
       if (!anchor || anchor.tagName !== target.anchor.tagName) return null;
       anchor.setAttribute(INSTANCE_ID_ATTR, instanceId);
       return anchor;
@@ -615,11 +635,11 @@ export function InspectorProvider({
   // Mutate bucket + DOM without recording history. Shared by `bufferOps`
   // (the public, history-recording entry point) and by `redo` closures.
   const applyOpsRaw = useCallback(
-    (line: number, column: number, anchor: HTMLElement | null, ops: EditOp[]) => {
-      const key = `${line}:${column}`;
+    (file: string, line: number, column: number, anchor: HTMLElement | null, ops: EditOp[]) => {
+      const key = locKey(file, line, column);
       let bucket = pendingRef.current.get(key);
       if (!bucket) {
-        bucket = createBucket(line, column);
+        bucket = createBucket(file, line, column);
         pendingRef.current.set(key, bucket);
       }
       const style = (anchor?.style ?? {}) as unknown as Record<string, string>;
@@ -635,7 +655,7 @@ export function InspectorProvider({
           if (!anchor) continue;
           const instanceId = ensureInstanceId(anchor);
           bucket.textTargets.set(instanceId, {
-            ...rememberTarget({ line, column, anchor }),
+            ...rememberTarget({ file, line, column, anchor }),
             pageIndex,
           });
           const prevText = op.prevText ?? readEditableText(anchor);
@@ -712,8 +732,8 @@ export function InspectorProvider({
   type Snap = StyleSnap | TextSnap | AttrSnap;
 
   const snapshotForOps = useCallback(
-    (line: number, column: number, anchor: HTMLElement, ops: EditOp[]): Snap[] => {
-      const key = `${line}:${column}`;
+    (file: string, line: number, column: number, anchor: HTMLElement, ops: EditOp[]): Snap[] => {
+      const key = locKey(file, line, column);
       const bucket = pendingRef.current.get(key);
       const style = anchor.style as unknown as Record<string, string>;
       const snaps: Snap[] = [];
@@ -776,17 +796,17 @@ export function InspectorProvider({
   // Restore the snapshotted values to bucket + DOM. Mirrors the bucket-empty
   // logic of `cancelEdits` so an undo back to the absolute baseline cleans up.
   const restoreSnapshot = useCallback(
-    (line: number, column: number, snaps: Snap[], recreate = false) => {
-      const key = `${line}:${column}`;
+    (file: string, line: number, column: number, snaps: Snap[], recreate = false) => {
+      const key = locKey(file, line, column);
       let bucket = pendingRef.current.get(key);
       if (!bucket && recreate) {
-        bucket = createBucket(line, column);
+        bucket = createBucket(file, line, column);
         pendingRef.current.set(key, bucket);
       }
       if (!bucket) return;
       // Style/attr snaps share the loc-level anchor (first match);
       // text snaps look up their per-instance node below.
-      const sharedAnchor = findAnchor(line, column);
+      const sharedAnchor = findAnchor(file, line, column);
       const sharedStyle = (sharedAnchor?.style ?? {}) as unknown as Record<string, string>;
       for (const snap of snaps) {
         if (snap.kind === 'style') {
@@ -841,6 +861,7 @@ export function InspectorProvider({
   const bufferOps = useCallback(
     (line: number, column: number, anchor: HTMLElement, ops: EditOp[]) => {
       const target = findSlideSource(anchor, slideId, { hostOnly: true }) ?? {
+        file: DEFAULT_DECK_FILE,
         line,
         column,
         anchor,
@@ -850,11 +871,15 @@ export function InspectorProvider({
       )
         ? ensureInstanceId(target.anchor)
         : undefined;
-      const snaps = snapshotForOps(target.line, target.column, target.anchor, ops);
-      applyOpsRaw(target.line, target.column, target.anchor, ops);
-      const textAfter = snapshotForOps(target.line, target.column, target.anchor, ops).filter(
-        (snap) => snap.kind === 'text',
-      );
+      const snaps = snapshotForOps(target.file, target.line, target.column, target.anchor, ops);
+      applyOpsRaw(target.file, target.line, target.column, target.anchor, ops);
+      const textAfter = snapshotForOps(
+        target.file,
+        target.line,
+        target.column,
+        target.anchor,
+        ops,
+      ).filter((snap) => snap.kind === 'text');
       const sharedOps = ops.filter(
         (op) => op.kind !== 'set-text' && op.kind !== 'set-text-range-style',
       );
@@ -866,25 +891,27 @@ export function InspectorProvider({
             ? first.attr
             : 'text'
         : 'noop';
-      const coalesceKey = `inspector:${target.line}:${target.column}:${first?.kind ?? 'noop'}:${opKey}`;
+      const coalesceKey = `inspector:${target.file}:${target.line}:${target.column}:${first?.kind ?? 'noop'}:${opKey}`;
       const reveal = [captureRevealTarget(target)];
       history.record({
         coalesceKey,
         pageIndex,
         undo: () => {
-          restoreSnapshot(target.line, target.column, snaps);
+          restoreSnapshot(target.file, target.line, target.column, snaps);
           revealTargets(reveal, pageIndex);
         },
         redo: () => {
           if (sharedOps.length) {
             applyOpsRaw(
+              target.file,
               target.line,
               target.column,
-              findAnchor(target.line, target.column, instanceId),
+              findAnchor(target.file, target.line, target.column, instanceId),
               sharedOps,
             );
           }
-          if (textAfter.length) restoreSnapshot(target.line, target.column, textAfter, true);
+          if (textAfter.length)
+            restoreSnapshot(target.file, target.line, target.column, textAfter, true);
           revealTargets(reveal, pageIndex);
         },
       });
@@ -910,9 +937,10 @@ export function InspectorProvider({
         ...findSlideSource(edit.anchor, slideId, { hostOnly: true }),
       }));
       const snapshots = edits.map((edit) =>
-        snapshotForOps(edit.line, edit.column, edit.anchor, edit.ops),
+        snapshotForOps(edit.file, edit.line, edit.column, edit.anchor, edit.ops),
       );
-      for (const edit of edits) applyOpsRaw(edit.line, edit.column, edit.anchor, edit.ops);
+      for (const edit of edits)
+        applyOpsRaw(edit.file, edit.line, edit.column, edit.anchor, edit.ops);
       const reveal = edits.map(captureRevealTarget);
       history.record({
         coalesceKey,
@@ -920,13 +948,19 @@ export function InspectorProvider({
         undo: () => {
           for (let index = edits.length - 1; index >= 0; index--) {
             const edit = edits[index];
-            restoreSnapshot(edit.line, edit.column, snapshots[index]);
+            restoreSnapshot(edit.file, edit.line, edit.column, snapshots[index]);
           }
           revealTargets(reveal, pageIndex);
         },
         redo: () => {
           for (const edit of edits)
-            applyOpsRaw(edit.line, edit.column, findAnchor(edit.line, edit.column), edit.ops);
+            applyOpsRaw(
+              edit.file,
+              edit.line,
+              edit.column,
+              findAnchor(edit.file, edit.line, edit.column),
+              edit.ops,
+            );
           revealTargets(reveal, pageIndex);
         },
       });
@@ -966,12 +1000,13 @@ export function InspectorProvider({
     };
     const pending: PendingItem[] = [];
     for (const bucket of buckets.values()) {
-      const { line, column, styleOps, textEdits, attrOps } = bucket;
+      const { file, line, column, styleOps, textEdits, attrOps } = bucket;
       for (const [k, op] of styleOps) {
         pending.push({
           bucket,
           seq: op.seq,
           edit: {
+            file,
             line,
             column,
             ops: [{ kind: 'set-style', key: k, value: op.value, prevText: op.prevText }],
@@ -987,6 +1022,7 @@ export function InspectorProvider({
           bucket,
           seq: op.seq,
           edit: {
+            file,
             line,
             column,
             ops: [
@@ -1012,6 +1048,7 @@ export function InspectorProvider({
             seq: step.seq,
             instanceId,
             edit: {
+              file: target?.file ?? file,
               line: target?.line ?? line,
               column: target?.column ?? column,
               ops: [step.op],
@@ -1064,7 +1101,7 @@ export function InspectorProvider({
             }
           }
         } else {
-          failures.push(`line ${item.edit.line}: ${r.error ?? 'edit failed'}`);
+          failures.push(`${item.edit.file} line ${item.edit.line}: ${r.error ?? 'edit failed'}`);
         }
       }
       refreshCount();
@@ -1086,7 +1123,7 @@ export function InspectorProvider({
     }
     const root = document.querySelector<HTMLElement>('[data-inspector-root]');
     for (const b of pendingRef.current.values()) {
-      const sharedEl = root?.querySelector<HTMLElement>(`[data-slide-loc="${b.line}:${b.column}"]`);
+      const sharedEl = root?.querySelector<HTMLElement>(slideLocSelector(b));
       if (sharedEl) {
         const style = sharedEl.style as unknown as Record<string, string>;
         for (const [k, v] of b.origStyle) style[k] = v;
@@ -1138,9 +1175,9 @@ export function InspectorProvider({
     if (!root) return;
 
     const applyBuffered = (el: HTMLElement) => {
-      const loc = el.dataset.slideLoc;
+      const loc = parseSlideLoc(el.dataset.slideLoc ?? '');
       if (!loc) return;
-      const bucket = pendingRef.current.get(loc);
+      const bucket = pendingRef.current.get(locKey(loc.file, loc.line, loc.column));
       if (!bucket) return;
       const style = el.style as unknown as Record<string, string>;
       for (const [key, op] of bucket.styleOps) {
@@ -1179,12 +1216,14 @@ export function InspectorProvider({
           if (!hit || hit.anchor !== anchor) continue;
           anchor.setAttribute(INSTANCE_ID_ATTR, instanceId);
           bucket.textTargets.set(instanceId, { ...rememberTarget(hit), pageIndex });
-          bucket.line = hit.line;
-          bucket.column = hit.column;
+          if (hit.file === bucket.file) {
+            bucket.line = hit.line;
+            bucket.column = hit.column;
+          }
           // Native editing can mutate child nodes before its input event updates the buffer.
           if (!anchor.isContentEditable) replayDomTextEdits(anchor, html, steps);
         }
-        const nextKey = `${bucket.line}:${bucket.column}`;
+        const nextKey = locKey(bucket.file, bucket.line, bucket.column);
         if (nextKey !== key) relocations.push({ key, nextKey, bucket });
       }
       let moved = true;
@@ -1247,12 +1286,15 @@ export function InspectorProvider({
         const anchor = target.anchor.isConnected
           ? target.anchor
           : (findRememberedTarget(root, target.canvasPath) ??
-            root.querySelector<HTMLElement>(`[data-slide-loc="${target.line}:${target.column}"]`));
+            root.querySelector<HTMLElement>(slideLocSelector(target)));
         if (!anchor) return target;
         const hit = findSlideSource(anchor, slideId, { hostOnly: true });
         if (
           !hit ||
-          (hit.anchor === target.anchor && hit.line === target.line && hit.column === target.column)
+          (hit.anchor === target.anchor &&
+            hit.file === target.file &&
+            hit.line === target.line &&
+            hit.column === target.column)
         )
           return target;
         changed = true;
@@ -1310,7 +1352,9 @@ export function InspectorProvider({
         html: captureTextDom(target.anchor),
       });
       setInlineSelection(null);
-      setSelection([{ line: target.line, column: target.column, anchor: target.anchor }]);
+      setSelection([
+        { file: target.file, line: target.line, column: target.column, anchor: target.anchor },
+      ]);
       setInlineEdit({ ...target, session: ++inlineEditSessionRef.current });
     },
     [setSelection],
@@ -1329,12 +1373,9 @@ export function InspectorProvider({
   }, [selected, inlineEdit, stopInlineEdit]);
 
   const openReplace = useCallback((anchor: HTMLElement) => {
-    const loc = anchor.dataset.slideLoc;
+    const loc = parseSlideLoc(anchor.dataset.slideLoc ?? '');
     if (!loc) return;
-    const [lineStr, columnStr] = loc.split(':');
-    const line = Number(lineStr);
-    const column = Number(columnStr);
-    if (!Number.isFinite(line) || !Number.isFinite(column)) return;
+    const { line, column } = loc;
     setReplaceTarget({ line, column, anchor });
   }, []);
 
@@ -1372,12 +1413,9 @@ export function InspectorProvider({
   }, [togglePanel, commentMode, exitCommentMode, setMode]);
 
   const openCrop = useCallback((anchor: HTMLImageElement) => {
-    const loc = anchor.dataset.slideLoc;
+    const loc = parseSlideLoc(anchor.dataset.slideLoc ?? '');
     if (!loc) return;
-    const [lineStr, columnStr] = loc.split(':');
-    const line = Number(lineStr);
-    const column = Number(columnStr);
-    if (!Number.isFinite(line) || !Number.isFinite(column)) return;
+    const { line, column } = loc;
     const cs = window.getComputedStyle(anchor);
     setCropTarget({
       line,

@@ -613,7 +613,7 @@ export function AssetView({ slideId }: Props) {
             const assetPath =
               scope === 'global' ? `@assets/${target.name}` : `./assets/${target.name}`;
             for (const u of usages) {
-              const rev = await revertAssetUsage(u.slideId, assetPath);
+              const rev = await revertAssetUsage(u.slideId, assetPath, u.file);
               if (!rev.ok) {
                 toast.error(format(t.asset.toastRevertFailed, { slideId: u.slideId }));
                 return;

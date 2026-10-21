@@ -113,8 +113,8 @@ describe('resolveTargets', () => {
       '  </div>',
       ')];',
     ].join('\n');
-    const [c] = resolveTargets(source, parseMarkers(source));
-    expect(c.target).toEqual({ line: 3, column: 4 });
+    const [c] = resolveTargets(source, parseMarkers(source), 'pages/01-a.tsx');
+    expect(c.target).toEqual({ file: 'pages/01-a.tsx', line: 3, column: 4 });
   });
 
   it('skips fragments and resolves to the nearest JSX element', () => {
@@ -129,15 +129,16 @@ describe('resolveTargets', () => {
       '  </main>',
       ')];',
     ].join('\n');
-    const [c] = resolveTargets(source, parseMarkers(source));
-    expect(c.target).toEqual({ line: 2, column: 2 });
+    const [c] = resolveTargets(source, parseMarkers(source), 'pages/01-a.tsx');
+    expect(c.target).toEqual({ file: 'pages/01-a.tsx', line: 2, column: 2 });
   });
 
   it('yields a null target when no element encloses the marker', () => {
     const payload = b64urlEncode(JSON.stringify({ note: 'x' }));
     const source = `{/* @slide-comment id="c-00000003" ts="t" text="${payload}" */}\nconst a = 1;`;
-    const [c] = resolveTargets(source, parseMarkers(source));
+    const [c] = resolveTargets(source, parseMarkers(source), 'pages/01-a.tsx');
     expect(c.target).toBeNull();
+    expect(c.file).toBe('pages/01-a.tsx');
   });
 });
 

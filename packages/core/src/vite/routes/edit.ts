@@ -9,15 +9,19 @@ import {
   json,
   readBody,
   readSlideSource,
+  rejectDeckFile,
+  requestedDeckFile,
+  resolveDeckFile,
   resolveSlideEntryPath,
 } from './context.ts';
 
-// POST /__edit                applyEdit({ slideId, line, column, ops })
-// POST /__edit/revert-asset   applyRevertAsset({ slideId, assetPath })
+// POST /__edit                applyEdit({ slideId, file?, line, column, ops })
+// POST /__edit/revert-asset   applyRevertAsset({ slideId, file?, assetPath })
 // POST /__edit/batch          applyEdit × N — single FS write per request
 
 type EditBody = {
   slideId?: string;
+  file?: unknown;
   line?: number;
   column?: number;
   ops?: EditOp[];
@@ -25,6 +29,7 @@ type EditBody = {
 
 type EditBatchBody = {
   slideId?: string;
+  file?: unknown;
   edits?: BatchEdit[];
 };
 
@@ -40,8 +45,11 @@ export function registerEditRoutes(server: ViteDevServer, ctx: ApiContext): void
       if (url.pathname === '/') {
         const body = (await readBody(req)) as EditBody;
         const slideId = body.slideId ?? '';
-        const file = resolveSlideEntryPath(ctx, slideId);
-        if (!file) return json(res, 400, { error: 'invalid slideId' });
+        if (!resolveSlideEntryPath(ctx, slideId))
+          return json(res, 400, { error: 'invalid slideId' });
+        const rel = requestedDeckFile(body.file);
+        const file = await resolveDeckFile(ctx, slideId, rel);
+        if (!file) return rejectDeckFile(res, rel);
         if (!body.line || body.line < 1) return json(res, 400, { error: 'invalid line' });
         if (!Array.isArray(body.ops)) return json(res, 400, { error: 'missing ops' });
 
@@ -56,11 +64,18 @@ export function registerEditRoutes(server: ViteDevServer, ctx: ApiContext): void
       }
 
       if (url.pathname === '/revert-asset') {
-        const body = (await readBody(req)) as { slideId?: string; assetPath?: string };
+        const body = (await readBody(req)) as {
+          slideId?: string;
+          file?: unknown;
+          assetPath?: string;
+        };
         const slideId = body.slideId ?? '';
         const assetPath = body.assetPath;
-        const file = resolveSlideEntryPath(ctx, slideId);
-        if (!file) return json(res, 400, { error: 'invalid slideId' });
+        if (!resolveSlideEntryPath(ctx, slideId))
+          return json(res, 400, { error: 'invalid slideId' });
+        const rel = requestedDeckFile(body.file);
+        const file = await resolveDeckFile(ctx, slideId, rel);
+        if (!file) return rejectDeckFile(res, rel);
         if (typeof assetPath !== 'string' || !assetPath) {
           return json(res, 400, { error: 'missing assetPath' });
         }
@@ -84,8 +99,11 @@ export function registerEditRoutes(server: ViteDevServer, ctx: ApiContext): void
       if (url.pathname === '/batch') {
         const body = (await readBody(req)) as EditBatchBody;
         const slideId = body.slideId ?? '';
-        const file = resolveSlideEntryPath(ctx, slideId);
-        if (!file) return json(res, 400, { error: 'invalid slideId' });
+        if (!resolveSlideEntryPath(ctx, slideId))
+          return json(res, 400, { error: 'invalid slideId' });
+        const rel = requestedDeckFile(body.file);
+        const file = await resolveDeckFile(ctx, slideId, rel);
+        if (!file) return rejectDeckFile(res, rel);
         if (!Array.isArray(body.edits)) return json(res, 400, { error: 'missing edits' });
 
         const source = await readSlideSource(file);

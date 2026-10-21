@@ -50,7 +50,7 @@ async function deleteAsset(slideId: string, name: string): Promise<Response> {
   return fetch(`/__assets/${slideId}/${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
-export type AssetUsage = { slideId: string; count: number };
+export type AssetUsage = { slideId: string; count: number; file?: string };
 
 export async function listAssetUsages(slideId: string, name: string): Promise<AssetUsage[]> {
   const res = await fetch(`/__assets/${slideId}/${encodeURIComponent(name)}/usages`);
@@ -62,11 +62,12 @@ export async function listAssetUsages(slideId: string, name: string): Promise<As
 export async function revertAssetUsage(
   slideId: string,
   assetPath: string,
+  file = 'index.tsx',
 ): Promise<{ ok: boolean; status: number }> {
   const res = await fetch('/__edit/revert-asset', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ slideId, assetPath }),
+    body: JSON.stringify({ slideId, file, assetPath }),
   });
   return { ok: res.ok, status: res.status };
 }
