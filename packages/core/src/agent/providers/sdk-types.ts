@@ -2,7 +2,9 @@
 // resolved from the user's workspace at runtime and never installed here, so
 // these cover only the fields the adapters read.
 
-export type ClaudePermissionResult =
+import type { AgentEffort } from '../types.ts';
+
+type ClaudePermissionResult =
   | { behavior: 'allow'; updatedInput?: Record<string, unknown> }
   | { behavior: 'deny'; message: string; interrupt?: boolean };
 
@@ -12,7 +14,7 @@ export type ClaudeCanUseTool = (
   options: { signal: AbortSignal; toolUseID: string },
 ) => Promise<ClaudePermissionResult>;
 
-export type ClaudeQueryOptions = {
+type ClaudeQueryOptions = {
   cwd?: string;
   permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto';
   settingSources?: ('user' | 'project' | 'local')[];
@@ -20,26 +22,23 @@ export type ClaudeQueryOptions = {
   resume?: string;
   resumeSessionAt?: string;
   model?: string;
-  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  effort?: Exclude<AgentEffort, 'minimal'>;
   includePartialMessages?: boolean;
   pathToClaudeCodeExecutable?: string;
   abortController?: AbortController;
   canUseTool?: ClaudeCanUseTool;
-  env?: Record<string, string | undefined>;
   stderr?: (data: string) => void;
 };
 
 export type ClaudeContentBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; tool_use_id: string; is_error?: boolean; content?: unknown }
-  | { type: string };
+  | { type: 'tool_result'; tool_use_id: string; is_error?: boolean; content?: unknown };
 
-export type ClaudeStreamEvent =
+type ClaudeStreamEvent =
   | { type: 'content_block_start'; index: number; content_block: ClaudeContentBlock }
   | { type: 'content_block_delta'; index: number; delta: { type: string; text?: string } }
-  | { type: 'content_block_stop'; index: number }
-  | { type: string };
+  | { type: 'content_block_stop'; index: number };
 
 export type ClaudeSdkMessage =
   | { type: 'system'; subtype: 'init'; session_id: string; model?: string }
@@ -73,8 +72,7 @@ export type ClaudeSdkMessage =
       is_error?: boolean;
       result?: string;
       errors?: string[];
-    }
-  | { type: string };
+    };
 
 export type ClaudeSdkModule = {
   query: (args: {
@@ -83,15 +81,15 @@ export type ClaudeSdkModule = {
   }) => AsyncIterable<ClaudeSdkMessage>;
 };
 
-export type CodexOptions = { codexPathOverride?: string; env?: Record<string, string> };
+type CodexOptions = { codexPathOverride?: string };
 
-export type CodexThreadOptions = {
+type CodexThreadOptions = {
   workingDirectory?: string;
   skipGitRepoCheck?: boolean;
   sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
   approvalPolicy?: 'never' | 'on-request' | 'on-failure' | 'untrusted';
   model?: string;
-  modelReasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  modelReasoningEffort?: AgentEffort;
 };
 
 export type CodexItem =
@@ -130,10 +128,9 @@ export type CodexThreadEvent =
   | { type: 'item.started'; item: CodexItem }
   | { type: 'item.updated'; item: CodexItem }
   | { type: 'item.completed'; item: CodexItem }
-  | { type: 'error'; message: string }
-  | { type: string };
+  | { type: 'error'; message: string };
 
-export type CodexThread = {
+type CodexThread = {
   id: string | null;
   runStreamed: (
     input: string,

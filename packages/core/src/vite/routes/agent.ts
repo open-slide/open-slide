@@ -4,20 +4,15 @@ import path from 'node:path';
 import type { ViteDevServer } from 'vite';
 import { extractDeckSlug, stripDeckSlug } from '../../agent/prompt.ts';
 import { createProviders } from '../../agent/providers/index.ts';
-import {
-  type AgentRunner,
-  createAgentRunner,
-  type RespondPayload,
-  type TurnEnd,
-} from '../../agent/runner.ts';
+import { type AgentRunner, createAgentRunner, type TurnEnd } from '../../agent/runner.ts';
 import { agentStatus, installSdk } from '../../agent/status.ts';
 import { createSessionStore, type SessionStore } from '../../agent/store.ts';
 import {
-  AGENT_EFFORTS,
-  type AgentEffort,
-  type AgentProviderId,
+  type AgentStreamEvent,
   type AgentTurnContext,
-  type AgentWsEvent,
+  isAgentEffort,
+  isAgentProviderId,
+  type RespondPayload,
 } from '../../agent/types.ts';
 import { UNTITLED_SLIDE_ID_RE } from '../../editing/placeholder-id.ts';
 import {
@@ -45,12 +40,6 @@ import { detectPackageManager } from './update.ts';
 // POST   /__agent/sessions/:id/stop           → { ok }
 // POST   /__agent/sessions/:id/respond        { itemId, answers? | allow? | cancel? } → { ok }
 // GET    /__agent/events                      → server-sent turn progress
-
-const PROVIDER_IDS: AgentProviderId[] = ['claude', 'codex'];
-
-function isProviderId(value: unknown): value is AgentProviderId {
-  return typeof value === 'string' && (PROVIDER_IDS as string[]).includes(value);
-}
 
 function parseContext(raw: unknown): AgentTurnContext | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -89,12 +78,6 @@ function parseModel(raw: unknown): string | null {
   return typeof raw === 'string' && MODEL_RE.test(raw) ? raw : null;
 }
 
-function parseEffort(raw: unknown): AgentEffort | null {
-  return typeof raw === 'string' && (AGENT_EFFORTS as readonly string[]).includes(raw)
-    ? (raw as AgentEffort)
-    : null;
-}
-
 // A deck drafted into a blank `untitled` folder gets a real id once the turn
 // that wrote it ends: the agent's <deck-slug> wins, else the title's slug.
 // Renaming mid-turn would pull the file out from under the agent's edits.
@@ -102,7 +85,7 @@ async function renamePlaceholderDeck(
   server: ViteDevServer,
   ctx: ApiContext,
   store: SessionStore,
-  broadcast: (event: AgentWsEvent) => void,
+  broadcast: (event: AgentStreamEvent) => void,
   turn: TurnEnd,
 ): Promise<void> {
   const session = store.get(turn.sessionId);
@@ -177,7 +160,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
   // Agent output goes over its own stream rather than the HMR socket, which
   // every network client can subscribe to when the server runs with --host.
   const streams = new Set<ServerResponse>();
-  const broadcast = (event: AgentWsEvent) => {
+  const broadcast = (event: AgentStreamEvent) => {
     const frame = `data: ${JSON.stringify(event)}\n\n`;
     for (const stream of streams) stream.write(frame);
   };
@@ -239,7 +222,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
         const body = (await readBody(req, AGENT_BODY_LIMIT)) as { provider?: unknown };
-        if (!isProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
+        if (!isAgentProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
         const provider = providers[body.provider];
         const pm = await detectPackageManager(ctx.userCwd);
         const pkg = provider.sdkPackage;
@@ -264,7 +247,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
           provider?: unknown;
           slideId?: unknown;
         };
-        if (!isProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
+        if (!isAgentProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
         const slideId =
           typeof body.slideId === 'string' && SLIDE_ID_RE.test(body.slideId) ? body.slideId : null;
         return json(res, 200, store.create(body.provider, slideId));
@@ -309,7 +292,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
             context: parseContext(body.context),
             autoApprove: body.autoApprove === true,
             model: parseModel(body.model),
-            effort: parseEffort(body.effort),
+            effort: isAgentEffort(body.effort) ? body.effort : null,
             edit: typeof body.edit === 'string' ? body.edit : undefined,
           });
           return json(res, 202, { ok: true });

@@ -507,7 +507,7 @@ export function CommentLayer() {
               <button
                 type="button"
                 className="pointer-events-auto rounded-[4px] px-1 py-0.5 font-medium text-brand outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30"
-                onClick={() => requestAgent({ text: applyCommentsPrompt(slideId), send: true })}
+                onClick={() => requestAgent({ text: applyCommentsPrompt(slideId) })}
               >
                 {format(t.agent.applyCommentsWith, { provider: agent.providerName ?? '' })}
               </button>

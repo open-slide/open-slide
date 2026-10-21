@@ -384,11 +384,7 @@
   }
 }
 
-/*
- * Agent presence. While an agent edits a deck, its frame wears a slowly
- * turning gradient ring in the provider's colours, each write sweeps a band
- * of light across the canvas, and live steps shimmer.
- */
+/* Agent presence: ring, write sweep and shimmer shown while an agent edits a deck. */
 @property --agent-angle {
   syntax: "<angle>";
   inherits: false;

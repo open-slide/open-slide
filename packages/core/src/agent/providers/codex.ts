@@ -10,20 +10,16 @@ import {
   type ProviderRunOptions,
   ProviderUnavailableError,
 } from '../provider.ts';
-import { AGENT_EFFORTS, type AgentEffort, type AgentModelOption } from '../types.ts';
+import { type AgentModelOption, isAgentEffort } from '../types.ts';
 import type { CodexItem, CodexSdkModule, CodexThreadEvent } from './sdk-types.ts';
 
-export const CODEX_SDK_PACKAGE = '@openai/codex-sdk';
+const CODEX_SDK_PACKAGE = '@openai/codex-sdk';
 
 const CODEX_DEFAULT_MODEL: AgentModelOption = {
   id: '',
   label: 'Default',
   efforts: ['low', 'medium', 'high'],
 };
-
-function isEffort(value: unknown): value is AgentEffort {
-  return typeof value === 'string' && (AGENT_EFFORTS as readonly string[]).includes(value);
-}
 
 // The Codex CLI caches the model list it shows in its own /model picker.
 // Reading that keeps the panel in step with whatever the user's account can
@@ -40,7 +36,7 @@ export function parseCodexModelsCache(raw: unknown): AgentModelOption[] {
     const levels = Array.isArray(m.supported_reasoning_levels) ? m.supported_reasoning_levels : [];
     const efforts = levels
       .map((l) => (l && typeof l === 'object' ? (l as { effort?: unknown }).effort : l))
-      .filter(isEffort);
+      .filter(isAgentEffort);
     models.push({
       option: {
         id: m.slug,
@@ -111,9 +107,6 @@ export function createCodexMapper(emit: (event: ProviderEvent) => void) {
       case 'error':
         if (phase === 'completed') emit({ type: 'error', text: item.message });
         return;
-      case 'reasoning':
-      case 'todo_list':
-        return;
       case 'command_execution':
       case 'file_change':
       case 'mcp_tool_call':
@@ -139,24 +132,24 @@ export function createCodexMapper(emit: (event: ProviderEvent) => void) {
       if (!event || typeof event !== 'object') return;
       switch (event.type) {
         case 'thread.started':
-          emit({ type: 'session-id', id: (event as { thread_id: string }).thread_id });
+          emit({ type: 'session-id', id: event.thread_id });
           return;
         case 'item.started':
-          handleItem('started', (event as { item: CodexItem }).item);
+          handleItem('started', event.item);
           return;
         case 'item.updated':
-          handleItem('updated', (event as { item: CodexItem }).item);
+          handleItem('updated', event.item);
           return;
         case 'item.completed':
-          handleItem('completed', (event as { item: CodexItem }).item);
+          handleItem('completed', event.item);
           return;
         case 'turn.failed':
           resultSeen = true;
-          emit({ type: 'error', text: (event as { error: { message: string } }).error.message });
+          emit({ type: 'error', text: event.error.message });
           emit({ type: 'result', durationMs: null, costUsd: null });
           return;
         case 'error':
-          emit({ type: 'error', text: (event as { message: string }).message });
+          emit({ type: 'error', text: event.message });
           return;
         case 'turn.completed':
           resultSeen = true;

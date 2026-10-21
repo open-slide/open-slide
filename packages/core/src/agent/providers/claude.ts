@@ -17,13 +17,13 @@ import type {
   ClaudeSdkModule,
 } from './sdk-types.ts';
 
-export const CLAUDE_SDK_PACKAGE = '@anthropic-ai/claude-agent-sdk';
+const CLAUDE_SDK_PACKAGE = '@anthropic-ai/claude-agent-sdk';
 
 const CLAUDE_EFFORTS: AgentEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
 // Aliases rather than dated ids: Claude Code resolves each to the newest
 // model of that family, so the list never goes stale.
-export const CLAUDE_MODELS: AgentModelOption[] = [
+const CLAUDE_MODELS: AgentModelOption[] = [
   { id: 'opus', label: 'Opus', efforts: CLAUDE_EFFORTS },
   { id: 'sonnet', label: 'Sonnet', efforts: CLAUDE_EFFORTS },
   { id: 'haiku', label: 'Haiku', efforts: [] },
@@ -31,7 +31,7 @@ export const CLAUDE_MODELS: AgentModelOption[] = [
 
 const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
 
-export function claudeEffort(effort: AgentEffort | null) {
+function claudeEffort(effort: AgentEffort | null) {
   return effort && effort !== 'minimal' ? effort : undefined;
 }
 
@@ -84,7 +84,7 @@ export function createClaudeMapper(emit: (event: ProviderEvent) => void, cwd: st
   const handleBlocks = (blocks: ClaudeContentBlock[]) => {
     for (const block of blocks) {
       if (block.type === 'text') {
-        const text = (block as { text: string }).text;
+        const { text } = block;
         const id = openTextIds.shift();
         if (id) {
           emit({ type: 'text-end', id, text });
@@ -94,9 +94,8 @@ export function createClaudeMapper(emit: (event: ProviderEvent) => void, cwd: st
           emit({ type: 'text-end', id: fresh, text });
         }
       } else if (block.type === 'tool_use') {
-        const tool = block as { id: string; name: string; input: Record<string, unknown> };
-        const { title, detail } = describeClaudeTool(tool.name, tool.input ?? {}, cwd);
-        emit({ type: 'tool-start', id: tool.id, name: tool.name, title, detail });
+        const { title, detail } = describeClaudeTool(block.name, block.input ?? {}, cwd);
+        emit({ type: 'tool-start', id: block.id, name: block.name, title, detail });
       }
     }
     textByIndex.clear();
@@ -109,68 +108,61 @@ export function createClaudeMapper(emit: (event: ProviderEvent) => void, cwd: st
     },
     handle(msg: ClaudeSdkMessage): void {
       if (!msg || typeof msg !== 'object') return;
-      if (msg.type === 'system' && 'subtype' in msg && msg.subtype === 'init') {
+      if (msg.type === 'system' && msg.subtype === 'init') {
         const init = msg as { session_id: string };
         emit({ type: 'session-id', id: init.session_id });
         return;
       }
       if (msg.type === 'stream_event') {
-        const m = msg as Extract<ClaudeSdkMessage, { type: 'stream_event' }>;
-        if (m.parent_tool_use_id) return;
-        const ev = m.event;
+        if (msg.parent_tool_use_id) return;
+        const ev = msg.event;
         if (ev.type === 'content_block_start') {
-          const start = ev as { index: number; content_block: ClaudeContentBlock };
-          if (start.content_block.type === 'text') {
+          if (ev.content_block.type === 'text') {
             const id = nextId();
-            textByIndex.set(start.index, id);
+            textByIndex.set(ev.index, id);
             openTextIds.push(id);
             emit({ type: 'text-start', id });
           }
         } else if (ev.type === 'content_block_delta') {
-          const delta = ev as { index: number; delta: { type: string; text?: string } };
-          const id = textByIndex.get(delta.index);
-          if (id && delta.delta.type === 'text_delta' && delta.delta.text) {
-            emit({ type: 'text-delta', id, text: delta.delta.text });
+          const id = textByIndex.get(ev.index);
+          if (id && ev.delta.type === 'text_delta' && ev.delta.text) {
+            emit({ type: 'text-delta', id, text: ev.delta.text });
           }
         }
         return;
       }
       if (msg.type === 'assistant') {
-        const m = msg as Extract<ClaudeSdkMessage, { type: 'assistant' }>;
-        if (m.parent_tool_use_id) return;
-        handleBlocks(m.message?.content ?? []);
-        if (m.uuid) emit({ type: 'checkpoint', id: m.uuid });
+        if (msg.parent_tool_use_id) return;
+        handleBlocks(msg.message?.content ?? []);
+        if (msg.uuid) emit({ type: 'checkpoint', id: msg.uuid });
         return;
       }
       if (msg.type === 'user') {
-        const m = msg as Extract<ClaudeSdkMessage, { type: 'user' }>;
-        if (m.parent_tool_use_id) return;
-        if (m.uuid) emit({ type: 'checkpoint', id: m.uuid });
-        const content = m.message?.content;
+        if (msg.parent_tool_use_id) return;
+        if (msg.uuid) emit({ type: 'checkpoint', id: msg.uuid });
+        const content = msg.message?.content;
         if (!Array.isArray(content)) return;
         for (const block of content) {
           if (block.type === 'tool_result') {
-            const r = block as { tool_use_id: string; is_error?: boolean };
-            emit({ type: 'tool-end', id: r.tool_use_id, ok: !r.is_error });
+            emit({ type: 'tool-end', id: block.tool_use_id, ok: !block.is_error });
           }
         }
         return;
       }
       if (msg.type === 'result') {
-        const m = msg as Extract<ClaudeSdkMessage, { type: 'result' }>;
         resultSeen = true;
-        if (m.session_id) emit({ type: 'session-id', id: m.session_id });
-        if (m.is_error || (m.subtype && m.subtype !== 'success')) {
+        if (msg.session_id) emit({ type: 'session-id', id: msg.session_id });
+        if (msg.is_error || (msg.subtype && msg.subtype !== 'success')) {
           const text =
-            (Array.isArray(m.errors) && m.errors.length ? m.errors.join('\n') : null) ??
-            (typeof m.result === 'string' && m.result ? m.result : null) ??
-            `Claude Code stopped: ${m.subtype ?? 'error'}`;
+            (Array.isArray(msg.errors) && msg.errors.length ? msg.errors.join('\n') : null) ??
+            (typeof msg.result === 'string' && msg.result ? msg.result : null) ??
+            `Claude Code stopped: ${msg.subtype ?? 'error'}`;
           emit({ type: 'error', text });
         }
         emit({
           type: 'result',
-          durationMs: typeof m.duration_ms === 'number' ? m.duration_ms : null,
-          costUsd: typeof m.total_cost_usd === 'number' ? m.total_cost_usd : null,
+          durationMs: typeof msg.duration_ms === 'number' ? msg.duration_ms : null,
+          costUsd: typeof msg.total_cost_usd === 'number' ? msg.total_cost_usd : null,
         });
       }
     },

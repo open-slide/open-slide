@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { toast } from 'sonner';
+import { useLocale } from '@/lib/use-locale';
 import {
-  AGENT_EFFORTS,
   type AgentEffort,
   type AgentItem,
   type AgentModelOption,
@@ -8,32 +9,16 @@ import {
   type AgentSession,
   type AgentSessionSummary,
   type AgentStatus,
+  type AgentStreamEvent,
   type AgentTurnContext,
-  type AgentWsEvent,
+  isAgentEffort,
+  isAgentProviderId,
+  type RespondPayload,
 } from '../../../agent/types';
 
-export type {
-  AgentEffort,
-  AgentItem,
-  AgentModelOption,
-  AgentProviderId,
-  AgentSession,
-  AgentSessionSummary,
-  AgentStatus,
-};
+type ModelChoice = { model: string; effort: AgentEffort | null };
 
-export type ModelChoice = { model: string; effort: AgentEffort | null };
-
-export type AgentRequest = {
-  text: string;
-  send: boolean;
-  newSession?: boolean;
-};
-
-export type RespondPayload =
-  | { answers: Record<string, string> }
-  | { allow: boolean }
-  | { cancel: true };
+type AgentRequest = { text: string };
 
 type State = {
   status: AgentStatus | null;
@@ -74,12 +59,8 @@ function writeStorage(key: string, value: string | null) {
   } catch {}
 }
 
-function isProviderId(value: string | null): value is AgentProviderId {
-  return value === 'claude' || value === 'codex';
-}
-
-function isEffort(value: unknown): value is AgentEffort {
-  return typeof value === 'string' && (AGENT_EFFORTS as readonly string[]).includes(value);
+function basePath(): string {
+  return import.meta.env.BASE_URL.replace(/\/$/, '');
 }
 
 function readModelChoices(): Partial<Record<AgentProviderId, ModelChoice>> {
@@ -87,10 +68,10 @@ function readModelChoices(): Partial<Record<AgentProviderId, ModelChoice>> {
   try {
     const raw = JSON.parse(readStorage(MODEL_KEY) ?? '{}') as Record<string, unknown>;
     for (const [provider, value] of Object.entries(raw)) {
-      if (!isProviderId(provider) || !value || typeof value !== 'object') continue;
+      if (!isAgentProviderId(provider) || !value || typeof value !== 'object') continue;
       const v = value as Record<string, unknown>;
       if (typeof v.model !== 'string') continue;
-      choices[provider] = { model: v.model, effort: isEffort(v.effort) ? v.effort : null };
+      choices[provider] = { model: v.model, effort: isAgentEffort(v.effort) ? v.effort : null };
     }
   } catch {}
   return choices;
@@ -107,7 +88,7 @@ let state: State = {
   activeId: readStorage(ACTIVE_KEY),
   provider: (() => {
     const stored = readStorage(PROVIDER_KEY);
-    return isProviderId(stored) ? stored : 'claude';
+    return isAgentProviderId(stored) ? stored : 'claude';
   })(),
   modelChoices: readModelChoices(),
   autoApprove: readStorage(AUTO_APPROVE_KEY) === '1',
@@ -152,7 +133,7 @@ function syncStream(enabled: boolean) {
   }
   if (stream) return;
   stream = new EventSource('/__agent/events');
-  stream.onmessage = (message) => applyEvent(JSON.parse(message.data) as AgentWsEvent);
+  stream.onmessage = (message) => applyEvent(JSON.parse(message.data) as AgentStreamEvent);
   stream.onopen = () => {
     // Anything streamed while disconnected is gone, so reload what is on screen.
     if (!streamOpened) {
@@ -172,7 +153,7 @@ function upsertSummary(list: AgentSessionSummary[], summary: AgentSessionSummary
   );
 }
 
-function applyEvent(event: AgentWsEvent) {
+function applyEvent(event: AgentStreamEvent) {
   switch (event.type) {
     case 'session':
       setState((prev) => {
@@ -234,7 +215,7 @@ function applyEvent(event: AgentWsEvent) {
 }
 
 function followSlideRename(from: string, to: string) {
-  const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const base = basePath();
   const prefix = `${base}/s/${encodeURIComponent(from)}`;
   const { pathname, search, hash } = window.location;
   if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
@@ -275,7 +256,7 @@ export async function refreshStatus(): Promise<void> {
   }
 }
 
-export async function loadSessions(): Promise<void> {
+async function loadSessions(): Promise<void> {
   if (!available) return;
   try {
     const { sessions } = await request<{ sessions: AgentSessionSummary[] }>('/__agent/sessions');
@@ -290,7 +271,7 @@ export async function loadSessions(): Promise<void> {
   }
 }
 
-export async function loadSession(id: string): Promise<AgentSession | null> {
+async function loadSession(id: string): Promise<AgentSession | null> {
   if (!available) return null;
   try {
     const session = await request<AgentSession>(`/__agent/sessions/${encodeURIComponent(id)}`);
@@ -375,9 +356,6 @@ export async function installProvider(provider: AgentProviderId): Promise<void> 
 
 let autoConnecting: Promise<void> | null = null;
 
-// Installs the SDK for every agent whose CLI is already on this machine, the
-// first time the panel needs one. Agents without a CLI are left for the
-// panel to explain.
 export function autoConnect(): Promise<void> {
   if (autoConnecting) return autoConnecting;
   const status = state.status;
@@ -408,8 +386,6 @@ export function setModelChoice(provider: AgentProviderId, choice: ModelChoice): 
   setState({ modelChoices, provider });
 }
 
-// Falls back to the provider's first model when the remembered one is gone,
-// and drops an effort the chosen model can't take.
 export function resolveModelChoice(
   models: AgentModelOption[],
   choice: ModelChoice | undefined,
@@ -439,19 +415,30 @@ export function requestAgent(req: AgentRequest): void {
 // open; their first message there becomes the brief the agent drafts from.
 let creatingDeck: Promise<void> | null = null;
 
-export function startBlankDeck(): Promise<void> {
+function startBlankDeck(): Promise<void> {
   creatingDeck ??= (async () => {
     const { slideId } = await request<{ slideId: string }>('/__slides', post());
     writeStorage(NEW_DECK_KEY, slideId);
     setActiveSession(null);
     setDockOpen(true);
-    window.location.assign(
-      `${import.meta.env.BASE_URL.replace(/\/$/, '')}/s/${encodeURIComponent(slideId)}`,
-    );
+    window.location.assign(`${basePath()}/s/${encodeURIComponent(slideId)}`);
   })().finally(() => {
     creatingDeck = null;
   });
   return creatingDeck;
+}
+
+export function useCreateDeck(): () => Promise<void> {
+  const t = useLocale();
+  return useCallback(async () => {
+    try {
+      await startBlankDeck();
+    } catch (err) {
+      toast.error(t.agent.toastCreateDeckFailed, {
+        description: err instanceof Error ? err.message : undefined,
+      });
+    }
+  }, [t]);
 }
 
 export function clearNewDeck(): void {
@@ -469,9 +456,7 @@ export function readyProviders(status: AgentStatus | null) {
   return status?.enabled ? status.providers.filter((p) => p.ready) : [];
 }
 
-// Picks the provider the panel should talk to: the remembered choice when
-// it's connected, else the first connected one.
-export function resolveProvider(status: AgentStatus | null, preferred: AgentProviderId) {
+function resolveProvider(status: AgentStatus | null, preferred: AgentProviderId) {
   const ready = readyProviders(status);
   return ready.find((p) => p.id === preferred) ?? ready[0] ?? null;
 }
@@ -487,7 +472,6 @@ export function useAgentStatus() {
   return {
     status: s.status,
     loading: s.status === null && !s.statusError,
-    error: s.statusError,
     enabled: s.status?.enabled ?? false,
     connected: provider !== null,
     provider,
@@ -496,10 +480,6 @@ export function useAgentStatus() {
     effort: choice?.effort ?? null,
     modelChoices: s.modelChoices,
   };
-}
-
-export function useAgentConnected(): boolean {
-  return useAgentStatus().connected;
 }
 
 export function useAgentSessions() {

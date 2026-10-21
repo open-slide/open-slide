@@ -1,3 +1,5 @@
+import type { AgentEffort } from '../agent/types.ts';
+
 export type Plural = { one: string; other: string };
 
 export type Locale = {
@@ -590,13 +592,11 @@ export type Locale = {
     historyOtherDecks: string;
     historyEmptyHint: string;
     sessionRunning: string;
-    switchProvider: string;
     /** template: "Ask {provider} to create or edit slides…" */
     composerPlaceholder: string;
     send: string;
     stop: string;
     working: string;
-    you: string;
     /** template: "Page {n}" */
     contextPage: string;
     contextSelection: string;
@@ -621,7 +621,6 @@ export type Locale = {
     questionSubmit: string;
     questionOther: string;
     questionOtherPlaceholder: string;
-    questionAnswered: string;
     questionCancelled: string;
     permissionTitle: string;
     allow: string;
@@ -676,7 +675,7 @@ export type Locale = {
     modelDefault: string;
     reasoning: string;
     effortAuto: string;
-    efforts: Record<'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max', string>;
+    efforts: Record<AgentEffort, string>;
     /** template: "{provider} is editing" */
     presenceEditing: string;
     presenceThinking: string;

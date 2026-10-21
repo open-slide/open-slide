@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
+import { clamp, cn } from '@/lib/utils';
 
 export function useStoredWidth(key: string, fallback: number, min: number, max: number) {
   const [width, setWidth] = useState<number>(() => {

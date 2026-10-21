@@ -13,14 +13,8 @@ export function findOnPath(command: string, env: NodeJS.ProcessEnv = process.env
     for (const ext of exts) {
       const candidate = path.join(dir, command + ext.toLowerCase());
       try {
-        if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+        if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate;
       } catch {}
-      if (IS_WINDOWS) {
-        const upper = path.join(dir, command + ext);
-        try {
-          if (existsSync(upper) && statSync(upper).isFile()) return upper;
-        } catch {}
-      }
     }
   }
   return null;

@@ -18,14 +18,18 @@ const CLI_INSTALL: Record<AgentProviderId, string> = {
   codex: 'npm install -g @openai/codex',
 };
 
-export function ConnectView({ className }: { className?: string }) {
+function needsCli(p: AgentProviderStatus): boolean {
+  return !p.cliFound && !p.ready;
+}
+
+export function ConnectView() {
   const t = useLocale();
   const { status, loading, enabled } = useAgentStatus();
   const { installing, connectErrors } = useAgentState();
   const [checking, setChecking] = useState(false);
   const providers = status?.providers ?? [];
-  const needCli = providers.length > 0 && providers.every((p) => !p.cliFound && !p.ready);
-  const anyMissing = providers.some((p) => !p.cliFound && !p.ready);
+  const needCli = providers.length > 0 && providers.every(needsCli);
+  const anyMissing = providers.some(needsCli);
 
   const checkAgain = async () => {
     setChecking(true);
@@ -37,7 +41,7 @@ export function ConnectView({ className }: { className?: string }) {
   };
 
   return (
-    <div className={cn('flex flex-col gap-4 px-4 py-5', className)}>
+    <div className="flex flex-col gap-4 px-4 py-5">
       <div>
         <span className="eyebrow">{t.agent.title}</span>
         <h2 className="mt-1.5 font-heading text-[15px] font-semibold tracking-tight">
@@ -111,7 +115,7 @@ function ProviderCard({
   onConnect: () => void;
 }) {
   const t = useLocale();
-  const missing = !provider.cliFound && !provider.ready;
+  const missing = needsCli(provider);
   const cliLabel = provider.cliFound
     ? provider.cliVersion
       ? format(t.agent.cliFound, { version: provider.cliVersion })

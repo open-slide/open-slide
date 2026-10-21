@@ -4,9 +4,8 @@ import { format, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from './provider-logo';
 
-// Sits inside the slide frame while an agent edits it. `revision` changes
-// whenever the deck module reloads, so each write the agent lands sweeps a
-// band of light across the canvas.
+// `revision` changes whenever the deck module reloads, so each write the
+// agent lands sweeps a band of light across the canvas.
 export function AgentPresence({
   activity,
   revision,

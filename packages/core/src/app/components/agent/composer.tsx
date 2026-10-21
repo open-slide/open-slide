@@ -1,6 +1,7 @@
 import { ArrowUp, Square } from 'lucide-react';
-import { type ReactNode, type RefObject, useLayoutEffect } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { Button } from '@/components/ui/button';
+import { useAutoGrow } from '@/lib/use-auto-grow';
 import { useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 
@@ -11,7 +12,6 @@ export function Composer({
   onStop,
   running,
   busy,
-  disabled,
   placeholder,
   chips,
   textareaRef,
@@ -22,21 +22,13 @@ export function Composer({
   onStop: () => void;
   running: boolean;
   busy?: boolean;
-  disabled?: boolean;
   placeholder: string;
   chips?: ReactNode;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
 }) {
   const t = useLocale();
-  const canSend = !running && !busy && !disabled && value.trim().length > 0;
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the text changes
-  useLayoutEffect(() => {
-    const node = textareaRef.current;
-    if (!node) return;
-    node.style.height = '0px';
-    node.style.height = `${Math.min(160, Math.max(40, node.scrollHeight))}px`;
-  }, [value, textareaRef]);
+  const canSend = !running && !busy && value.trim().length > 0;
+  useAutoGrow(textareaRef, value, 160);
 
   return (
     <div className="relative z-10 shrink-0 bg-sidebar px-3 pt-1 pb-3">
@@ -53,7 +45,6 @@ export function Composer({
         <textarea
           ref={textareaRef}
           value={value}
-          disabled={disabled}
           rows={1}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {

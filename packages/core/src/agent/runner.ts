@@ -1,9 +1,15 @@
 import { answersPrompt, buildTurnPrompt, editedPrompt, systemPromptAppend } from './prompt.ts';
 import type { AgentProvider, PermissionRequest, ProviderEvent } from './provider.ts';
 import { newId, type SessionStore, titleFromPrompt } from './store.ts';
-import type { AgentEffort, AgentProviderId, AgentQuestion, AgentTurnContext } from './types.ts';
+import type {
+  AgentEffort,
+  AgentProviderId,
+  AgentQuestion,
+  AgentTurnContext,
+  RespondPayload,
+} from './types.ts';
 
-export type SendOptions = {
+type SendOptions = {
   text: string;
   context?: AgentTurnContext;
   autoApprove?: boolean;
@@ -19,14 +25,14 @@ export type SendOptions = {
 
 export type TurnEnd = { sessionId: string; userItemId: string };
 
-export type RespondPayload =
-  | { answers: Record<string, string> }
-  | { allow: boolean }
-  | { cancel: true };
-
 type PendingPrompt =
   | { kind: 'question'; resolve: (answers: Record<string, string> | null) => void }
   | { kind: 'permission'; resolve: (allow: boolean) => void };
+
+function cancelPrompt(prompt: PendingPrompt): void {
+  if (prompt.kind === 'question') prompt.resolve(null);
+  else prompt.resolve(false);
+}
 
 export type AgentRunner = ReturnType<typeof createAgentRunner>;
 
@@ -107,6 +113,16 @@ export function createAgentRunner(opts: {
     const startedAt = Date.now();
     let resultSeen = false;
 
+    const appendQuestion = (questions: AgentQuestion[]) =>
+      store.appendItem(sessionId, {
+        kind: 'question',
+        id: newId('q'),
+        ts: now(),
+        questions,
+        answers: null,
+        status: 'pending',
+      });
+
     const emit = (event: ProviderEvent) => {
       if (!store.get(sessionId)) return;
       switch (event.type) {
@@ -166,14 +182,7 @@ export function createAgentRunner(opts: {
           });
           return;
         case 'questions':
-          store.appendItem(sessionId, {
-            kind: 'question',
-            id: newId('q'),
-            ts: now(),
-            questions: event.questions,
-            answers: null,
-            status: 'pending',
-          });
+          appendQuestion(event.questions);
           return;
         case 'result':
           resultSeen = true;
@@ -192,14 +201,7 @@ export function createAgentRunner(opts: {
     const askUser = (questions: AgentQuestion[]) =>
       new Promise<Record<string, string> | null>((resolve) => {
         if (controller.signal.aborted) return resolve(null);
-        const item = store.appendItem(sessionId, {
-          kind: 'question',
-          id: newId('q'),
-          ts: now(),
-          questions,
-          answers: null,
-          status: 'pending',
-        });
+        const item = appendQuestion(questions);
         pending.set(item.id, {
           kind: 'question',
           resolve: (answers) => {
@@ -261,7 +263,9 @@ export function createAgentRunner(opts: {
       if (onTurnEnd) {
         void Promise.resolve()
           .then(() => onTurnEnd({ sessionId, userItemId }))
-          .catch(() => {});
+          .catch((err: unknown) => {
+            console.error('[open-slide] agent turn-end handler failed:', err);
+          });
       }
     };
 
@@ -295,9 +299,7 @@ export function createAgentRunner(opts: {
     if (session) {
       for (const item of session.items) {
         const prompt = pending.get(item.id);
-        if (!prompt) continue;
-        if (prompt.kind === 'question') prompt.resolve(null);
-        else prompt.resolve(false);
+        if (prompt) cancelPrompt(prompt);
       }
     }
     controller.abort();
@@ -310,8 +312,7 @@ export function createAgentRunner(opts: {
     const prompt = pending.get(itemId);
     if (!prompt) return answerInNextTurn(sessionId, itemId, payload);
     if ('cancel' in payload) {
-      if (prompt.kind === 'question') prompt.resolve(null);
-      else prompt.resolve(false);
+      cancelPrompt(prompt);
       return true;
     }
     if (prompt.kind === 'question' && 'answers' in payload) {
@@ -343,7 +344,9 @@ export function createAgentRunner(opts: {
       context,
       text: answersPrompt(item.questions, answers),
       answering: itemId,
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      console.error('[open-slide] agent turn failed:', err);
+    });
     return true;
   }
 

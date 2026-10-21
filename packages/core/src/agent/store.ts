@@ -7,7 +7,7 @@ import {
   type AgentProviderId,
   type AgentSession,
   type AgentSessionSummary,
-  type AgentWsEvent,
+  type AgentStreamEvent,
   sessionSummary,
 } from './types.ts';
 
@@ -29,7 +29,7 @@ export function titleFromPrompt(text: string): string {
   return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1)}…` : line;
 }
 
-type Listener = (event: AgentWsEvent) => void;
+type Listener = (event: AgentStreamEvent) => void;
 
 type PersistedShape = { version: 1; sessions: AgentSession[] };
 
@@ -76,7 +76,7 @@ export function createSessionStore(opts: { file: string | null }) {
     }
   }
 
-  const emit = (event: AgentWsEvent) => {
+  const emit = (event: AgentStreamEvent) => {
     for (const l of listeners) l(event);
   };
 
@@ -99,7 +99,8 @@ export function createSessionStore(opts: { file: string | null }) {
       await fs.mkdir(path.dirname(file), { recursive: true });
       await fs.writeFile(tmp, JSON.stringify(body), { encoding: 'utf8', mode: 0o600 });
       await fs.rename(tmp, file);
-    } catch {
+    } catch (err) {
+      console.error('[open-slide] failed to save agent sessions:', err);
       await fs.rm(tmp, { force: true }).catch(() => {});
     }
   };

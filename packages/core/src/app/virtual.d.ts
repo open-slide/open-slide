@@ -20,7 +20,6 @@ declare module 'virtual:open-slide/config' {
       showSlideUi: boolean;
       allowHtmlDownload: boolean;
     };
-    agent?: { enabled?: boolean };
   };
   export default config;
 }

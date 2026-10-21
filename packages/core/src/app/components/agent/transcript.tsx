@@ -1,11 +1,11 @@
 import { Check, ChevronRight, CircleAlert, Copy, Pencil } from 'lucide-react';
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import type { AgentItem, AgentSession, RespondPayload } from '@/lib/agent/use-agent';
+import { useAutoGrow } from '@/lib/use-auto-grow';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import { stripDeckSlug } from '../../../agent/prompt';
-import type { AgentQuestion } from '../../../agent/types';
+import type { AgentItem, AgentQuestion, AgentSession, RespondPayload } from '../../../agent/types';
 import { AgentMarkdown } from './agent-markdown';
 
 export function Transcript({
@@ -245,17 +245,11 @@ function UserEditor({
 }) {
   const t = useLocale();
   const [value, setValue] = useState(text);
-  const [busy, setBusy] = useState(false);
+  const [busy, runBusy] = useBusy();
   const ref = useRef<HTMLTextAreaElement>(null);
   const canSend = !running && !busy && value.trim().length > 0 && value.trim() !== text.trim();
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the text changes
-  useLayoutEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    node.style.height = '0px';
-    node.style.height = `${Math.min(200, Math.max(40, node.scrollHeight))}px`;
-  }, [value]);
+  useAutoGrow(ref, value, 200);
 
   useEffect(() => {
     const node = ref.current;
@@ -266,12 +260,7 @@ function UserEditor({
 
   const submit = async () => {
     if (!canSend) return;
-    setBusy(true);
-    try {
-      await onSend(value.trim());
-    } finally {
-      setBusy(false);
-    }
+    await runBusy(() => onSend(value.trim()));
   };
 
   return (
@@ -311,6 +300,19 @@ function UserEditor({
       </div>
     </div>
   );
+}
+
+function useBusy() {
+  const [busy, setBusy] = useState(false);
+  const run = async (task: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await task();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return [busy, run] as const;
 }
 
 type ToolEntry = Extract<AgentItem, { kind: 'tool' }>;
@@ -435,15 +437,8 @@ function PermissionItem({
   onRespond: (payload: RespondPayload) => Promise<void>;
 }) {
   const t = useLocale();
-  const [busy, setBusy] = useState(false);
-  const decide = async (allow: boolean) => {
-    setBusy(true);
-    try {
-      await onRespond({ allow });
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [busy, runBusy] = useBusy();
+  const decide = (allow: boolean) => runBusy(() => onRespond({ allow }));
 
   if (item.status !== 'pending') {
     return (
@@ -494,7 +489,7 @@ function QuestionItem({
   const t = useLocale();
   const [picked, setPicked] = useState<Record<string, string[]>>({});
   const [other, setOther] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
+  const [busy, runBusy] = useBusy();
 
   const answerFor = (q: AgentQuestion): string | null => {
     const custom = other[q.question]?.trim();
@@ -504,14 +499,7 @@ function QuestionItem({
   };
   const complete = item.questions.every((q) => answerFor(q) !== null);
 
-  const reply = async (payload: RespondPayload) => {
-    setBusy(true);
-    try {
-      await onRespond(payload);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const reply = (payload: RespondPayload) => runBusy(() => onRespond(payload));
   const submit = () => {
     const answers: Record<string, string> = {};
     for (const q of item.questions) answers[q.question] = answerFor(q) ?? '';

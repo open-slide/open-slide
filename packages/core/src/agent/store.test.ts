@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSessionStore, titleFromPrompt } from './store.ts';
-import type { AgentWsEvent } from './types.ts';
+import type { AgentStreamEvent } from './types.ts';
 
 let dir: string;
 
@@ -26,7 +26,7 @@ describe('titleFromPrompt', () => {
 describe('createSessionStore', () => {
   it('creates, lists newest-first and streams events', () => {
     const store = createSessionStore({ file: null });
-    const events: AgentWsEvent[] = [];
+    const events: AgentStreamEvent[] = [];
     store.subscribe((e) => events.push(e));
 
     const a = store.create('claude', null);

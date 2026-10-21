@@ -39,18 +39,17 @@ export function HistoryView({
 }) {
   const t = useLocale();
   const groups = useMemo(() => {
-    const sorted = [...sessions].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    if (!slideId) return [{ id: 'all', label: null, items: sorted }];
+    if (!slideId) return [{ id: 'all', label: null, items: sessions }];
     return [
       {
         id: 'here',
         label: t.agent.historyThisDeck,
-        items: sorted.filter((s) => s.slideId === slideId),
+        items: sessions.filter((s) => s.slideId === slideId),
       },
       {
         id: 'other',
         label: t.agent.historyOtherDecks,
-        items: sorted.filter((s) => s.slideId !== slideId),
+        items: sessions.filter((s) => s.slideId !== slideId),
       },
     ].filter((g) => g.items.length > 0);
   }, [sessions, slideId, t]);

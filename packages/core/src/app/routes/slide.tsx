@@ -140,8 +140,7 @@ export function Slide() {
   const [designOpen, setDesignOpen] = useState(false);
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  const { open: agentOpen } = useAgentDock();
-  // Agent and Design share the sidebar, so opening one closes the other.
+  const { open: agentOpen, toggle: toggleAgent } = useAgentDock();
   useLayoutEffect(() => {
     if (agentOpen) setDesignOpen(false);
   }, [agentOpen]);
@@ -378,12 +377,12 @@ export function Slide() {
       } else if (import.meta.env.DEV && (e.key === 'd' || e.key === 'D')) {
         setDesignOpen((v) => !v);
       } else if (import.meta.env.DEV && (e.key === 'a' || e.key === 'A')) {
-        setDockOpen(!agentOpen);
+        toggleAgent();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [index, goTo, playMode, slideId, overviewOpen, agentOpen]);
+  }, [index, goTo, playMode, slideId, overviewOpen, toggleAgent]);
 
   if (error) {
     return (
@@ -771,7 +770,7 @@ export function Slide() {
                     )}
                     <DropdownMenuGroup>
                       {narrowToolbar && import.meta.env.DEV && (
-                        <DropdownMenuItem onClick={() => setDockOpen(!agentOpen)}>
+                        <DropdownMenuItem onClick={toggleAgent}>
                           <Sparkles />
                           {t.agent.openTitle}
                         </DropdownMenuItem>
@@ -967,7 +966,7 @@ export function Slide() {
                 onCopyLink: copyLink,
                 onOverview: () => setOverviewOpen(true),
                 onToggleDesignPanel: () => setDesignOpen((v) => !v),
-                onToggleAgentPanel: () => setDockOpen(!agentOpen),
+                onToggleAgentPanel: toggleAgent,
                 onExportHtml: exportHtml,
                 onExportPdf: exportPdf,
                 onExportPptx: exportPptx,

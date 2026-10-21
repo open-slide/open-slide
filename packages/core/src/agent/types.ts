@@ -1,8 +1,18 @@
-export type AgentProviderId = 'claude' | 'codex';
+export const AGENT_PROVIDER_IDS = ['claude', 'codex'] as const;
+
+export type AgentProviderId = (typeof AGENT_PROVIDER_IDS)[number];
 
 export const AGENT_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 
 export type AgentEffort = (typeof AGENT_EFFORTS)[number];
+
+export function isAgentProviderId(value: unknown): value is AgentProviderId {
+  return typeof value === 'string' && (AGENT_PROVIDER_IDS as readonly string[]).includes(value);
+}
+
+export function isAgentEffort(value: unknown): value is AgentEffort {
+  return typeof value === 'string' && (AGENT_EFFORTS as readonly string[]).includes(value);
+}
 
 export type AgentModelOption = {
   // Empty when the option stands for the CLI's own default model.
@@ -15,7 +25,6 @@ export type AgentProviderStatus = {
   id: AgentProviderId;
   name: string;
   sdkPackage: string;
-  sdkInstalled: boolean;
   sdkVersion: string | null;
   cliCommand: string;
   cliFound: boolean;
@@ -30,7 +39,7 @@ export type AgentStatus = {
   providers: AgentProviderStatus[];
 };
 
-export type AgentQuestionOption = { label: string; description?: string };
+type AgentQuestionOption = { label: string; description?: string };
 
 export type AgentQuestion = {
   header: string;
@@ -87,7 +96,7 @@ export type AgentItem =
       aborted: boolean;
     };
 
-export type AgentSessionStatus = 'idle' | 'running';
+type AgentSessionStatus = 'idle' | 'running';
 
 export type AgentSessionSummary = {
   id: string;
@@ -115,7 +124,12 @@ export type AgentTurnContext = {
   newDeck?: boolean;
 };
 
-export type AgentWsEvent =
+export type RespondPayload =
+  | { answers: Record<string, string> }
+  | { allow: boolean }
+  | { cancel: true };
+
+export type AgentStreamEvent =
   | { type: 'session'; session: AgentSessionSummary }
   | { type: 'session-removed'; sessionId: string }
   | { type: 'item'; sessionId: string; item: AgentItem }

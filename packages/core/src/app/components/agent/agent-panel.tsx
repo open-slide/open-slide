@@ -17,15 +17,11 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
-  type AgentEffort,
-  type AgentModelOption,
-  type AgentProviderId,
   autoConnect,
   clearNewDeck,
   consumeRequest,
   createSession,
   deleteSession,
-  type RespondPayload,
   readyProviders,
   resolveModelChoice,
   respond,
@@ -33,17 +29,23 @@ import {
   setActiveSession,
   setAutoApprove,
   setModelChoice,
-  startBlankDeck,
   stopSession,
   useAgentSession,
   useAgentSessions,
   useAgentState,
   useAgentStatus,
+  useCreateDeck,
 } from '@/lib/agent/use-agent';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import { applyCommentsPrompt } from '../../../agent/prompt';
-import type { AgentTurnContext } from '../../../agent/types';
+import type {
+  AgentEffort,
+  AgentModelOption,
+  AgentProviderId,
+  AgentTurnContext,
+  RespondPayload,
+} from '../../../agent/types';
 import { Composer, ContextChip } from './composer';
 import { ConnectView } from './connect-view';
 import { HistoryView } from './history-view';
@@ -56,11 +58,9 @@ const CREATE_THEME_PROMPT =
 export function AgentPanel({
   context,
   onClose,
-  className,
 }: {
-  context?: AgentTurnContext;
-  onClose?: () => void;
-  className?: string;
+  context: AgentTurnContext;
+  onClose: () => void;
 }) {
   const t = useLocale();
   const { status, loading, connected, provider, model, effort, modelChoices } = useAgentStatus();
@@ -87,7 +87,7 @@ export function AgentPanel({
   // Arriving at another deck starts a new conversation; the previous one stays
   // in history. Picking a chat from history navigates to its own deck, so it
   // survives this check.
-  const slideId = context?.slideId ?? null;
+  const slideId = context.slideId ?? null;
   const checkedSlideRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (!sessionsLoaded || checkedSlideRef.current === slideId) return;
@@ -95,7 +95,7 @@ export function AgentPanel({
     const active = activeId ? sessions.find((s) => s.id === activeId) : null;
     if (active?.slideId && active.slideId !== slideId) setActiveSession(null);
   }, [slideId, sessionsLoaded, activeId, sessions]);
-  const isNewDeck = Boolean(context?.slideId) && newDeck === context?.slideId;
+  const isNewDeck = Boolean(context.slideId) && newDeck === context.slideId;
 
   const ensureSession = useCallback(
     async (fresh: boolean) => {
@@ -104,7 +104,7 @@ export function AgentPanel({
       if (!fresh && current && current.status !== 'running' && current.provider === provider.id) {
         return current.id;
       }
-      const created = await createSession(provider.id, contextRef.current?.slideId ?? null);
+      const created = await createSession(provider.id, contextRef.current.slideId ?? null);
       return created.id;
     },
     [activeId, sessions, provider],
@@ -137,15 +137,7 @@ export function AgentPanel({
     [ensureSession, isNewDeck, t],
   );
 
-  const createDeck = useCallback(async () => {
-    try {
-      await startBlankDeck();
-    } catch (err) {
-      toast.error(t.agent.toastCreateDeckFailed, {
-        description: err instanceof Error ? err.message : undefined,
-      });
-    }
-  }, [t]);
+  const createDeck = useCreateDeck();
 
   useEffect(() => {
     if (isNewDeck && connected) textareaRef.current?.focus();
@@ -156,11 +148,7 @@ export function AgentPanel({
     const req = consumeRequest();
     if (!req) return;
     setManage(false);
-    if (req.send) void send(req.text, req.newSession);
-    else {
-      setDraft(req.text);
-      queueMicrotask(() => textareaRef.current?.focus());
-    }
+    void send(req.text);
   }, [request, loading, connected, send]);
 
   const onRespond = useCallback(
@@ -190,9 +178,9 @@ export function AgentPanel({
     [session, t],
   );
 
-  const pendingComments = context?.pendingComments ?? 0;
+  const pendingComments = context.pendingComments ?? 0;
 
-  const chips: ReactNode = context?.slideId ? (
+  const chips: ReactNode = context.slideId ? (
     <>
       <ContextChip title={context.slideId}>
         {context.slideTitle ?? context.slideId}
@@ -219,7 +207,7 @@ export function AgentPanel({
   return (
     <div
       data-agent-provider={provider?.id}
-      className={cn('relative flex h-full min-h-0 flex-col bg-sidebar', className)}
+      className="relative flex h-full min-h-0 flex-col bg-sidebar"
     >
       {running && <span aria-hidden className="agent-progress z-10" />}
       <header className="relative z-10 flex h-9 shrink-0 items-center justify-between gap-1 bg-sidebar px-2">
@@ -279,17 +267,15 @@ export function AgentPanel({
               </Button>
             </>
           )}
-          {onClose && (
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label={t.agent.close}
-              title={t.agent.close}
-              onClick={onClose}
-            >
-              <X className="size-3.5" />
-            </Button>
-          )}
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={t.agent.close}
+            title={t.agent.close}
+            onClick={onClose}
+          >
+            <X className="size-3.5" />
+          </Button>
         </div>
       </header>
 
@@ -303,11 +289,11 @@ export function AgentPanel({
         <HistoryView
           sessions={sessions}
           activeId={activeId}
-          slideId={context?.slideId ?? null}
+          slideId={context.slideId ?? null}
           onSelect={(s) => {
             setActiveSession(s.id);
             setView('chat');
-            if (s.slideId && s.slideId !== context?.slideId) navigate(`/s/${s.slideId}`);
+            if (s.slideId && s.slideId !== context.slideId) navigate(`/s/${s.slideId}`);
           }}
           onDelete={async (id) => {
             try {
@@ -326,9 +312,9 @@ export function AgentPanel({
           ) : (
             <EmptyState
               pendingComments={pendingComments}
-              hasSlide={Boolean(context?.slideId)}
+              hasSlide={Boolean(context.slideId)}
               onCreate={createDeck}
-              onApply={() => context?.slideId && send(applyCommentsPrompt(context.slideId))}
+              onApply={() => context.slideId && send(applyCommentsPrompt(context.slideId))}
               onTheme={() => send(CREATE_THEME_PROMPT, true)}
               onEdit={() => textareaRef.current?.focus()}
             />
@@ -337,7 +323,12 @@ export function AgentPanel({
             value={draft}
             onChange={setDraft}
             onSend={() => send(draft)}
-            onStop={() => session && stopSession(session.id).catch(() => {})}
+            onStop={() =>
+              session &&
+              stopSession(session.id).catch((err) => {
+                toast.error(err instanceof Error ? err.message : String(err));
+              })
+            }
             running={Boolean(running)}
             busy={sending}
             placeholder={

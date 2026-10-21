@@ -31,7 +31,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { startBlankDeck, useAgentStatus } from '@/lib/agent/use-agent';
+import { useAgentStatus, useCreateDeck } from '@/lib/agent/use-agent';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
 import { ProviderLogo } from '../components/agent/provider-logo';
@@ -323,24 +323,11 @@ function SortControl({ value, onChange }: { value: SortKey; onChange: (next: Sor
   );
 }
 
-// Only shows once an agent is connected; without one the empty state keeps
-// pointing at the terminal workflow.
 function useCreateDeckWithAgent() {
-  const t = useLocale();
-  const { connected, provider } = useAgentStatus();
-  if (!provider || !connected) return null;
-  return {
-    provider,
-    start: async () => {
-      try {
-        await startBlankDeck();
-      } catch (err) {
-        toast.error(t.agent.toastCreateDeckFailed, {
-          description: err instanceof Error ? err.message : undefined,
-        });
-      }
-    },
-  };
+  const { provider } = useAgentStatus();
+  const start = useCreateDeck();
+  if (!provider) return null;
+  return { provider, start };
 }
 
 function NewDeckButton() {

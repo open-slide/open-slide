@@ -5,7 +5,6 @@ type ProviderStatus = {
   id: string;
   name: string;
   sdkPackage: string;
-  sdkInstalled: boolean;
   sdkVersion?: string | null;
   cliCommand: string;
   cliFound: boolean;
@@ -42,7 +41,7 @@ test.describe('agent panel', () => {
     const claude = body.providers[0];
     expect(claude.sdkPackage).toBe('@anthropic-ai/claude-agent-sdk');
     expect(claude.cliCommand).toBe('claude');
-    expect(claude.ready).toBe(claude.sdkInstalled);
+    expect(typeof claude.ready).toBe('boolean');
   });
 
   test('sessions can be created, listed, read and deleted', async ({ request }) => {
@@ -124,7 +123,7 @@ test.describe('agent panel', () => {
   });
 
   test('the panel asks for a CLI when neither agent is installed', async ({ page }) => {
-    await mockStatus(page, () => ({ cliFound: false, sdkInstalled: false }));
+    await mockStatus(page, () => ({ cliFound: false, ready: false }));
     let installs = 0;
     await page.route('**/__agent/install', (route) => {
       installs += 1;
@@ -155,8 +154,8 @@ test.describe('agent panel', () => {
     const requested: string[] = [];
     await mockStatus(page, (p) =>
       p.id === 'claude'
-        ? { cliFound: true, sdkInstalled: installed, ready: installed, sdkVersion: '0.0.0' }
-        : { cliFound: false, sdkInstalled: false },
+        ? { cliFound: true, ready: installed, sdkVersion: '0.0.0' }
+        : { cliFound: false, ready: false },
     );
     await page.route('**/__agent/install', async (route) => {
       requested.push(route.request().postDataJSON().provider);
@@ -174,8 +173,8 @@ test.describe('agent panel', () => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await mockStatus(page, (p) =>
       p.id === 'claude'
-        ? { cliFound: true, sdkInstalled: true, ready: true, sdkVersion: '0.0.0' }
-        : { cliFound: false, sdkInstalled: false },
+        ? { cliFound: true, ready: true, sdkVersion: '0.0.0' }
+        : { cliFound: false, ready: false },
     );
     const ts = new Date().toISOString();
     const session = {
@@ -255,8 +254,8 @@ test.describe('agent panel', () => {
   test('opening the panel on another deck starts a new conversation', async ({ page }) => {
     await mockStatus(page, (p) =>
       p.id === 'claude'
-        ? { cliFound: true, sdkInstalled: true, ready: true, sdkVersion: '0.0.0' }
-        : { cliFound: false, sdkInstalled: false },
+        ? { cliFound: true, ready: true, sdkVersion: '0.0.0' }
+        : { cliFound: false, ready: false },
     );
     const ts = new Date().toISOString();
     const session = {
@@ -308,9 +307,7 @@ test.describe('agent panel', () => {
         json: {
           ...status,
           providers: status.providers.map((p) =>
-            p.id === 'claude'
-              ? { ...p, sdkInstalled: true, ready: true }
-              : { ...p, cliFound: false },
+            p.id === 'claude' ? { ...p, ready: true } : { ...p, cliFound: false },
           ),
         },
       }),

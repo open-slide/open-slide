@@ -194,10 +194,10 @@ export async function duplicateSlideDir(
 
 export const BLANK_SLIDE_TITLE = 'Untitled';
 
-export function blankSlideSource(title: string = BLANK_SLIDE_TITLE): string {
+function blankSlideSource(): string {
   return `import type { Page, SlideMeta } from '@open-slide/core';
 
-export const meta: SlideMeta = { title: ${JSON.stringify(title)} };
+export const meta: SlideMeta = { title: ${JSON.stringify(BLANK_SLIDE_TITLE)} };
 
 const Blank: Page = () => <div style={{ width: '100%', height: '100%', background: '#ffffff' }} />;
 

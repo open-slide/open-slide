@@ -121,19 +121,24 @@ function formatCommand(spec: CommandSpec): string {
   return [spec.cmd, ...spec.args].join(' ');
 }
 
-async function runCommand(spec: CommandSpec, cwd: string): Promise<void> {
+export async function runCommand(
+  spec: CommandSpec,
+  cwd: string,
+  timeoutMs = COMMAND_TIMEOUT_MS,
+): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(spec.cmd, spec.args, {
       cwd,
       env: process.env,
       shell: process.platform === 'win32',
       stdio: ['ignore', 'ignore', 'pipe'],
+      windowsHide: true,
     });
     let stderr = '';
     const timer = setTimeout(() => {
       child.kill();
       reject(new Error(`${formatCommand(spec)} timed out`));
-    }, COMMAND_TIMEOUT_MS);
+    }, timeoutMs);
 
     child.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString('utf8');

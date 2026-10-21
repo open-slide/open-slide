@@ -58,22 +58,22 @@ export function EditorSidebar({
   const [lastMode, setLastMode] = useState<Mode>('format');
   if (mode && mode !== lastMode) setLastMode(mode);
   const shown = mode ?? lastMode;
+  const isAgent = shown === 'agent';
   const [lastEditor, setLastEditor] = useState<'format' | 'design'>('format');
-  if (shown !== 'agent' && shown !== lastEditor) setLastEditor(shown);
+  if (!isAgent && shown !== lastEditor) setLastEditor(shown);
   const [agentMounted, setAgentMounted] = useState(false);
-  if (shown === 'agent' && !agentMounted) setAgentMounted(true);
+  if (isAgent && !agentMounted) setAgentMounted(true);
   const open = mode !== null;
   const { mounted, animVisible } = usePanelMount(open);
 
   if (!mounted) return null;
 
-  const isAgent = shown === 'agent';
   const width = isAgent ? agentWidth : editorWidth;
 
   return (
     <div
       data-editor-sidebar
-      data-agent-dock={shown === 'agent' ? '' : undefined}
+      data-agent-dock={isAgent ? '' : undefined}
       inert={!open}
       aria-hidden={!open}
       className="relative flex h-full max-h-1/2 shrink-0 justify-end overflow-hidden bg-sidebar transition-[width] ease-swift motion-reduce:transition-none md:max-h-none"

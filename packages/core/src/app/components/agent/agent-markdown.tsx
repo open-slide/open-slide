@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { NoteMarkdown } from '@/components/note-markdown';
 
-type Segment = { type: 'text'; text: string } | { type: 'code'; lang: string; code: string };
+type Segment = { type: 'text'; text: string } | { type: 'code'; code: string };
 
-const FENCE = /^```([\w+-]*)[^\n]*\n([\s\S]*?)\n?```\s*$/m;
+const FENCE = /^```[^\n]*\n([\s\S]*?)\n?```\s*$/m;
 
-export function splitFences(text: string): Segment[] {
+function splitFences(text: string): Segment[] {
   const segments: Segment[] = [];
   let rest = text;
   while (rest) {
@@ -16,7 +16,7 @@ export function splitFences(text: string): Segment[] {
     }
     const before = rest.slice(0, m.index);
     if (before.trim()) segments.push({ type: 'text', text: before });
-    segments.push({ type: 'code', lang: m[1], code: m[2] });
+    segments.push({ type: 'code', code: m[1] });
     rest = rest.slice(m.index + m[0].length);
   }
   return segments;
