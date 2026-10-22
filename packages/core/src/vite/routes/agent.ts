@@ -232,7 +232,9 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
         });
         res.write(': connected\n\n');
         streams.add(res);
-        req.on('close', () => streams.delete(res));
+        const drop = () => streams.delete(res);
+        res.on('close', drop);
+        res.on('error', drop);
         return;
       }
 

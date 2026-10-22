@@ -185,6 +185,7 @@ export function createClaudeProvider(): AgentProvider {
       if (!sdk || typeof sdk.query !== 'function') throw new ProviderUnavailableError(this);
 
       const mapper = createClaudeMapper(opts.emit, opts.cwd);
+      if (opts.signal.aborted) return;
       const abortController = new AbortController();
       opts.signal.addEventListener('abort', () => abortController.abort(), { once: true });
 
