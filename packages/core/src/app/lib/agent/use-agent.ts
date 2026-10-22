@@ -221,7 +221,10 @@ function followSlideRename(from: string, to: string) {
   if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
     const rest = pathname.slice(prefix.length);
     window.location.replace(`${base}/s/${encodeURIComponent(to)}${rest}${search}${hash}`);
-  } else {
+  } else if (!pathname.startsWith(`${base}/s/`)) {
+    // The slide list is baked into the bundle, so pages listing decks reload
+    // to pick up the new id. Another deck's page may hold unsaved edits, so it
+    // is left alone and catches up on its next load.
     window.location.reload();
   }
 }
@@ -304,25 +307,26 @@ export async function deleteSession(id: string): Promise<void> {
   applyEvent({ type: 'session-removed', sessionId: id });
 }
 
+function turnSettings(id: string) {
+  const provider = state.full[id]?.provider ?? state.provider;
+  const status = state.status?.providers.find((p) => p.id === provider);
+  const choice = status ? resolveModelChoice(status.models, state.modelChoices[provider]) : null;
+  return {
+    autoApprove: state.autoApprove,
+    model: choice?.model.id || null,
+    effort: choice?.effort ?? null,
+  };
+}
+
 export async function sendMessage(
   id: string,
   text: string,
   context: AgentTurnContext | undefined,
   edit?: string,
 ): Promise<void> {
-  const provider = state.full[id]?.provider ?? state.provider;
-  const status = state.status?.providers.find((p) => p.id === provider);
-  const choice = status ? resolveModelChoice(status.models, state.modelChoices[provider]) : null;
   await request(
     `/__agent/sessions/${encodeURIComponent(id)}/messages`,
-    post({
-      text,
-      context,
-      autoApprove: state.autoApprove,
-      model: choice?.model.id || null,
-      effort: choice?.effort ?? null,
-      edit,
-    }),
+    post({ text, context, ...turnSettings(id), edit }),
   );
 }
 
@@ -330,10 +334,17 @@ export async function stopSession(id: string): Promise<void> {
   await request(`/__agent/sessions/${encodeURIComponent(id)}/stop`, post());
 }
 
-export async function respond(id: string, itemId: string, payload: RespondPayload): Promise<void> {
+// Answers to questions that ended the turn start the next one, so they carry
+// the same settings and context a new message would.
+export async function respond(
+  id: string,
+  itemId: string,
+  payload: RespondPayload,
+  context: AgentTurnContext | undefined,
+): Promise<void> {
   await request(
     `/__agent/sessions/${encodeURIComponent(id)}/respond`,
-    post({ itemId, ...payload }),
+    post({ itemId, ...payload, context, ...turnSettings(id) }),
   );
 }
 

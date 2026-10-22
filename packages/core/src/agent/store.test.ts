@@ -137,4 +137,17 @@ describe('createSessionStore', () => {
     expect(store.remove(first.id)).toBe(false);
     expect(store.get(first.id)).toBeNull();
   });
+
+  it('drops the oldest items past the cap and marks the session trimmed', () => {
+    const store = createSessionStore({ file: null });
+    const s = store.create('claude', null);
+    for (let i = 0; i < 401; i++) {
+      store.appendItem(s.id, { kind: 'error', id: `e${i}`, ts: '', text: String(i) });
+    }
+    const after = store.get(s.id);
+    expect(after?.items).toHaveLength(400);
+    expect(after?.items[0]?.id).toBe('e1');
+    expect(after?.trimmed).toBe(true);
+    expect(store.list()[0]).not.toHaveProperty('trimmed');
+  });
 });

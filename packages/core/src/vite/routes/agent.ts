@@ -4,7 +4,12 @@ import path from 'node:path';
 import type { ViteDevServer } from 'vite';
 import { extractDeckSlug, stripDeckSlug } from '../../agent/prompt.ts';
 import { createProviders } from '../../agent/providers/index.ts';
-import { type AgentRunner, createAgentRunner, type TurnEnd } from '../../agent/runner.ts';
+import {
+  type AgentRunner,
+  createAgentRunner,
+  type TurnEnd,
+  type TurnSettings,
+} from '../../agent/runner.ts';
 import { agentStatus, installSdk } from '../../agent/status.ts';
 import { createSessionStore, type SessionStore } from '../../agent/store.ts';
 import {
@@ -38,7 +43,7 @@ import { detectPackageManager } from './update.ts';
 // DELETE /__agent/sessions/:id                → { ok }
 // POST   /__agent/sessions/:id/messages       { text, context?, autoApprove?, model?, effort?, edit? } → { ok }
 // POST   /__agent/sessions/:id/stop           → { ok }
-// POST   /__agent/sessions/:id/respond        { itemId, answers? | allow? | cancel? } → { ok }
+// POST   /__agent/sessions/:id/respond        { itemId, answers? | allow? | cancel?, context?, autoApprove?, model?, effort? } → { ok }
 // GET    /__agent/events                      → server-sent turn progress
 
 function parseContext(raw: unknown): AgentTurnContext | undefined {
@@ -116,6 +121,9 @@ async function renamePlaceholderDeck(
   const desired = slugifyTitle(marked ?? '') || slugifyTitle(meta.title);
   if (!desired || UNTITLED_SLIDE_ID_RE.test(desired)) return;
 
+  // A new turn may have started while the file was read; it must not lose the
+  // folder it is writing into.
+  if (store.list().some((s) => s.slideId === slideId && s.status === 'running')) return;
   recordWrite(entry);
   const renamed = await renameSlideDir(ctx.slidesRoot, slideId, desired);
   if (!renamed.ok) return;
@@ -148,6 +156,16 @@ function parseRespond(raw: unknown): RespondPayload | null {
     return { answers };
   }
   return null;
+}
+
+function parseTurnSettings(raw: Record<string, unknown>): TurnSettings {
+  const settings: TurnSettings = {};
+  const context = parseContext(raw.context);
+  if (context) settings.context = context;
+  if (typeof raw.autoApprove === 'boolean') settings.autoApprove = raw.autoApprove;
+  if ('model' in raw) settings.model = parseModel(raw.model);
+  if ('effort' in raw) settings.effort = isAgentEffort(raw.effort) ? raw.effort : null;
+  return settings;
 }
 
 const AGENT_BODY_LIMIT = 1024 * 1024;
@@ -287,6 +305,12 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
             return json(res, 400, { error: 'missing text' });
           }
           if (runner.isRunning(id)) return json(res, 409, { error: 'session is already running' });
+          if (
+            body.edit !== undefined &&
+            !session.items.some((i) => i.id === body.edit && i.kind === 'user')
+          ) {
+            return json(res, 400, { error: 'unknown message' });
+          }
           await runner.send(id, {
             text: body.text,
             context: parseContext(body.context),
@@ -307,12 +331,12 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
         if (method === 'POST' && action === 'respond') {
           const guard = validateMutationRequest(req, { requireJsonBody: true });
           if (!guard.ok) return json(res, guard.status, { error: guard.error });
-          const body = (await readBody(req, AGENT_BODY_LIMIT)) as { itemId?: unknown };
+          const body = (await readBody(req, AGENT_BODY_LIMIT)) as Record<string, unknown>;
           const payload = parseRespond(body);
           if (typeof body.itemId !== 'string' || !payload) {
             return json(res, 400, { error: 'invalid response' });
           }
-          const ok = runner.respond(id, body.itemId, payload);
+          const ok = runner.respond(id, body.itemId, payload, parseTurnSettings(body));
           return json(res, ok ? 200 : 409, ok ? { ok } : { error: 'nothing pending' });
         }
       }

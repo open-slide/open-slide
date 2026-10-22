@@ -205,6 +205,32 @@ describe('createAgentRunner', () => {
     expect(runner.respond(session.id, question.id, { cancel: true })).toBe(false);
   });
 
+  it('runs the answer turn with the settings the panel sends along', async () => {
+    const captured: ProviderRunOptions[] = [];
+    const { store, runner } = setup(async (opts) => {
+      captured.push(opts);
+      if (captured.length === 1) {
+        opts.emit({
+          type: 'questions',
+          questions: [{ header: 'Pages', question: 'How many?', options: [], multiSelect: false }],
+        });
+      }
+    });
+    const session = store.create('codex', null);
+    await runner.send(session.id, { text: 'new deck', model: 'gpt-x', effort: 'low' });
+    await settle();
+    const question = itemOf(store, session.id, 'question');
+    runner.respond(
+      session.id,
+      question.id,
+      { answers: { 'How many?': '6' } },
+      { model: 'gpt-y', context: { slideId: 'deck' } },
+    );
+    await settle();
+    expect(captured[1]).toMatchObject({ model: 'gpt-y', effort: 'low' });
+    expect(captured[1].prompt).toContain('slides/deck/index.tsx');
+  });
+
   it('drops an unanswered question when the user sends a new message', async () => {
     const { store, runner } = setup(async (opts) => {
       opts.emit({
@@ -321,7 +347,9 @@ describe('createAgentRunner', () => {
       const { runs, store, runner, sessionId, users } = await prime(true);
       await runner.send(sessionId, { text: 'two, edited', edit: users[1].id });
       await settle();
-      expect(runs[2]).toMatchObject({ resume: 'native-1', resumeAt: 'c1', prompt: 'two, edited' });
+      expect(runs[2]).toMatchObject({ resume: 'native-1', resumeAt: 'c1' });
+      expect(runs[2]?.prompt.startsWith('two, edited')).toBe(true);
+      expect(runs[2]?.prompt).toContain('read the current files');
       const items = sessionOf(store, sessionId).items;
       expect(items.filter((i) => i.kind === 'user').map((i) => i.text)).toEqual([
         'one',
@@ -342,6 +370,14 @@ describe('createAgentRunner', () => {
       const after = sessionOf(store, sessionId);
       expect(after.title).toBe('uno');
       expect(after.items.map((i) => i.kind)).toEqual(['user', 'assistant', 'result']);
+    });
+
+    it('keeps the provider history when the oldest message left was trimmed', async () => {
+      const { runs, store, runner, sessionId, users } = await prime(true);
+      sessionOf(store, sessionId).trimmed = true;
+      await runner.send(sessionId, { text: 'uno', edit: users[0].id });
+      await settle();
+      expect(runs[2]?.resume).toBe('native-1');
     });
 
     it('tells an agent that cannot rewind to set the old reply aside', async () => {

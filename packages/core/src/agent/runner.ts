@@ -1,4 +1,10 @@
-import { answersPrompt, buildTurnPrompt, editedPrompt, systemPromptAppend } from './prompt.ts';
+import {
+  answersPrompt,
+  buildTurnPrompt,
+  editedPrompt,
+  rewoundPrompt,
+  systemPromptAppend,
+} from './prompt.ts';
 import type { AgentProvider, PermissionRequest, ProviderEvent } from './provider.ts';
 import { newId, type SessionStore, titleFromPrompt } from './store.ts';
 import type {
@@ -22,6 +28,10 @@ type SendOptions = {
   // turn runs again from there with the new text.
   edit?: string;
 };
+
+export type TurnSettings = Partial<
+  Pick<SendOptions, 'context' | 'autoApprove' | 'model' | 'effort'>
+>;
 
 export type TurnEnd = { sessionId: string; userItemId: string };
 
@@ -69,13 +79,17 @@ export function createAgentRunner(opts: {
       const index = session.items.findIndex((i) => i.id === options.edit);
       const target = session.items[index];
       if (target?.kind !== 'user') throw new Error('unknown message');
-      const first = !session.items.slice(0, index).some((i) => i.kind === 'user');
+      // Once old items were trimmed, the oldest message left is not where the
+      // provider's history starts, so it can't restart from scratch.
+      const first =
+        !session.trimmed && !session.items.slice(0, index).some((i) => i.kind === 'user');
       if (first) {
         store.patch(sessionId, { providerSessionId: null, providerCheckpoint: null });
         if (target.newDeck && context) context = { ...context, newDeck: true };
       } else if (provider.canRewind && target.resumeAt) {
         resumeAt = target.resumeAt;
         store.patch(sessionId, { providerCheckpoint: resumeAt });
+        promptText = rewoundPrompt(text);
       } else {
         promptText = editedPrompt(target.text, text);
       }
@@ -306,11 +320,16 @@ export function createAgentRunner(opts: {
     return true;
   }
 
-  function respond(sessionId: string, itemId: string, payload: RespondPayload): boolean {
+  function respond(
+    sessionId: string,
+    itemId: string,
+    payload: RespondPayload,
+    next: TurnSettings = {},
+  ): boolean {
     const session = store.get(sessionId);
     if (!session?.items.some((i) => i.id === itemId)) return false;
     const prompt = pending.get(itemId);
-    if (!prompt) return answerInNextTurn(sessionId, itemId, payload);
+    if (!prompt) return answerInNextTurn(sessionId, itemId, payload, next);
     if ('cancel' in payload) {
       cancelPrompt(prompt);
       return true;
@@ -326,7 +345,12 @@ export function createAgentRunner(opts: {
     return false;
   }
 
-  function answerInNextTurn(sessionId: string, itemId: string, payload: RespondPayload): boolean {
+  function answerInNextTurn(
+    sessionId: string,
+    itemId: string,
+    payload: RespondPayload,
+    next: TurnSettings,
+  ): boolean {
     const item = store.get(sessionId)?.items.find((i) => i.id === itemId);
     if (item?.kind !== 'question' || item.status !== 'pending' || running.has(sessionId)) {
       return false;
@@ -337,8 +361,10 @@ export function createAgentRunner(opts: {
       answers,
       status: answers ? 'answered' : 'cancelled',
     });
-    const previous = lastOptions.get(sessionId);
-    const context = previous?.context ? { ...previous.context, newDeck: undefined } : undefined;
+    // The panel sends its current settings; what the last turn used only
+    // fills the gaps, e.g. a client that sent none.
+    const previous = { ...lastOptions.get(sessionId), ...next };
+    const context = previous.context ? { ...previous.context, newDeck: undefined } : undefined;
     void send(sessionId, {
       ...previous,
       context,

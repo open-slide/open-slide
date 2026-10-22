@@ -114,7 +114,8 @@ export function AgentPanel({
   const send = useCallback(
     async (text: string, fresh = false) => {
       const trimmed = text.trim();
-      if (!trimmed || sendingRef.current) return;
+      // A second agent would edit the same deck alongside the running one.
+      if (!trimmed || sendingRef.current || (running && !fresh)) return;
       sendingRef.current = true;
       setSending(true);
       try {
@@ -135,7 +136,7 @@ export function AgentPanel({
         setSending(false);
       }
     },
-    [ensureSession, isNewDeck, t],
+    [ensureSession, isNewDeck, running, t],
   );
 
   const createDeck = useCreateDeck();
@@ -144,19 +145,21 @@ export function AgentPanel({
     if (isNewDeck && connected) textareaRef.current?.focus();
   }, [isNewDeck, connected]);
 
+  // A request made while a turn runs waits for it to end, then joins the same
+  // conversation.
   useEffect(() => {
-    if (!request || loading || !connected) return;
+    if (!request || loading || !connected || running) return;
     const req = consumeRequest();
     if (!req) return;
     setManage(false);
     void send(req.text);
-  }, [request, loading, connected, send]);
+  }, [request, loading, connected, running, send]);
 
   const onRespond = useCallback(
     async (itemId: string, payload: RespondPayload) => {
       if (!session) return;
       try {
-        await respond(session.id, itemId, payload);
+        await respond(session.id, itemId, payload, contextRef.current);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err));
       }
@@ -196,7 +199,11 @@ export function AgentPanel({
         <ContextChip
           tone="brand"
           title={t.agent.quickApplyHint}
-          onClick={() => context.slideId && send(applyCommentsPrompt(context.slideId))}
+          onClick={
+            running
+              ? undefined
+              : () => context.slideId && send(applyCommentsPrompt(context.slideId))
+          }
         >
           {format(plural(pendingComments, t.agent.pendingComments), { count: pendingComments })} ·{' '}
           {t.agent.applyComments}
@@ -671,8 +678,14 @@ function BetaBadge() {
           </button>
         }
       />
-      <TooltipContent side="bottom" sideOffset={6} className="max-w-60 text-left">
-        {t.agent.betaHint}
+      <TooltipContent
+        side="bottom"
+        align="start"
+        sideOffset={6}
+        className="w-64 px-3 py-2.5 text-left text-pretty"
+      >
+        <p className="font-medium text-[12px]">{t.agent.betaTitle}</p>
+        <p className="mt-1 text-[11.5px] text-background/70 leading-relaxed">{t.agent.betaHint}</p>
       </TooltipContent>
     </Tooltip>
   );

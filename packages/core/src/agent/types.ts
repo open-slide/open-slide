@@ -111,6 +111,8 @@ export type AgentSessionSummary = {
 export type AgentSession = AgentSessionSummary & {
   providerSessionId: string | null;
   providerCheckpoint?: string | null;
+  // Set once the oldest items were dropped to stay under the item cap.
+  trimmed?: boolean;
   items: AgentItem[];
 };
 
@@ -138,6 +140,12 @@ export type AgentStreamEvent =
   | { type: 'slide-renamed'; from: string; to: string };
 
 export function sessionSummary(session: AgentSession): AgentSessionSummary {
-  const { providerSessionId: _p, providerCheckpoint: _c, items: _i, ...summary } = session;
+  const {
+    providerSessionId: _p,
+    providerCheckpoint: _c,
+    trimmed: _t,
+    items: _i,
+    ...summary
+  } = session;
   return summary;
 }

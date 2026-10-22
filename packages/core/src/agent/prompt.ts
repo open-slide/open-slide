@@ -133,3 +133,9 @@ export function answersPrompt(
 export function editedPrompt(original: string, text: string): string {
   return `I went back and edited an earlier message of mine. Treat everything after it in this conversation, including your replies, as discarded, and respond to the edited version instead. Files keep whatever changes were already made.\n\n<original-message>\n${escapeTag(original)}\n</original-message>\n\n${text}`;
 }
+
+// For agents rewound to before the edited message: their history forgets the
+// later turns, but the files on disk still hold what those turns wrote.
+export function rewoundPrompt(text: string): string {
+  return `${text}\n\n<open-slide-note>I went back and edited this message. Files keep the changes made after it in the discarded part of this conversation, so read the current files before editing them.</open-slide-note>`;
+}

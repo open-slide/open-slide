@@ -194,6 +194,7 @@ export function createSessionStore(opts: { file: string | null }) {
     session.items.push(item);
     if (session.items.length > MAX_ITEMS_PER_SESSION) {
       session.items.splice(0, session.items.length - MAX_ITEMS_PER_SESSION);
+      session.trimmed = true;
     }
     emit({ type: 'item', sessionId, item });
     touch(session);
