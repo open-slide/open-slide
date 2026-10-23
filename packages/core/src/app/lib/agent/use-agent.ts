@@ -12,7 +12,6 @@ import {
   type AgentStreamEvent,
   type AgentTurnContext,
   isAgentEffort,
-  isAgentProviderId,
   type RespondPayload,
 } from '../../../agent/types';
 
@@ -68,7 +67,7 @@ function readModelChoices(): Partial<Record<AgentProviderId, ModelChoice>> {
   try {
     const raw = JSON.parse(readStorage(MODEL_KEY) ?? '{}') as Record<string, unknown>;
     for (const [provider, value] of Object.entries(raw)) {
-      if (!isAgentProviderId(provider) || !value || typeof value !== 'object') continue;
+      if (!provider || !value || typeof value !== 'object') continue;
       const v = value as Record<string, unknown>;
       if (typeof v.model !== 'string') continue;
       choices[provider] = { model: v.model, effort: isAgentEffort(v.effort) ? v.effort : null };
@@ -88,7 +87,7 @@ let state: State = {
   activeId: readStorage(ACTIVE_KEY),
   provider: (() => {
     const stored = readStorage(PROVIDER_KEY);
-    return isAgentProviderId(stored) ? stored : 'claude';
+    return typeof stored === 'string' ? stored : 'claude';
   })(),
   modelChoices: readModelChoices(),
   autoApprove: readStorage(AUTO_APPROVE_KEY) === '1',
@@ -372,7 +371,7 @@ export function autoConnect(): Promise<void> {
   const status = state.status;
   if (!status?.enabled) return Promise.resolve();
   const pending = status.providers.filter(
-    (p) => p.cliFound && !p.ready && !state.connectErrors[p.id],
+    (p) => p.type !== 'acp' && p.cliFound && !p.ready && !state.connectErrors[p.id],
   );
   if (pending.length === 0) return Promise.resolve();
   autoConnecting = (async () => {

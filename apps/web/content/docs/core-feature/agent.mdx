@@ -1,6 +1,6 @@
 ---
 title: Agent panel
-description: Drive Claude Code or Codex from inside the dev server — create decks, apply comments, and edit the current page without a terminal.
+description: Drive Claude Code, Codex, or a configured ACP agent from inside the dev server.
 ---
 
 ![Open-slide agent panel beside the canvas, with Claude Code editing the open deck and its transcript streaming in](/assets/screenshots/agent-panel.webp)
@@ -16,17 +16,18 @@ before.
 
 ## Supported agents
 
-| Agent | SDK installed into your workspace | Uses your login from |
+| Agent | Connection | Uses your login from |
 | --- | --- | --- |
 | [Claude Code](https://code.claude.com) | `@anthropic-ai/claude-agent-sdk` | the `claude` CLI |
 | [Codex](https://developers.openai.com/codex) | `@openai/codex-sdk` | the `codex` CLI |
+| [Agent Client Protocol](https://agentclientprotocol.com) | configured stdio command | the configured agent |
 
-The panel talks to each agent through its official TypeScript SDK. The SDKs
-are not bundled with `@open-slide/core` — they pull in a native binary — so
-they are added to your workspace as a dev dependency the first time you open
-the panel.
+Claude Code and Codex use their official TypeScript SDKs. The SDKs are not
+bundled with `@open-slide/core` — they pull in a native binary — so they are
+added to your workspace as a dev dependency the first time you open the panel.
 If the matching CLI is on your `PATH`, the panel points the SDK at it so you
-keep the same version and sign-in you already use in the terminal.
+keep the same version and sign-in you already use in the terminal. Configured
+ACP agents use JSON-RPC 2.0 over stdio and require no SDK.
 
 ## Connect
 
@@ -39,11 +40,45 @@ once (`claude` or `codex login`); the panel reuses that login.
 If neither CLI is installed, the panel shows the install command for each and
 a **Check again** button instead.
 
-Both agents can be connected. The model menu in the panel header lists each
-connected agent's models (Opus, Sonnet and Haiku for Claude Code; the models
-your Codex CLI offers for Codex) and the reasoning effort the chosen model
-supports. Set `agent: { enabled: false }` in `open-slide.config.ts` to hide
-the panel entirely.
+Connected agents appear in the model menu in the panel header. It lists Opus,
+Sonnet and Haiku for Claude Code, the models your Codex CLI offers, and one
+default entry for each ACP agent. Set `agent: { enabled: false }` in
+`open-slide.config.ts` to hide the panel entirely.
+
+### Configure an ACP agent
+
+Add any ACP-compatible command to `open-slide.config.ts`. The command runs
+without a shell, with the workspace root as its working directory.
+
+```ts title="open-slide.config.ts"
+import type { OpenSlideConfig } from '@open-slide/core';
+
+const config: OpenSlideConfig = {
+  agent: {
+    providers: [
+      {
+        id: 'my-agent',
+        name: 'My Agent',
+        type: 'acp',
+        command: 'my-agent',
+        args: ['--acp'],
+      },
+    ],
+  },
+};
+
+export default config;
+```
+
+Set `builtinProviders: false` in `agent` to offer only your configured ACP
+agents, for example on a shared server where Claude Code and Codex are not
+signed in.
+
+The panel maps ACP message chunks, plans, tool calls, permission requests and
+cancellation to its existing transcript controls. It reloads persisted native
+sessions when the agent advertises `loadSession`; otherwise a follow-up starts
+a new native session. ACP authentication, client file-system and terminal
+methods, elicitation, modes, and model discovery are not supported.
 
 ## What you can do
 
@@ -81,13 +116,13 @@ conversation; earlier ones stay in history.
 
 Hover a message to copy its text. Your own messages also have an edit
 button: sending the edit replaces everything after that message and runs the
-turn again. Claude Code rewinds its own conversation to that point; Codex can't,
-so it is told to set the old replies aside. Files the agent already changed stay
-as they are.
+turn again. Claude Code rewinds its own conversation to that point; Codex and
+ACP agents can't, so they are told to set the old replies aside. Files the agent
+already changed stay as they are.
 
 Sessions persist across dev-server restarts under
-`node_modules/.open-slide/agent-sessions.json`, and each one resumes the
-agent's own native session, so follow-ups keep their history.
+`node_modules/.open-slide/agent-sessions.json`. Claude Code and Codex resume
+their native sessions; ACP agents do so when they advertise `loadSession`.
 
 ## Dev-server API
 

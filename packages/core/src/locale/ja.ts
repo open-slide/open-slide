@@ -614,6 +614,8 @@ export const ja: Locale = {
     cliMissing: 'PATH に CLI が見つかりません',
     cliHint:
       '{name} CLI をインストールして一度ログインしてください。パネルはそのログインを再利用します。',
+    acpMissing: '設定された ACP コマンドが見つかりません: {command}',
+    acpConfigured: 'Agent Client Protocol 経由で設定されています。',
     needCliTitle: '先に Claude Code か Codex をインストールしてください',
     needCliDescription:
       'パネルはこのマシンのコーディングエージェント CLI を操作しますが、PATH に見つかりませんでした。どちらかをインストールしてターミナルで一度ログインし、もう一度確認してください。',

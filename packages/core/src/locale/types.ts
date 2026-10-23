@@ -652,6 +652,9 @@ export type Locale = {
     cliMissing: string;
     /** template: "Install the {name} CLI and sign in once; the panel reuses its login." */
     cliHint: string;
+    /** template: "Configured ACP command not found: {command}" */
+    acpMissing: string;
+    acpConfigured: string;
     needCliTitle: string;
     needCliDescription: string;
     checkAgain: string;
