@@ -32,6 +32,9 @@ export function Nav({ githubStars }: { githubStars?: string | null }) {
           <Link href="/docs" className={linkClass}>
             Docs
           </Link>
+          <Link href="/changelog" className={linkClass}>
+            Changelog
+          </Link>
           <a
             href="https://demo.open-slide.dev/"
             target="_blank"

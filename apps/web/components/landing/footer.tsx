@@ -27,10 +27,11 @@ export function Footer() {
         <FooterCol
           title="Product"
           links={[
-            ['Live demo', '#demo'],
-            ['Features', '#features'],
+            ['Live demo', '/#demo'],
+            ['Features', '/#features'],
             ['Docs', '/docs'],
-            ['FAQ', '#faq'],
+            ['Changelog', '/changelog'],
+            ['FAQ', '/#faq'],
           ]}
         />
         <FooterCol
