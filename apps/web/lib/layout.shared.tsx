@@ -8,12 +8,12 @@ export function baseOptions(): BaseLayoutProps {
       title: (
         <>
           <Image
-            src="/open-slide.png"
+            src="/open-slide.svg"
             alt=""
             aria-hidden
             width={24}
             height={24}
-            className="h-6 w-6 rounded-[4px]"
+            className="h-6 w-6"
           />
           <span>{appName}</span>
         </>

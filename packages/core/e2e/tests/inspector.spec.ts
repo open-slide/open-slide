@@ -90,7 +90,7 @@ test.describe('inspector editing', () => {
     const saved = page.waitForResponse(
       (res) => res.url().includes('/__edit') && res.request().method() === 'POST',
     );
-    await page.getByTitle('Preview', { exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
     expect((await saved).status()).toBe(200);
     await expect.poll(() => readSlideSource('insp-commit')).toContain('Committed body copy');
   });

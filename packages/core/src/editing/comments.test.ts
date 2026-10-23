@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { b64urlDecode, b64urlEncode, parseMarkers } from './comments.ts';
+import {
+  b64urlDecode,
+  b64urlEncode,
+  buildMarker,
+  findInsertion,
+  parseMarkers,
+  removeMarker,
+  resolveTargets,
+  updateMarkerNote,
+} from './comments.ts';
 
 describe('b64url encoding', () => {
   it('round-trips arbitrary unicode strings', () => {
@@ -68,5 +77,127 @@ describe('parseMarkers', () => {
     const comments = parseMarkers(source);
     expect(comments.map((c) => c.note)).toEqual(['one', 'two']);
     expect(comments.map((c) => c.line)).toEqual([1, 3]);
+  });
+});
+
+describe('region and page payloads', () => {
+  const ts = '2026-04-25T00:00:00.000Z';
+  const marker = (payload: Record<string, unknown>) =>
+    `{/* @slide-comment id="c-abcdef01" ts="${ts}" text="${b64urlEncode(JSON.stringify(payload))}" */}`;
+
+  it('reads a rounded rect and page index from the payload', () => {
+    const [c] = parseMarkers(
+      marker({ note: 'here', rect: { x: 10.4, y: 20.6, w: 300, h: 80 }, page: 2 }),
+    );
+    expect(c.rect).toEqual({ x: 10, y: 21, w: 300, h: 80 });
+    expect(c.page).toBe(2);
+  });
+
+  it('drops malformed rects and pages', () => {
+    const [c] = parseMarkers(marker({ note: 'here', rect: { x: 1, y: 2, w: 0, h: 5 }, page: -1 }));
+    expect(c.rect).toBeUndefined();
+    expect(c.page).toBeUndefined();
+  });
+});
+
+describe('resolveTargets', () => {
+  it('points each marker at the loc of its enclosing JSX element', () => {
+    const payload = b64urlEncode(JSON.stringify({ note: 'x' }));
+    const source = [
+      'export default [() => (',
+      '  <div>',
+      '    <section style={{ padding: 4 }}>',
+      `      {/* @slide-comment id="c-00000001" ts="t" text="${payload}" */}`,
+      '      <img src="a.png" />',
+      '    </section>',
+      '  </div>',
+      ')];',
+    ].join('\n');
+    const [c] = resolveTargets(source, parseMarkers(source));
+    expect(c.target).toEqual({ line: 3, column: 4 });
+  });
+
+  it('skips fragments and resolves to the nearest JSX element', () => {
+    const payload = b64urlEncode(JSON.stringify({ note: 'x' }));
+    const source = [
+      'export default [() => (',
+      '  <main>',
+      '    <>',
+      `      {/* @slide-comment id="c-00000002" ts="t" text="${payload}" */}`,
+      '      <p>hi</p>',
+      '    </>',
+      '  </main>',
+      ')];',
+    ].join('\n');
+    const [c] = resolveTargets(source, parseMarkers(source));
+    expect(c.target).toEqual({ line: 2, column: 2 });
+  });
+
+  it('yields a null target when no element encloses the marker', () => {
+    const payload = b64urlEncode(JSON.stringify({ note: 'x' }));
+    const source = `{/* @slide-comment id="c-00000003" ts="t" text="${payload}" */}\nconst a = 1;`;
+    const [c] = resolveTargets(source, parseMarkers(source));
+    expect(c.target).toBeNull();
+  });
+});
+
+describe('marker insertion and removal', () => {
+  const ts = '2026-04-25T00:00:00.000Z';
+  const encoded = b64urlEncode(JSON.stringify({ note: 'x' }));
+
+  it('gives the marker its own line when content follows the opening tag', () => {
+    const source = ['export default [() => (', '  <h1>Hello</h1>', ')];'].join('\n');
+    const plan = findInsertion(source, 2, 2);
+    expect(plan?.breakAfter).toBe(true);
+    const marker = buildMarker(plan as NonNullable<typeof plan>, 'c-00000001', ts, encoded);
+    const next = source.slice(0, plan?.offset) + marker + source.slice(plan?.offset);
+    expect(next.split('\n')).toEqual([
+      'export default [() => (',
+      '  <h1>',
+      `    {/* @slide-comment id="c-00000001" ts="${ts}" text="${encoded}" */}`,
+      '    Hello</h1>',
+      ')];',
+    ]);
+    expect(removeMarker(next, 'c-00000001')?.split('\n')).toEqual([
+      'export default [() => (',
+      '  <h1>',
+      '    Hello</h1>',
+      ')];',
+    ]);
+  });
+
+  it('does not add a break when the opening tag already ends its line', () => {
+    const source = ['export default [() => (', '  <div>', '    hi', '  </div>', ')];'].join('\n');
+    const plan = findInsertion(source, 2, 2);
+    expect(plan?.breakAfter).toBe(false);
+    const marker = buildMarker(plan as NonNullable<typeof plan>, 'c-00000002', ts, encoded);
+    const next = source.slice(0, plan?.offset) + marker + source.slice(plan?.offset);
+    expect(next.split('\n')[2]).toMatch(/^ {4}\{\/\* @slide-comment/);
+    expect(removeMarker(next, 'c-00000002')).toBe(source);
+  });
+
+  it('keeps content that shares a line with a legacy marker', () => {
+    const source = `  <h1>\n    {/* @slide-comment id="c-00000003" ts="${ts}" text="${encoded}" */}Hello</h1>`;
+    expect(removeMarker(source, 'c-00000003')).toBe('  <h1>\n    Hello</h1>');
+    expect(removeMarker(source, 'c-ffffffff')).toBeNull();
+  });
+});
+
+describe('updateMarkerNote', () => {
+  it('replaces the note while keeping the rest of the payload', () => {
+    const encoded = b64urlEncode(
+      JSON.stringify({ note: 'old', rect: { x: 1, y: 2, w: 3, h: 4 }, page: 1 }),
+    );
+    const source = `<div>\n  {/* @slide-comment id="c-00000009" ts="t" text="${encoded}" */}\n</div>`;
+    const next = updateMarkerNote(source, 'c-00000009', 'new');
+    expect(next).not.toBeNull();
+    const [c] = parseMarkers(next as string);
+    expect(c).toMatchObject({
+      id: 'c-00000009',
+      note: 'new',
+      rect: { x: 1, y: 2, w: 3, h: 4 },
+      page: 1,
+    });
+    expect(updateMarkerNote(source, 'c-ffffffff', 'new')).toBeNull();
   });
 });

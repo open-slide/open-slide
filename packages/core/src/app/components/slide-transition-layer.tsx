@@ -809,7 +809,7 @@ export function SlideTransitionLayer({
         </div>
       ) : null}
       {CurrentPage ? (
-        <div ref={incomingLayerRef} className="absolute inset-0">
+        <div ref={incomingLayerRef} data-osd-current-page={current} className="absolute inset-0">
           <SlidePageProvider index={current} total={total}>
             <StepHost
               isActivePage

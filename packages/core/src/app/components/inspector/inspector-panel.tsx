@@ -46,7 +46,7 @@ import { styleContext } from '@/lib/inspector/text-selection';
 import type { EditOp } from '@/lib/inspector/use-editor';
 import { useAgentSocketConnected } from '@/lib/use-agent-socket';
 import { format, useLocale } from '@/lib/use-locale';
-import { cn, round2 } from '@/lib/utils';
+import { round2 } from '@/lib/utils';
 import type { Locale } from '../../../locale/types';
 import { ArrangePanel } from './arrange-panel';
 import { AssetPickerDialog } from './asset-picker-dialog';
@@ -107,7 +107,6 @@ export function InspectorPanel({
     bufferOps,
     pendingCount,
     opsVersion,
-    add,
     applyEdit,
   } = useInspector();
   const [snapshot, setSnapshot] = useState<ElementSnapshot | null>(null);
@@ -256,19 +255,14 @@ export function InspectorPanel({
   );
   const footer =
     selected && snapshot && !multiple ? (
-      <>
-        <CollapsibleSection title={t.inspector.leaveComment}>
-          <CommentsSection selected={selected} onAdd={add} />
-        </CollapsibleSection>
-        <CollapsibleSection title={t.inspector.sourceSection}>
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-[10.5px] text-muted-foreground">
-              &lt;{selected.anchor.tagName.toLowerCase()}&gt; · {selected.line}:{selected.column}
-            </span>
-            <AgentWatchingBadge />
-          </div>
-        </CollapsibleSection>
-      </>
+      <CollapsibleSection title={t.inspector.sourceSection}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-mono text-[10.5px] text-muted-foreground">
+            &lt;{selected.anchor.tagName.toLowerCase()}&gt; · {selected.line}:{selected.column}
+          </span>
+          <AgentWatchingBadge />
+        </div>
+      </CollapsibleSection>
     ) : undefined;
 
   return (
@@ -278,7 +272,7 @@ export function InspectorPanel({
         if (value === 'arrange') stopInlineEdit();
         if (value === 'format' || value === 'arrange') onTabChange(value);
       }}
-      className="h-full shrink-0 gap-0"
+      className="h-full w-full min-w-0 shrink-0 gap-0"
       onPointerDownCapture={(event) => {
         if (!inlineEdit || !(event.target instanceof Element)) return;
         const button = event.target.closest('button');
@@ -891,83 +885,6 @@ function AgentWatchingBadge() {
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  );
-}
-
-// The cue animation re-mounts with every element selection; without this
-// guard it replays each time instead of once per inspector session.
-let commentCuePlayed = false;
-
-function CommentsSection({
-  selected,
-  onAdd,
-}: {
-  selected: { line: number; column: number };
-  onAdd: (line: number, column: number, text: string) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [showCue] = useState(() => !commentCuePlayed);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const t = useLocale();
-
-  useEffect(() => {
-    commentCuePlayed = true;
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '/') return;
-      if (!(e.metaKey || e.ctrlKey)) return;
-      if (e.altKey || e.shiftKey) return;
-      const ta = wrapRef.current?.querySelector('textarea');
-      if (!ta) return;
-      e.preventDefault();
-      const details = ta.closest('details');
-      if (details) details.open = true;
-      ta.focus({ preventScroll: true });
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const submit = async () => {
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-    setSubmitting(true);
-    try {
-      await onAdd(selected.line, selected.column, trimmed);
-      setDraft('');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <>
-      <div ref={wrapRef} className={cn('rounded-[6px]', showCue && 'comment-cue')}>
-        <Textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          placeholder={t.inspector.commentPlaceholder}
-          className="min-h-16 resize-none text-[12px]"
-        />
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10.5px] text-muted-foreground/70">
-          {t.inspector.commentShortcutHint}
-        </span>
-        <Button size="sm" variant="brand" disabled={submitting || !draft.trim()} onClick={submit}>
-          {t.inspector.addComment}
-        </Button>
-      </div>
-    </>
   );
 }
 

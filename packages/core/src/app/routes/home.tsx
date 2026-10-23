@@ -8,6 +8,7 @@ import {
   MoreHorizontal,
   Palette,
   Pencil,
+  Plus,
   Search,
   Trash2,
   X,
@@ -30,8 +31,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useAgentStatus, useCreateDeck } from '@/lib/agent/use-agent';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
+import { ProviderLogo } from '../components/agent/provider-logo';
 import { FolderIconChip, SLIDE_DND_MIME, SystemViewIcon } from '../components/sidebar/folder-item';
 import { ALL_SLIDES_ID, DRAFT_ID } from '../components/sidebar/sidebar';
 import { SlideCanvas } from '../components/slide-canvas';
@@ -193,6 +196,7 @@ export function Home() {
           <div className="ml-auto flex w-full items-center gap-2 md:w-auto">
             <SortControl value={sortKey} onChange={setSortKey} />
             <SearchInput value={query} onChange={setQuery} />
+            {import.meta.env.DEV && <NewDeckButton />}
           </div>
         </div>
       </header>
@@ -319,6 +323,30 @@ function SortControl({ value, onChange }: { value: SortKey; onChange: (next: Sor
   );
 }
 
+function useCreateDeckWithAgent() {
+  const { provider } = useAgentStatus();
+  const start = useCreateDeck();
+  if (!provider) return null;
+  return { provider, start };
+}
+
+function NewDeckButton() {
+  const t = useLocale();
+  const agent = useCreateDeckWithAgent();
+  if (!agent) return null;
+  return (
+    <Button
+      size="sm"
+      className="h-8 shrink-0"
+      onClick={agent.start}
+      title={format(t.agent.createDeckWith, { provider: agent.provider.name })}
+    >
+      <Plus />
+      {t.agent.createDeck}
+    </Button>
+  );
+}
+
 function HomeLoading() {
   const t = useLocale();
   return (
@@ -360,6 +388,7 @@ function NoResultsState({ query, onClear }: { query: string; onClear: () => void
 
 function EmptyState({ isDraft, folderName }: { isDraft: boolean; folderName?: string }) {
   const t = useLocale();
+  const agent = useCreateDeckWithAgent();
   const folderEmptyTitle = t.home.folderEmptyTitle.replace(
     '{name}',
     folderName ?? t.home.folderEmptyTitle,
@@ -373,13 +402,20 @@ function EmptyState({ isDraft, folderName }: { isDraft: boolean; folderName?: st
             <p className="mt-4 font-heading text-[14px] font-semibold tracking-tight">
               {t.home.noSlidesYet}
             </p>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-              {t.home.createSlideHintPrefix}
-              <code className="rounded-[4px] bg-muted px-1.5 py-0.5 font-mono text-[11.5px] text-foreground">
-                /create-slide
-              </code>
-              {t.home.createSlideHintSuffix}
-            </p>
+            {agent ? (
+              <Button size="sm" className="mt-4" onClick={agent.start}>
+                <ProviderLogo provider={agent.provider.id} />
+                {format(t.agent.createDeckWith, { provider: agent.provider.name })}
+              </Button>
+            ) : (
+              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                {t.home.createSlideHintPrefix}
+                <code className="rounded-[4px] bg-muted px-1.5 py-0.5 font-mono text-[11.5px] text-foreground">
+                  /create-slide
+                </code>
+                {t.home.createSlideHintSuffix}
+              </p>
+            )}
           </>
         ) : (
           <>

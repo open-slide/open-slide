@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import {
   type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
   useCallback,
   useEffect,
   useRef,
@@ -24,16 +23,17 @@ import { hasModifier, isBackwardKey, isForwardKey, isTypingTarget } from '@/lib/
 import { useDocumentTitle } from '@/lib/use-document-title';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
+import { NoteMarkdown } from '../components/note-markdown';
 import {
   type PresenterState,
   usePresenterChannel,
 } from '../components/present/use-presenter-channel';
+import { PreviewStepHost } from '../components/preview-step-host';
 import { SlideCanvas } from '../components/slide-canvas';
 import { isDeckWarmed, markDeckWarmed, SlidePreloadLayer } from '../components/slide-preload-layer';
 import { SlidePageProvider } from '../lib/page-context';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, type SlideModule } from '../lib/sdk';
 import { loadSlide, slideIds } from '../lib/slides';
-import { type StepController, StepHost } from '../lib/step-context';
 import { useSlideModule } from '../lib/use-slide-module';
 
 export function Presenter() {
@@ -591,11 +591,11 @@ function SpeakerNotes({ note }: { note: string | undefined }) {
         </div>
       </div>
       <div
-        className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-border bg-card p-3 leading-relaxed whitespace-pre-wrap text-card-foreground"
+        className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-border bg-card p-3 leading-relaxed text-card-foreground"
         style={{ fontSize: NOTES_FONT_SIZES[sizeIndex] }}
       >
         {note?.trim() ? (
-          note
+          <NoteMarkdown text={note} />
         ) : (
           <span className="text-muted-foreground">
             {t.presenter.noNotesPrefix}
@@ -650,20 +650,6 @@ function PresenterJumpControl({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <span className="eyebrow">{children}</span>;
-}
-
-function PreviewStepHost({ revealed, children }: { revealed: number; children: ReactNode }) {
-  const noopControllerRef = useRef<StepController | null>(null);
-  return (
-    <StepHost
-      isActivePage={false}
-      entryDirection="jump"
-      controllerRef={noopControllerRef}
-      controlledRevealed={revealed}
-    >
-      {children}
-    </StepHost>
-  );
 }
 
 function Clock() {

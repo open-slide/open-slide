@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateMutationRequest } from './request-guard.ts';
+import { isLoopbackRequest, validateMutationRequest } from './request-guard.ts';
 
 describe('validateMutationRequest', () => {
   function makeReq(
@@ -90,5 +90,19 @@ describe('validateMutationRequest', () => {
       'content-type': 'application/json',
     });
     expect(validateMutationRequest(req, { requireJsonBody: true })).toEqual({ ok: true });
+  });
+});
+
+describe('isLoopbackRequest', () => {
+  const from = (remoteAddress: string | undefined) =>
+    ({ socket: { remoteAddress } }) as unknown as Parameters<typeof isLoopbackRequest>[0];
+
+  it('accepts only this machine', () => {
+    expect(isLoopbackRequest(from('127.0.0.1'))).toBe(true);
+    expect(isLoopbackRequest(from('::1'))).toBe(true);
+    expect(isLoopbackRequest(from('::ffff:127.0.0.1'))).toBe(true);
+    expect(isLoopbackRequest(from('192.168.1.20'))).toBe(false);
+    expect(isLoopbackRequest(from('::ffff:10.0.0.4'))).toBe(false);
+    expect(isLoopbackRequest(from(undefined))).toBe(false);
   });
 });

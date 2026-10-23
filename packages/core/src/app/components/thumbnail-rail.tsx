@@ -26,6 +26,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useOptionalInspector } from '@/components/inspector/inspector-provider';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -36,7 +37,7 @@ import {
 } from '@/components/ui/context-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { format, useLocale } from '@/lib/use-locale';
+import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
 import type { DesignSystem } from '../lib/design';
 import { SlidePageProvider } from '../lib/page-context';
@@ -74,6 +75,36 @@ type Props = {
   onOverview?: () => void;
 };
 
+// Per-page pending comment counts, shown on the rail only while the
+// comment tool is active.
+function usePageCommentCounts(): Map<number, number> | null {
+  const inspector = useOptionalInspector();
+  if (!inspector?.commentMode) return null;
+  const counts = new Map<number, number>();
+  for (const comment of inspector.comments) {
+    if (comment.page === undefined) continue;
+    counts.set(comment.page, (counts.get(comment.page) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function CommentCountBadge({ count, className }: { count: number; className?: string }) {
+  const t = useLocale();
+  return (
+    <span
+      role="img"
+      aria-label={format(plural(count, t.inspector.commentsCount), { count })}
+      data-page-comments={count}
+      className={cn(
+        'flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 font-mono text-[9.5px] font-semibold leading-none text-brand-foreground tabular-nums',
+        className,
+      )}
+    >
+      {count}
+    </span>
+  );
+}
+
 const DEFAULT_VERTICAL_THUMB_WIDTH = 184;
 const VERTICAL_RAIL_CHROME = 80;
 const MIN_VERTICAL_THUMB_WIDTH = 120;
@@ -103,6 +134,7 @@ export function ThumbnailRail({
   const virtualListRef = useRef<HTMLDivElement | null>(null);
   const verticalViewportRef = useRef<HTMLElement | null>(null);
   const focusCurrentAfterScrollRef = useRef(false);
+  const focusAfterArrowRef = useRef(false);
   const [currentPosition, setCurrentPosition] = useState<ThumbnailOffscreenDirection>(null);
   const t = useLocale();
 
@@ -172,6 +204,32 @@ export function ThumbnailRail({
     return () => cancelAnimationFrame(frame);
   }, [currentPosition]);
 
+  useLayoutEffect(() => {
+    if (!focusAfterArrowRef.current || !activeRef.current) return;
+    activeRef.current.focus({ preventScroll: true });
+    focusAfterArrowRef.current = false;
+  });
+
+  const onThumbnailArrowKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.nativeEvent.isComposing) return;
+      const direction =
+        event.key === 'ArrowRight' || event.key === 'ArrowDown'
+          ? 1
+          : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+            ? -1
+            : 0;
+      if (!direction) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const next = Math.min(Math.max(index + direction, 0), pages.length - 1);
+      if (next === index) return;
+      focusAfterArrowRef.current = true;
+      onSelect(next);
+    },
+    [onSelect, pages.length],
+  );
+
   const renderThumb = useCallback(
     (PageComp: Page, i: number) => {
       const active = i === current;
@@ -195,6 +253,7 @@ export function ThumbnailRail({
           active={active}
           activeRef={active ? activeRef : undefined}
           onSelect={() => onSelect(i)}
+          onArrowKeyDown={(event) => onThumbnailArrowKeyDown(event, i)}
           ariaLabel={format(t.thumbnailRail.goToPageAria, { n: i + 1 })}
         >
           {inner}
@@ -204,6 +263,7 @@ export function ThumbnailRail({
           type="button"
           ref={active ? activeRef : undefined}
           onClick={() => onSelect(i)}
+          onKeyDown={(event) => onThumbnailArrowKeyDown(event, i)}
           aria-label={format(t.thumbnailRail.goToPageAria, { n: i + 1 })}
           aria-current={active ? 'page' : undefined}
           className={thumbButtonClass(active)}
@@ -235,6 +295,7 @@ export function ThumbnailRail({
       moduleTransition,
       onReorder,
       onSelect,
+      onThumbnailArrowKeyDown,
       pages.length,
       scale,
       thumbWidth,
@@ -256,6 +317,7 @@ export function ThumbnailRail({
             actions={actions}
             activeRef={activeRef}
             onSelect={onSelect}
+            onArrowKeyDown={onThumbnailArrowKeyDown}
             scale={scale}
             thumbWidth={horizontalWidth}
           />
@@ -411,6 +473,7 @@ function HorizontalVirtualThumbList({
   actions,
   activeRef,
   onSelect,
+  onArrowKeyDown,
   scale,
   thumbWidth,
 }: {
@@ -420,6 +483,7 @@ function HorizontalVirtualThumbList({
   actions?: ThumbnailActions;
   activeRef: React.MutableRefObject<HTMLButtonElement | null>;
   onSelect: (index: number) => void;
+  onArrowKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => void;
   scale: number;
   thumbWidth: number;
 }) {
@@ -489,15 +553,18 @@ function HorizontalVirtualThumbList({
   }, [current, itemWidth, pages.length, thumbWidth]);
 
   const visibleRange = clampVisibleRange(range, current, pages.length);
+  const commentCounts = usePageCommentCounts();
   const visible = [];
   for (let i = visibleRange.start; i < visibleRange.end; i++) {
     const PageComp = pages[i];
     const active = i === current;
+    const commentCount = commentCounts?.get(i) ?? 0;
     const button = (
       <button
         type="button"
         ref={active ? activeRef : undefined}
         onClick={() => onSelect(i)}
+        onKeyDown={(event) => onArrowKeyDown(event, i)}
         aria-label={format(t.thumbnailRail.goToPageAria, { n: i + 1 })}
         aria-current={active ? 'page' : undefined}
         className={cn(
@@ -528,6 +595,9 @@ function HorizontalVirtualThumbList({
             </SlidePageProvider>
           </SlideCanvas>
         </div>
+        {commentCount > 0 && (
+          <CommentCountBadge count={commentCount} className="absolute -top-0.5 -right-1" />
+        )}
       </button>
     );
 
@@ -764,6 +834,7 @@ function ThumbContents({
   }, [PageComp]);
 
   const hasTransition = Boolean(PageComp.transition ?? moduleTransition);
+  const commentCount = usePageCommentCounts()?.get(index) ?? 0;
 
   return (
     <>
@@ -776,6 +847,7 @@ function ThumbContents({
         >
           {pad2(index + 1)}
         </span>
+        {commentCount > 0 && <CommentCountBadge count={commentCount} />}
         {(hasTransition || hasSteps) && (
           <div className="flex flex-col items-end gap-0.5">
             {hasTransition && (
@@ -921,6 +993,7 @@ function SortableThumb({
   active,
   activeRef,
   onSelect,
+  onArrowKeyDown,
   ariaLabel,
   children,
   ...rest
@@ -929,6 +1002,7 @@ function SortableThumb({
   active: boolean;
   activeRef: React.MutableRefObject<HTMLButtonElement | null> | undefined;
   onSelect: () => void;
+  onArrowKeyDown: React.KeyboardEventHandler<HTMLButtonElement>;
   ariaLabel: string;
   children: React.ReactNode;
 } & Omit<
@@ -953,6 +1027,7 @@ function SortableThumb({
       ref={setRef}
       type="button"
       onClick={onSelect}
+      onKeyDownCapture={isDragging ? undefined : onArrowKeyDown}
       aria-label={ariaLabel}
       aria-current={active ? 'page' : undefined}
       style={{

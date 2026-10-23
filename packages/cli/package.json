@@ -1,6 +1,6 @@
 {
   "name": "@open-slide/cli",
-  "version": "2.0.0-beta.3",
+  "version": "2.0.0",
   "description": "Scaffold an open-slide workspace with Claude Code skills preconfigured.",
   "type": "module",
   "bin": {
@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",
-    "chalk": "^6.0.0",
+    "chalk": "^6.0.1",
     "commander": "^15.0.0"
   },
   "devDependencies": {

@@ -11,6 +11,7 @@ import { designPlugin } from './design-plugin.ts';
 import { locTagsPlugin } from './loc-tags-plugin.ts';
 import { notesPlugin } from './notes-plugin.ts';
 import { loadUserConfig, type OpenSlideConfig, openSlidePlugin } from './open-slide-plugin.ts';
+import { serverInfoPlugin } from './server-info-plugin.ts';
 import { themesPlugin } from './themes-plugin.ts';
 
 function findPackageRoot(fromFile: string): string {
@@ -87,9 +88,11 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
         themesDir,
         themeImportAllowedHosts: config.themeImport?.allowedHosts,
         coreVersion: CORE_VERSION,
+        agentEnabled: config.agent?.enabled ?? true,
       }),
       notesPlugin({ userCwd, slidesDir }),
       currentPlugin({ userCwd, slidesDir }),
+      serverInfoPlugin({ userCwd }),
     ],
     resolve: {
       alias: {

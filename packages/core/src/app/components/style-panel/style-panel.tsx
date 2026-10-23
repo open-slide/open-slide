@@ -197,12 +197,13 @@ export function DesignToggleButton({
       size="sm"
       variant={active ? 'default' : 'ghost'}
       onClick={onToggle}
+      aria-label={t.stylePanel.designToggle}
       data-design-ui
       title={t.stylePanel.designToggleTitle}
     >
       <Palette className="size-3.5" />
-      <span className="hidden md:inline">{t.stylePanel.designToggle}</span>
-      <kbd className="ml-1 hidden rounded-[3px] bg-foreground/10 px-1 font-mono text-[9.5px] tracking-[0.04em] md:inline">
+      <span className="hidden lg:inline">{t.stylePanel.designToggle}</span>
+      <kbd className="ml-1 hidden rounded-[3px] bg-foreground/10 px-1 font-mono text-[9.5px] tracking-[0.04em] lg:inline">
         D
       </kbd>
     </Button>

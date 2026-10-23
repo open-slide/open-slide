@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { IconTooltip } from '@/components/icon-tooltip';
 import { buttonVariants } from '@/components/ui/button';
 import { TooltipTrigger } from '@/components/ui/tooltip';
+import { IS_APPLE } from '@/lib/keys';
 import { LOCALE_OPTIONS, setLocale } from '@/lib/locale-store';
 import { format, useLocale } from '@/lib/use-locale';
 import { useRestartServer } from '@/lib/use-restart-server';
@@ -117,9 +118,6 @@ export function CommandMenu({
     </CommandDialog>
   );
 }
-
-const IS_APPLE =
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
 
 export const COMMAND_MENU_SHORTCUT = IS_APPLE ? '⌘K' : 'Ctrl K';
 

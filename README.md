@@ -1,4 +1,4 @@
-<img width="1280" height="640" alt="open-slide github cover" src="https://github.com/user-attachments/assets/02f5e6d7-12a7-4a8e-88e7-ae8770a96584" />
+<img width="1280" height="640" alt="open-slide github cover" src="https://github.com/user-attachments/assets/da535284-f7a9-4834-b281-f9ac6fe416e8" />
 
 <br />
 <br />
@@ -37,9 +37,13 @@ From a one-line prompt to a polished deck, no boilerplate.
 
 ### 🎯 In-browser inspector
 
-Click any element in the dev server and attach a comment — *"make this red"*, *"change to 'Open Slide Rocks'"*, *"shrink the headline"*. Comments are persisted as `@slide-comment` markers in source. Run `/apply-comments` and the agent applies every pending edit, then clears the markers.
+Switch the dev server toolbar to comment mode, then click any element or drag across a region and leave a note — *"make this red"*, *"change to 'Open Slide Rocks'"*, *"shrink the headline"*. Each comment floats as a pin beside its target and is persisted as an `@slide-comment` marker in source. Run `/apply-comments` and the agent applies every pending edit, then clears the markers.
 
-The loop: present → click to comment → `/apply-comments` → repeat.
+The loop: present → comment → `/apply-comments` → repeat.
+
+### 🧑‍💻 In-app agent panel
+
+Connect your locally installed Claude Code or Codex once and the whole loop moves into the browser: draft a deck, answer the scoping questions as option cards, apply comments with one click, and edit the selected element by describing the change. Without a connected agent the dev server keeps the terminal-driven flow above.
 
 ### 🖼️ Assets manager + svgl logo search
 
@@ -95,7 +99,7 @@ pnpm lint     # lints via biome
 
 If open-slide has been useful to you, consider supporting development:
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/D1D11YPUP1)
+<a href="https://buymeacoffee.com/1weiho"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="40"></a>
 
 ## License
 

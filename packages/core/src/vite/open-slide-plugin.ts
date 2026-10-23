@@ -274,10 +274,15 @@ export function openSlidePlugin(opts: OpenSlidePluginOptions): Plugin {
       // otherwise treat a glob pattern as a literal path.
       if (existsSync(slidesRoot)) server.watcher.add(slidesRoot);
       server.watcher.on('add', (p) => {
-        if (isSlideEntry(p)) reload();
+        // Slides the dev server scaffolds itself already invalidated the
+        // module before answering; a reload here would race the client's own
+        // navigation into the new slide.
+        if (isSlideEntry(p) && !hasRecentWrite(p)) reload();
       });
       server.watcher.on('unlink', (p) => {
-        if (isSlideEntry(p)) reload();
+        // A rename the dev server made itself is announced to clients, which
+        // navigate to the new id; a reload would land them on the old one.
+        if (isSlideEntry(p) && !hasRecentWrite(p)) reload();
       });
 
       let foldersTimer: ReturnType<typeof setTimeout> | null = null;
@@ -301,6 +306,11 @@ export function openSlidePlugin(opts: OpenSlidePluginOptions): Plugin {
       });
     },
   };
+}
+
+export function invalidateSlidesModule(server: ViteDevServer): void {
+  const mod = server.moduleGraph.getModuleById(resolved(SLIDES_VMOD));
+  if (mod) server.moduleGraph.invalidateModule(mod);
 }
 
 export async function loadUserConfig(userCwd: string): Promise<OpenSlideConfig> {

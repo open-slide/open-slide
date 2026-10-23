@@ -14,6 +14,7 @@ export type ApiContext = {
   themeImportAllowedHosts?: string[];
   manifestPath: string;
   coreVersion: string;
+  agentEnabled: boolean;
 };
 
 export type ApiPluginOptions = {
@@ -23,6 +24,7 @@ export type ApiPluginOptions = {
   themesDir?: string;
   themeImportAllowedHosts?: string[];
   coreVersion: string;
+  agentEnabled: boolean;
 };
 
 export function makeContext(opts: ApiPluginOptions): ApiContext {
@@ -43,13 +45,33 @@ export function makeContext(opts: ApiPluginOptions): ApiContext {
     themeImportAllowedHosts: opts.themeImportAllowedHosts,
     manifestPath,
     coreVersion: opts.coreVersion,
+    agentEnabled: opts.agentEnabled,
   };
 }
 
-export async function readBody(req: Connect.IncomingMessage): Promise<unknown> {
+export class BodyTooLargeError extends Error {
+  constructor() {
+    super('request body too large');
+    this.name = 'BodyTooLargeError';
+  }
+}
+
+export async function readBody(
+  req: Connect.IncomingMessage,
+  limit = Number.POSITIVE_INFINITY,
+): Promise<unknown> {
   return await new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
+    let size = 0;
+    req.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > limit) {
+        req.destroy();
+        reject(new BodyTooLargeError());
+        return;
+      }
+      chunks.push(c);
+    });
     req.on('end', () => {
       const raw = Buffer.concat(chunks).toString('utf8');
       if (!raw) return resolve({});

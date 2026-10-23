@@ -4,6 +4,22 @@ import { parse as babelParse } from '@babel/parser';
 
 export const SLIDE_ID_RE = /^[a-z0-9_-]+$/i;
 
+/**
+ * True when a directory under root already uses this id, including a
+ * different case. ext4 keeps `Cover` and `cover` as two folders; macOS
+ * and Windows usually collapse them. Listing names catches both.
+ */
+async function slideIdTaken(root: string, slideId: string): Promise<boolean> {
+  let names: string[];
+  try {
+    names = await fs.readdir(root);
+  } catch {
+    return false;
+  }
+  const want = slideId.toLowerCase();
+  return names.some((name) => name.toLowerCase() === want);
+}
+
 type MetaTitleRead =
   | { kind: 'found'; title: string }
   | { kind: 'missing' }
@@ -29,7 +45,7 @@ function unwrapExpression(
   return current;
 }
 
-function readMetaTitleInSource(source: string): MetaTitleRead {
+export function readMetaTitleInSource(source: string): MetaTitleRead {
   let ast: unknown;
   try {
     ast = babelParse(source, {
@@ -126,20 +142,18 @@ export async function duplicateSlideDir(
     if (!dstDir.startsWith(root + path.sep)) {
       return { ok: false, status: 400, error: 'invalid newId' };
     }
-    try {
-      await fs.access(dstDir);
+    if (await slideIdTaken(root, newId)) {
       return { ok: false, status: 409, error: 'slide already exists' };
-    } catch {}
+    }
   } else {
     let suffix = 1;
     while (true) {
       newId = suffix === 1 ? `${slideId}-copy` : `${slideId}-copy-${suffix}`;
-      try {
-        await fs.access(path.resolve(root, newId));
+      if (await slideIdTaken(root, newId)) {
         suffix++;
-      } catch {
-        break;
+        continue;
       }
+      break;
     }
   }
 
@@ -176,6 +190,91 @@ export async function duplicateSlideDir(
     }
     return { ok: false, status: 500, error: String((err as Error).message ?? err) };
   }
+}
+
+export const BLANK_SLIDE_TITLE = 'Untitled';
+
+function blankSlideSource(createdAt: string): string {
+  return `import type { Page, SlideMeta } from '@open-slide/core';
+
+export const meta: SlideMeta = { title: ${JSON.stringify(BLANK_SLIDE_TITLE)}, createdAt: ${JSON.stringify(createdAt)} };
+
+const Blank: Page = () => <div style={{ width: '100%', height: '100%', background: '#ffffff' }} />;
+
+export default [Blank] satisfies Page[];
+`;
+}
+
+export async function createBlankSlideDir(
+  slidesRoot: string,
+): Promise<
+  { ok: true; slideId: string; file: string } | { ok: false; status: number; error: string }
+> {
+  const root = path.resolve(slidesRoot);
+  await fs.mkdir(root, { recursive: true });
+  for (let suffix = 1; suffix < 1000; suffix++) {
+    const slideId = suffix === 1 ? 'untitled' : `untitled-${suffix}`;
+    if (await slideIdTaken(root, slideId)) continue;
+    const dir = path.join(root, slideId);
+    try {
+      await fs.mkdir(dir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') continue;
+      return { ok: false, status: 500, error: String((err as Error).message ?? err) };
+    }
+    const file = path.join(dir, 'index.tsx');
+    await fs.writeFile(file, blankSlideSource(new Date().toISOString()), 'utf8');
+    return { ok: true, slideId, file };
+  }
+  return { ok: false, status: 409, error: 'no free slide id' };
+}
+
+export function slugifyTitle(title: string): string {
+  return title
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .slice(0, 48)
+    .replace(/-+$/, '');
+}
+
+export async function renameSlideDir(
+  slidesRoot: string,
+  slideId: string,
+  desiredId: string,
+): Promise<
+  | { ok: true; slideId: string; from: string; to: string }
+  | { ok: false; status: number; error: string }
+> {
+  if (!SLIDE_ID_RE.test(slideId) || !SLIDE_ID_RE.test(desiredId)) {
+    return { ok: false, status: 400, error: 'invalid slideId' };
+  }
+  const root = path.resolve(slidesRoot);
+  const from = path.resolve(root, slideId);
+  if (!from.startsWith(root + path.sep))
+    return { ok: false, status: 400, error: 'invalid slideId' };
+  try {
+    await fs.access(path.join(from, 'index.tsx'));
+  } catch {
+    return { ok: false, status: 404, error: 'slide not found' };
+  }
+  for (let suffix = 1; suffix < 1000; suffix++) {
+    const candidate = suffix === 1 ? desiredId : `${desiredId}-${suffix}`;
+    if (candidate === slideId) return { ok: false, status: 409, error: 'slide id unchanged' };
+    if (await slideIdTaken(root, candidate)) continue;
+    const to = path.join(root, candidate);
+    try {
+      await fs.rename(from, to);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST' || code === 'ENOTEMPTY') continue;
+      return { ok: false, status: 500, error: String((err as Error).message ?? err) };
+    }
+    return { ok: true, slideId: candidate, from, to };
+  }
+  return { ok: false, status: 409, error: 'no free slide id' };
 }
 
 export function resolveSlideEntry(slidesRoot: string, slideId: string): string | null {
