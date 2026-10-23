@@ -1,5 +1,15 @@
 # @open-slide/core
 
+## 2.3.0
+
+### Minor Changes
+
+- [#567](https://github.com/open-slide/open-slide/pull/567) [`c93ca36`](https://github.com/open-slide/open-slide/commit/c93ca36f2463cdf0fc47dc91fda2bea8c2a3d030) Thanks [@1weiho](https://github.com/1weiho)! - Add an in-app agent panel that uses a locally installed Claude Code or Codex to draft decks, apply comments, and edit pages.
+
+### Patch Changes
+
+- [#559](https://github.com/open-slide/open-slide/pull/559) [`4081bf9`](https://github.com/open-slide/open-slide/commit/4081bf973db1c4b81b2772fafa66f93004c98bde) Thanks [@1weiho](https://github.com/1weiho)! - Keep letterbox bars black in present mode when the screen isn't 16:9.
+
 ## 2.2.0
 
 ### Minor Changes
