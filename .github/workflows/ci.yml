@@ -35,6 +35,9 @@ jobs:
       - name: Run lint
         run: pnpm lint
 
+      - name: Check core package contents
+        run: pnpm core check:pack
+
   typecheck:
     runs-on: ubuntu-latest
     steps:

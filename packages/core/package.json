@@ -29,12 +29,19 @@
     "env.d.ts",
     "src/app",
     "src/locale",
+    "src/agent/prompt.ts",
+    "src/agent/provider.ts",
+    "src/agent/types.ts",
+    "src/editing/placeholder-id.ts",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
     "skills",
     "README.md"
   ],
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
+    "check:pack": "node scripts/check-pack.mjs",
     "test:e2e": "pnpm run build && playwright test",
     "prepack": "pnpm build"
   },
