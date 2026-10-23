@@ -34,10 +34,22 @@ describe('injectLocTags', () => {
     expect(out).toContain('<div data-slide-loc="2:2">hello</div>');
   });
 
-  it('skips capitalized component invocations', () => {
+  it('tags capitalized component invocations with data-slide-call', () => {
     const src = ['export default [() => (', '  <MyComp>hi</MyComp>', ')];', ''].join('\n');
     const out = injectLocTags(src);
-    expect(out).toBeNull();
+    if (out === null) throw new Error('expected transform');
+    expect(out).toContain('<MyComp data-slide-call="2:2">hi</MyComp>');
+    expect(out).not.toContain('data-slide-loc');
+  });
+
+  it('leaves Fragment and member-expression components untagged', () => {
+    const src = [
+      'export default [() => (',
+      '  <Fragment><Ctx.Provider value={1}>hi</Ctx.Provider></Fragment>',
+      ')];',
+      '',
+    ].join('\n');
+    expect(injectLocTags(src)).toBeNull();
   });
 
   it('tags every host element including nested ones', () => {
@@ -101,6 +113,8 @@ describe('injectLocTags', () => {
     if (out === null) throw new Error('expected transform');
     expect(out).toContain('<h1 data-slide-loc="3:4">Title</h1>');
     expect(out).toContain('<span data-slide-loc="4:12">nested</span>');
+    expect(out).toContain('<Layout data-slide-call="2:2">');
+    expect(out).toContain('<SubBox data-slide-call="4:4">');
     expect(out).not.toContain('<Layout data-slide-loc');
     expect(out).not.toContain('<SubBox data-slide-loc');
   });
