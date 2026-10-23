@@ -1,3 +1,4 @@
+import { ImageZoom } from 'fumadocs-ui/components/image-zoom';
 import { ChevronDown } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -195,7 +196,7 @@ function Entry({ release, latest, last }: { release: Release; latest: boolean; l
 
         {release.shot ? (
           <figure data-reveal className="mt-8 sm:mt-10">
-            <Image
+            <ImageZoom
               src={release.shot.src}
               alt={release.shot.alt}
               width={release.shot.width}
