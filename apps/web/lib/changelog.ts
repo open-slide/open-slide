@@ -16,6 +16,7 @@ export type Patch = {
 export type Release = {
   line: string;
   version: string;
+  versionLabel?: string;
   date: string;
   kind: ReleaseKind;
   title: string;
@@ -565,6 +566,7 @@ export const eras: Era[] = [
       {
         line: '0.0',
         version: '0.0.1',
+        versionLabel: '0.0.1 – 0.0.16',
         date: '2026-04-19',
         kind: 'origin',
         title: 'The first commit',

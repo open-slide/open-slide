@@ -80,7 +80,7 @@ export function Timeline({ eras, latest }: { eras: Era[]; latest: string }) {
             <Entry
               key={release.line}
               release={release}
-              latest={release.version === latest || release.patches?.at(-1)?.version === latest}
+              latest={latest}
               last={eraIndex === eras.length - 1 && i === era.releases.length - 1}
             />
           ))}
@@ -111,9 +111,12 @@ function EraHeader({ era, first }: { era: Era; first: boolean }) {
   );
 }
 
-function Entry({ release, latest, last }: { release: Release; latest: boolean; last: boolean }) {
+function Entry({ release, latest, last }: { release: Release; latest: string; last: boolean }) {
   const major = release.kind === 'major';
   const highlight = isHighlight(release);
+  const isLatest = release.version === latest;
+  const holdsLatest = isLatest || !!release.patches?.some((patch) => patch.version === latest);
+  const versionLabel = `v${release.versionLabel ?? release.version}`;
 
   return (
     <article
@@ -127,7 +130,7 @@ function Entry({ release, latest, last }: { release: Release; latest: boolean; l
             href={`#v${release.line}`}
             className="nums font-[family-name:var(--font-mono)] text-[15px] font-medium text-[color:var(--color-text)] hover:text-[color:var(--color-accent)]"
           >
-            v{release.version}
+            {versionLabel}
           </a>
           <time
             dateTime={release.date}
@@ -135,7 +138,7 @@ function Entry({ release, latest, last }: { release: Release; latest: boolean; l
           >
             {formatDate(release.date)}
           </time>
-          {latest ? <LatestBadge /> : null}
+          {isLatest ? <LatestBadge /> : null}
         </div>
       </header>
 
@@ -144,7 +147,7 @@ function Entry({ release, latest, last }: { release: Release; latest: boolean; l
       >
         <span
           aria-hidden
-          className={`cl-node ${major || latest ? 'cl-node-accent' : highlight ? 'cl-node-solid' : 'cl-node-hollow'}`}
+          className={`cl-node ${major || holdsLatest ? 'cl-node-accent' : highlight ? 'cl-node-solid' : 'cl-node-hollow'}`}
         />
 
         <div data-reveal>
@@ -159,11 +162,11 @@ function Entry({ release, latest, last }: { release: Release; latest: boolean; l
               {kindLabel[release.kind]}
             </span>
             <span className="nums flex items-center gap-2 font-[family-name:var(--font-mono)] text-[12.5px] text-[color:var(--color-muted)] min-[1200px]:hidden">
-              v{release.version}
+              {versionLabel}
               <span aria-hidden>·</span>
               <time dateTime={release.date}>{formatDate(release.date)}</time>
             </span>
-            {latest ? (
+            {isLatest ? (
               <span className="min-[1200px]:hidden">
                 <LatestBadge />
               </span>
@@ -237,7 +240,7 @@ function Entry({ release, latest, last }: { release: Release; latest: boolean; l
           </div>
         ) : null}
 
-        {release.patches?.length ? <Patches patches={release.patches} /> : null}
+        {release.patches?.length ? <Patches patches={release.patches} latest={latest} /> : null}
 
         {release.docs || release.contributors?.length ? (
           <div
@@ -257,13 +260,13 @@ function Entry({ release, latest, last }: { release: Release; latest: boolean; l
   );
 }
 
-function Patches({ patches }: { patches: Patch[] }) {
+function Patches({ patches, latest }: { patches: Patch[]; latest: string }) {
   const range =
     patches.length > 1 ? `${patches[0].version} – ${patches.at(-1)?.version}` : patches[0].version;
   return (
     <details
       data-reveal
-      open={patches.length <= 2}
+      open={patches.length <= 2 || patches.some((patch) => patch.version === latest)}
       className="cl-patches group mt-8 max-w-[64ch] border-t border-[color:var(--color-rule-soft)]"
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-3.5 text-[13.5px] text-[color:var(--color-text-soft)] transition-colors hover:text-[color:var(--color-text)]">
@@ -287,8 +290,11 @@ function Patches({ patches }: { patches: Patch[] }) {
             key={patch.version}
             className="grid grid-cols-[64px_minmax(0,1fr)] gap-x-4 border-t border-dashed border-[color:var(--color-rule-soft)] py-3 sm:grid-cols-[64px_minmax(0,1fr)_56px]"
           >
-            <span className="nums pt-px font-[family-name:var(--font-mono)] text-[12.5px] text-[color:var(--color-text)]">
-              {patch.version}
+            <span className="flex flex-col items-start gap-1.5">
+              <span className="nums pt-px font-[family-name:var(--font-mono)] text-[12.5px] text-[color:var(--color-text)]">
+                {patch.version}
+              </span>
+              {patch.version === latest ? <LatestBadge /> : null}
             </span>
             <p className="text-[14px] leading-[1.6] text-[color:var(--color-text-soft)]">
               <Rich text={patch.note} />
