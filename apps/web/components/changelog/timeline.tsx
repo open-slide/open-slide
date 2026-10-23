@@ -52,7 +52,7 @@ export function Rich({ text }: { text: string }) {
 export function Timeline({ eras, latest }: { eras: Era[]; latest: string }) {
   return (
     <div className="cl-timeline">
-      <div className="mb-12 flex flex-wrap items-center justify-between gap-4 sm:mb-16 md:pl-[228px]">
+      <div className="mb-12 flex flex-wrap items-center justify-between gap-4 sm:mb-16">
         <fieldset className="cl-filter inline-flex items-center gap-0.5 rounded-full bg-[color:var(--color-panel)] p-1 shadow-[var(--shadow-edge)]">
           <legend className="sr-only">Show</legend>
           <label>
@@ -92,24 +92,21 @@ export function Timeline({ eras, latest }: { eras: Era[]; latest: string }) {
 
 function EraHeader({ era, first }: { era: Era; first: boolean }) {
   return (
-    <div className="md:grid md:grid-cols-[180px_minmax(0,1fr)] md:gap-x-12">
-      <div className="hidden md:block" />
-      <div className={`cl-rail relative pb-14 pl-8 sm:pl-12 ${first ? 'cl-rail-start' : 'pt-6'}`}>
-        <span aria-hidden className="cl-node cl-node-era" />
-        <p className="caption nums mb-3 flex items-center gap-2">
-          <span className="normal-case text-[color:var(--color-text)]">{era.label}</span>
-          <span aria-hidden>·</span>
-          <span>{era.span}</span>
-        </p>
-        <h2
-          id={`era-${era.id}`}
-          data-reveal
-          className="max-w-[24ch] text-balance text-[26px] font-medium leading-[1.15] tracking-[-0.03em] sm:text-[32px]"
-        >
-          <span className="text-[color:var(--color-text)]">{era.title}.</span>{' '}
-          <span className="text-[color:var(--color-muted)]">{era.blurb}</span>
-        </h2>
-      </div>
+    <div className={`cl-rail relative pb-14 pl-8 sm:pl-12 ${first ? 'cl-rail-start' : 'pt-6'}`}>
+      <span aria-hidden className="cl-node cl-node-era" />
+      <p className="caption nums mb-3 flex items-center gap-2">
+        <span className="normal-case text-[color:var(--color-text)]">{era.label}</span>
+        <span aria-hidden>·</span>
+        <span>{era.span}</span>
+      </p>
+      <h2
+        id={`era-${era.id}`}
+        data-reveal
+        className="max-w-[24ch] text-balance text-[26px] font-medium leading-[1.15] tracking-[-0.03em] sm:text-[32px]"
+      >
+        <span className="text-[color:var(--color-text)]">{era.title}.</span>{' '}
+        <span className="text-[color:var(--color-muted)]">{era.blurb}</span>
+      </h2>
     </div>
   );
 }
@@ -122,9 +119,9 @@ function Entry({ release, latest, last }: { release: Release; latest: boolean; l
     <article
       id={`v${release.line}`}
       data-highlight={highlight ? 'true' : 'false'}
-      className="cl-entry scroll-mt-24 md:grid md:grid-cols-[180px_minmax(0,1fr)] md:gap-x-12"
+      className="cl-entry relative scroll-mt-24"
     >
-      <header className="hidden md:block">
+      <header className="absolute inset-y-0 right-full mr-10 hidden w-[160px] min-[1200px]:block">
         <div className="sticky top-[92px] flex flex-col items-end gap-1.5 pt-[3px] text-right">
           <a
             href={`#v${release.line}`}
@@ -161,13 +158,13 @@ function Entry({ release, latest, last }: { release: Release; latest: boolean; l
             >
               {kindLabel[release.kind]}
             </span>
-            <span className="nums flex items-center gap-2 font-[family-name:var(--font-mono)] text-[12.5px] text-[color:var(--color-muted)] md:hidden">
+            <span className="nums flex items-center gap-2 font-[family-name:var(--font-mono)] text-[12.5px] text-[color:var(--color-muted)] min-[1200px]:hidden">
               v{release.version}
               <span aria-hidden>·</span>
               <time dateTime={release.date}>{formatDate(release.date)}</time>
             </span>
             {latest ? (
-              <span className="md:hidden">
+              <span className="min-[1200px]:hidden">
                 <LatestBadge />
               </span>
             ) : null}
@@ -201,7 +198,7 @@ function Entry({ release, latest, last }: { release: Release; latest: boolean; l
               alt={release.shot.alt}
               width={release.shot.width}
               height={release.shot.height}
-              sizes="(min-width: 1040px) 760px, 100vw"
+              sizes="(min-width: 800px) 690px, 100vw"
               className="block h-auto w-full rounded-[14px] shadow-[var(--shadow-floating)] ring-1 ring-[color:var(--color-rule-soft)]"
             />
           </figure>

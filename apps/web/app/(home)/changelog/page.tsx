@@ -35,8 +35,8 @@ export default async function ChangelogPage() {
       <Nav githubStars={githubStars} />
       <ScrollReveal />
       <main className="relative flex-1">
-        <div className="mx-auto w-full max-w-[1040px] px-6 sm:px-8">
-          <section className="pt-20 pb-16 sm:pt-28 sm:pb-24 md:pl-[228px]">
+        <div className="mx-auto w-full max-w-[800px] px-6 sm:px-8">
+          <section className="pt-20 pb-16 sm:pt-28 sm:pb-24">
             <p className="eyebrow rise">Changelog</p>
             <h1
               className="rise mt-4 text-balance text-[44px] font-medium leading-[1.02] tracking-[-0.04em] text-[color:var(--color-text)] sm:text-[60px]"
