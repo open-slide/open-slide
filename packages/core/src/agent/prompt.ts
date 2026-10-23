@@ -3,7 +3,7 @@ import { parseQuestions } from './provider.ts';
 import type { AgentQuestion, AgentTurnContext } from './types.ts';
 
 const PAGE_BY_PAGE =
-  'Write a new deck page by page so the user can follow along on the canvas: first replace the file with the imports, meta, design and the cover page only, then add each remaining page with its own separate edit, keeping the file compiling after every write.';
+  'Write a new deck page by page so the user can follow along on the canvas: first replace the file with the imports, meta (keeping its existing createdAt), design and the cover page only, then add each remaining page with its own separate edit, keeping the file compiling after every write.';
 
 const DECK_SLUG =
   "This deck's folder still has a placeholder name. Never rename or move the folder yourself: once the deck has content, end your final reply with a slug for it on a line of its own as <deck-slug>short-kebab-case-english-slug</deck-slug>, and open-slide renames the folder from it.";

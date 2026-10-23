@@ -44,7 +44,11 @@ describe('createBlankSlideDir', () => {
       expect(first).toMatchObject({ ok: true, slideId: 'untitled-2' });
       expect(await createBlankSlideDir(root)).toMatchObject({ ok: true, slideId: 'untitled-3' });
       const source = await fs.readFile(path.join(root, 'untitled-2', 'index.tsx'), 'utf8');
-      expect(source).toContain('export const meta: SlideMeta = { title: "Untitled" };');
+      const createdAt = source.match(/createdAt: "([^"]+)"/)?.[1];
+      expect(createdAt && new Date(createdAt).toISOString()).toBe(createdAt);
+      expect(source).toContain(
+        `export const meta: SlideMeta = { title: "Untitled", createdAt: "${createdAt}" };`,
+      );
       expect(source).toContain('export default [Blank] satisfies Page[];');
     });
   });

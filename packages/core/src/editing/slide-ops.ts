@@ -194,10 +194,10 @@ export async function duplicateSlideDir(
 
 export const BLANK_SLIDE_TITLE = 'Untitled';
 
-function blankSlideSource(): string {
+function blankSlideSource(createdAt: string): string {
   return `import type { Page, SlideMeta } from '@open-slide/core';
 
-export const meta: SlideMeta = { title: ${JSON.stringify(BLANK_SLIDE_TITLE)} };
+export const meta: SlideMeta = { title: ${JSON.stringify(BLANK_SLIDE_TITLE)}, createdAt: ${JSON.stringify(createdAt)} };
 
 const Blank: Page = () => <div style={{ width: '100%', height: '100%', background: '#ffffff' }} />;
 
@@ -223,7 +223,7 @@ export async function createBlankSlideDir(
       return { ok: false, status: 500, error: String((err as Error).message ?? err) };
     }
     const file = path.join(dir, 'index.tsx');
-    await fs.writeFile(file, blankSlideSource(), 'utf8');
+    await fs.writeFile(file, blankSlideSource(new Date().toISOString()), 'utf8');
     return { ok: true, slideId, file };
   }
   return { ok: false, status: 409, error: 'no free slide id' };
