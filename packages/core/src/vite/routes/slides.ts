@@ -1,13 +1,15 @@
 import fs from 'node:fs/promises';
 import type { ViteDevServer } from 'vite';
 import {
-  duplicateNotesElementInSource,
+  duplicatePageAlignedElementInSource,
   duplicatePageInDefaultExportInSource,
   duplicateSlideDir,
-  removeNotesElementInSource,
+  PAGE_ALIGNED_EXPORTS,
+  type PageAlignedExport,
+  removePageAlignedElementInSource,
   removePageFromDefaultExportInSource,
   reorderDefaultExportPagesInSource,
-  reorderNotesArrayInSource,
+  reorderPageAlignedArrayInSource,
   resolveSlideEntry,
   rmSlideDir,
   SLIDE_ID_RE,
@@ -27,6 +29,19 @@ import { type ApiContext, json, readBody } from './context.ts';
 
 type DuplicateSlideBody = { newId?: unknown };
 type SlidePatchBody = { name?: unknown };
+
+function alignPageExports(
+  source: string,
+  align: (source: string, exportName: PageAlignedExport) => string | null,
+): { source: string } | { invalid: PageAlignedExport } {
+  let next = source;
+  for (const exportName of PAGE_ALIGNED_EXPORTS) {
+    const aligned = align(next, exportName);
+    if (aligned === null) return { invalid: exportName };
+    next = aligned;
+  }
+  return { source: next };
+}
 
 export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): void {
   server.middlewares.use('/__slides', async (req, res, next) => {
@@ -67,14 +82,16 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
             error: 'could not reorder pages — order must be a permutation of the existing array',
           });
         }
-        const withNotes = reorderNotesArrayInSource(reordered, order);
-        if (withNotes === null) {
+        const aligned = alignPageExports(reordered, (src, exportName) =>
+          reorderPageAlignedArrayInSource(src, exportName, order),
+        );
+        if ('invalid' in aligned) {
           return json(res, 422, {
-            error: 'could not reorder pages — `notes` export has an unexpected shape',
+            error: `could not reorder pages — \`${aligned.invalid}\` export has an unexpected shape`,
           });
         }
-        if (withNotes !== source) {
-          await fs.writeFile(entry, withNotes, 'utf8');
+        if (aligned.source !== source) {
+          await fs.writeFile(entry, aligned.source, 'utf8');
         }
         return json(res, 200, { ok: true, slideId, order });
       }
@@ -116,18 +133,19 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
               : 'could not duplicate page — index out of range or default export is not an array',
           });
         }
-        const withNotes = isDelete
-          ? removeNotesElementInSource(updated, pageIndex)
-          : duplicateNotesElementInSource(updated, pageIndex);
-        if (withNotes === null) {
+        const aligned = alignPageExports(updated, (src, exportName) =>
+          isDelete
+            ? removePageAlignedElementInSource(src, exportName, pageIndex)
+            : duplicatePageAlignedElementInSource(src, exportName, pageIndex),
+        );
+        if ('invalid' in aligned) {
+          const action = isDelete ? 'delete' : 'duplicate';
           return json(res, 422, {
-            error: isDelete
-              ? 'could not delete page — `notes` export has an unexpected shape'
-              : 'could not duplicate page — `notes` export has an unexpected shape',
+            error: `could not ${action} page — \`${aligned.invalid}\` export has an unexpected shape`,
           });
         }
-        if (withNotes !== source) {
-          await fs.writeFile(entry, withNotes, 'utf8');
+        if (aligned.source !== source) {
+          await fs.writeFile(entry, aligned.source, 'utf8');
         }
         return json(res, 200, { ok: true, slideId, index: pageIndex });
       }

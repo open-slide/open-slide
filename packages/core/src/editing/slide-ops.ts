@@ -357,13 +357,30 @@ export function reorderDefaultExportPagesInSource(source: string, order: number[
   return source.slice(0, arrayStart) + rebuilt + source.slice(arrayEnd);
 }
 
-type NotesArrayInfo = {
+// Module exports that hold one entry per page, index-aligned with
+// `export default [...]`, and must follow every page reorder/delete/duplicate.
+export const PAGE_ALIGNED_EXPORTS = ['notes', 'durations'] as const;
+export type PageAlignedExport = (typeof PAGE_ALIGNED_EXPORTS)[number];
+
+// Every comment in the array belongs to an entry so a rebuild never drops
+// one: own-line comments lead the entry below them, a same-line comment
+// trails the entry it labels (`30, // Cover`), and comments after the last
+// entry stay at the end of the array.
+type PageAlignedEntry = { leading: string[]; text: string; trailing: string | null };
+
+type PageAlignedArrayInfo = {
   arrayStart: number;
   arrayEnd: number;
-  elementTexts: string[];
+  entries: PageAlignedEntry[];
+  tail: string[];
 };
 
-function findNotesArray(source: string): NotesArrayInfo | null | 'invalid' {
+const EMPTY_ENTRY: PageAlignedEntry = { leading: [], text: 'undefined', trailing: null };
+
+function findPageAlignedArray(
+  source: string,
+  exportName: PageAlignedExport,
+): PageAlignedArrayInfo | null | 'invalid' {
   let ast: unknown;
   try {
     ast = babelParse(source, {
@@ -374,6 +391,7 @@ function findNotesArray(source: string): NotesArrayInfo | null | 'invalid' {
   } catch {
     return 'invalid';
   }
+  const comments = (ast as { comments?: Array<Record<string, unknown>> }).comments ?? [];
   const body = (ast as { program?: { body?: Array<Record<string, unknown>> } }).program?.body ?? [];
   for (const stmt of body) {
     if (stmt.type !== 'ExportNamedDeclaration') continue;
@@ -382,114 +400,179 @@ function findNotesArray(source: string): NotesArrayInfo | null | 'invalid' {
     const declarations = (decl.declarations as Array<Record<string, unknown>> | undefined) ?? [];
     for (const d of declarations) {
       const id = d.id as Record<string, unknown> | undefined;
-      if (id?.type !== 'Identifier' || id.name !== 'notes') continue;
+      if (id?.type !== 'Identifier' || id.name !== exportName) continue;
       const init = d.init as Record<string, unknown> | undefined;
       if (init?.type !== 'ArrayExpression') return 'invalid';
       const arrayStart = init.start as number | undefined;
       const arrayEnd = init.end as number | undefined;
       if (typeof arrayStart !== 'number' || typeof arrayEnd !== 'number') return 'invalid';
+
+      const inside: Array<{ start: number; end: number }> = [];
+      for (const c of comments) {
+        const start = c.start as number | undefined;
+        const end = c.end as number | undefined;
+        if (typeof start !== 'number' || typeof end !== 'number') continue;
+        if (start > arrayStart && end < arrayEnd) inside.push({ start, end });
+      }
+      const commentText = (i: number) => source.slice(inside[i].start, inside[i].end);
+
       const rawElements = (init.elements as Array<Record<string, unknown> | null>) ?? [];
-      const elementTexts: string[] = [];
-      for (const el of rawElements) {
+      const entries: PageAlignedEntry[] = [];
+      let k = 0;
+      for (let i = 0; i < rawElements.length; i++) {
+        const el = rawElements[i];
         if (el === null) {
-          elementTexts.push('undefined');
+          entries.push(EMPTY_ENTRY);
           continue;
         }
         if (el.type === 'SpreadElement') return 'invalid';
         const start = el.start as number | undefined;
         const end = el.end as number | undefined;
         if (typeof start !== 'number' || typeof end !== 'number') return 'invalid';
-        elementTexts.push(source.slice(start, end));
+        const following = rawElements.slice(i + 1).find((next) => next !== null);
+        const boundary = (following?.start as number | undefined) ?? arrayEnd;
+
+        const leading: string[] = [];
+        while (k < inside.length && inside[k].end <= start) leading.push(commentText(k++));
+        // Comments inside the element are already part of its source text.
+        while (k < inside.length && inside[k].end <= end) k++;
+        const trailing: string[] = [];
+        while (
+          k < inside.length &&
+          inside[k].end <= boundary &&
+          !source.slice(end, inside[k].start).includes('\n')
+        ) {
+          trailing.push(commentText(k++));
+        }
+        entries.push({
+          leading,
+          text: source.slice(start, end),
+          trailing: trailing.length > 0 ? trailing.join(' ') : null,
+        });
       }
-      return { arrayStart, arrayEnd, elementTexts };
+      const tail: string[] = [];
+      while (k < inside.length) tail.push(commentText(k++));
+      return { arrayStart, arrayEnd, entries, tail };
     }
   }
   return null;
 }
 
 /**
- * Reorder `export const notes = [...]` to follow the page-array reorder.
+ * Reorder a page-aligned export (`export const notes = [...]`,
+ * `export const durations = [...]`) to follow the page-array reorder.
  *
  * `order[i]` is the original page index that should land at new position `i`.
- * The notes array is index-aligned with the pages array but may be shorter
+ * The array is index-aligned with the pages array but may be shorter
  * (trailing `undefined` slots are routinely trimmed). Missing elements are
  * treated as `undefined`, and trailing `undefined` is trimmed again after
- * reordering to keep the file tidy.
+ * reordering to keep the file tidy. Comments move with the entry they belong
+ * to.
  *
- * Returns the rewritten source, the original source if no `notes` export
- * exists or the reorder is a no-op, or `null` if the `notes` export's shape
- * is too surprising to touch safely.
+ * Returns the rewritten source, the original source if the export doesn't
+ * exist or the reorder is a no-op, or `null` if the export's shape is too
+ * surprising to touch safely.
  */
-export function reorderNotesArrayInSource(source: string, order: number[]): string | null {
+export function reorderPageAlignedArrayInSource(
+  source: string,
+  exportName: PageAlignedExport,
+  order: number[],
+): string | null {
   for (const idx of order) {
     if (!Number.isInteger(idx) || idx < 0) return null;
   }
-  const found = findNotesArray(source);
+  const found = findPageAlignedArray(source, exportName);
   if (found === 'invalid') return null;
   if (found === null) return source;
 
-  const { arrayStart, arrayEnd, elementTexts } = found;
-  const pick = (i: number): string =>
-    i >= 0 && i < elementTexts.length ? elementTexts[i] : 'undefined';
-  return rebuildNotesArray(source, arrayStart, arrayEnd, order.map(pick));
+  const { entries } = found;
+  const pick = (i: number): PageAlignedEntry =>
+    i >= 0 && i < entries.length ? entries[i] : EMPTY_ENTRY;
+  return rebuildPageAlignedArray(source, found, order.map(pick), found.tail);
 }
 
 /**
- * Remove the note aligned with the page at `index` so the `notes` export stays
- * index-aligned with `export default [...]` after a page deletion. Mirrors
- * {@link removePageFromDefaultExportInSource}.
+ * Remove the entry aligned with the page at `index` so a page-aligned export
+ * stays index-aligned with `export default [...]` after a page deletion.
+ * Mirrors {@link removePageFromDefaultExportInSource}. The entry's same-line
+ * comment goes with it; own-line comments above it pass to the next entry so
+ * section headings survive.
  *
- * Returns the rewritten source, the original source if no `notes` export exists
- * or the index falls past the recorded notes, or `null` if the `notes` export's
- * shape is too surprising to touch safely.
+ * Returns the rewritten source, the original source if the export doesn't
+ * exist or the index falls past the recorded entries, or `null` if the
+ * export's shape is too surprising to touch safely.
  */
-export function removeNotesElementInSource(source: string, index: number): string | null {
-  if (!Number.isInteger(index) || index < 0) return null;
-  const found = findNotesArray(source);
-  if (found === 'invalid') return null;
-  if (found === null) return source;
-
-  const { arrayStart, arrayEnd, elementTexts } = found;
-  if (index >= elementTexts.length) return source;
-  const next = elementTexts.slice();
-  next.splice(index, 1);
-  return rebuildNotesArray(source, arrayStart, arrayEnd, next);
-}
-
-/**
- * Duplicate the note aligned with the page at `index`, inserting the copy right
- * after it so the `notes` export stays index-aligned with `export default [...]`
- * after a page duplication. Mirrors {@link duplicatePageInDefaultExportInSource}.
- *
- * Returns the rewritten source, the original source if no `notes` export exists
- * or the index falls past the recorded notes (the new slot and everything after
- * it are absent, so nothing shifts), or `null` if the shape is too surprising.
- */
-export function duplicateNotesElementInSource(source: string, index: number): string | null {
-  if (!Number.isInteger(index) || index < 0) return null;
-  const found = findNotesArray(source);
-  if (found === 'invalid') return null;
-  if (found === null) return source;
-
-  const { arrayStart, arrayEnd, elementTexts } = found;
-  if (index >= elementTexts.length) return source;
-  const next = elementTexts.slice();
-  next.splice(index + 1, 0, next[index]);
-  return rebuildNotesArray(source, arrayStart, arrayEnd, next);
-}
-
-function rebuildNotesArray(
+export function removePageAlignedElementInSource(
   source: string,
-  arrayStart: number,
-  arrayEnd: number,
-  elements: string[],
+  exportName: PageAlignedExport,
+  index: number,
+): string | null {
+  if (!Number.isInteger(index) || index < 0) return null;
+  const found = findPageAlignedArray(source, exportName);
+  if (found === 'invalid') return null;
+  if (found === null) return source;
+
+  const { entries } = found;
+  if (index >= entries.length) return source;
+  const next = entries.slice();
+  const [removed] = next.splice(index, 1);
+  let tail = found.tail;
+  if (index < next.length) {
+    next[index] = { ...next[index], leading: [...removed.leading, ...next[index].leading] };
+  } else {
+    tail = [...removed.leading, ...tail];
+  }
+  return rebuildPageAlignedArray(source, found, next, tail);
+}
+
+/**
+ * Duplicate the entry aligned with the page at `index`, inserting the copy
+ * right after it so a page-aligned export stays index-aligned with
+ * `export default [...]` after a page duplication. Mirrors
+ * {@link duplicatePageInDefaultExportInSource}. The copy keeps the entry's
+ * same-line comment but not the own-line comments above it.
+ *
+ * Returns the rewritten source, the original source if the export doesn't
+ * exist or the index falls past the recorded entries (the new slot and
+ * everything after it are absent, so nothing shifts), or `null` if the shape
+ * is too surprising.
+ */
+export function duplicatePageAlignedElementInSource(
+  source: string,
+  exportName: PageAlignedExport,
+  index: number,
+): string | null {
+  if (!Number.isInteger(index) || index < 0) return null;
+  const found = findPageAlignedArray(source, exportName);
+  if (found === 'invalid') return null;
+  if (found === null) return source;
+
+  const { entries } = found;
+  if (index >= entries.length) return source;
+  const next = entries.slice();
+  next.splice(index + 1, 0, { ...next[index], leading: [] });
+  return rebuildPageAlignedArray(source, found, next, found.tail);
+}
+
+function rebuildPageAlignedArray(
+  source: string,
+  { arrayStart, arrayEnd }: PageAlignedArrayInfo,
+  entries: PageAlignedEntry[],
+  tail: string[],
 ): string {
-  const trimmed = elements.slice();
-  while (trimmed.length > 0 && trimmed[trimmed.length - 1] === 'undefined') {
+  const trimmed = entries.slice();
+  while (trimmed.length > 0) {
+    const last = trimmed[trimmed.length - 1];
+    if (last.text !== 'undefined' || last.trailing !== null || last.leading.length > 0) break;
     trimmed.pop();
   }
-  const replacement =
-    trimmed.length === 0 ? '[]' : `[\n${trimmed.map((s) => `  ${s},`).join('\n')}\n]`;
+  const lines: string[] = [];
+  for (const e of trimmed) {
+    for (const c of e.leading) lines.push(`  ${c}`);
+    lines.push(`  ${e.text},${e.trailing === null ? '' : ` ${e.trailing}`}`);
+  }
+  for (const c of tail) lines.push(`  ${c}`);
+  const replacement = lines.length === 0 ? '[]' : `[\n${lines.join('\n')}\n]`;
   if (replacement === source.slice(arrayStart, arrayEnd)) return source;
   return source.slice(0, arrayStart) + replacement + source.slice(arrayEnd);
 }

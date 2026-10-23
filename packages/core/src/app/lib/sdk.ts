@@ -17,6 +17,8 @@ export type SlideModule = {
   design?: DesignSystem;
   // Index-aligned with `default`.
   notes?: (string | undefined)[];
+  // Seconds budgeted per page, index-aligned with `default`.
+  durations?: (number | undefined)[];
   transition?: SlideTransition;
 };
 

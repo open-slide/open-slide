@@ -45,6 +45,50 @@ test.describe('presenter view', () => {
     await expect(popup.getByText('01 / 03')).toBeVisible();
   });
 
+  test('times each page against its budget and flags overruns', async ({ page, context }) => {
+    await openSlide(page, 'alpha');
+    await enterPlayMode(page);
+
+    const popupPromise = context.waitForEvent('page');
+    await page.keyboard.press('p');
+    const popup = await popupPromise;
+    await expect(popup.getByText('01 / 03')).toBeVisible({ timeout: 30_000 });
+
+    const overrun = popup.getByText(/^\+\d\d:\d\d$/);
+    await expect(popup.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '1');
+    await expect(popup.getByText('/ 00:01')).toBeVisible();
+    await expect(overrun).toBeVisible({ timeout: 10_000 });
+
+    await popup.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(popup.getByText('02 / 03')).toBeVisible();
+    await expect(popup.getByRole('progressbar')).toBeHidden();
+    await expect(popup.getByText('Slide time')).toBeVisible();
+    await expect(overrun).toBeHidden();
+
+    await popup.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(popup.getByText('03 / 03')).toBeVisible();
+    await expect(popup.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '3600');
+    await expect(popup.getByText('/ 1:00:00')).toBeVisible();
+    await expect(overrun).toBeHidden();
+
+    await popup.getByRole('button', { name: 'Prev', exact: true }).click();
+    await popup.getByRole('button', { name: 'Prev', exact: true }).click();
+    await expect(popup.getByText('01 / 03')).toBeVisible();
+    await expect(overrun).toBeVisible();
+    await expect(popup.getByText(/^Behind by /)).toBeVisible();
+
+    const jump = popup.locator('input[type="number"]');
+    await jump.fill('3');
+    await jump.press('Enter');
+    await expect(popup.getByText('03 / 03')).toBeVisible();
+    await expect(popup.getByText(/^Behind by /)).toBeVisible();
+
+    await popup.getByRole('button', { name: 'Reset', exact: true }).click();
+    await expect(popup.getByText('On schedule')).toBeVisible();
+    await expect(popup.getByText(/^00:0\d \/ 1:00:00$/)).toBeVisible();
+    await expect(popup.getByText(/^Behind by /)).toBeHidden();
+  });
+
   test('blackout round-trips between presenter and player', async ({ page, context }) => {
     await openSlide(page, 'alpha');
     await enterPlayMode(page);

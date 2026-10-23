@@ -15,6 +15,7 @@ import { PresentControlBar } from './present/control-bar';
 import { PresentHelpOverlay } from './present/help-overlay';
 import { PresentJumpInput } from './present/jump-input';
 import { PresentLaserPointer } from './present/laser-pointer';
+import { createPageTimes, foldPageTime } from './present/page-timer';
 import { PresentProgressBar } from './present/progress-bar';
 import { useIdle } from './present/use-idle';
 import { usePointerNearBottom } from './present/use-pointer-near-bottom';
@@ -82,7 +83,22 @@ export function Player({
   const [keyboardDriven, setKeyboardDriven] = useState(false);
   const [mobileChromeVisible, setMobileChromeVisible] = useState(false);
   const [mobileChromeDeadline, setMobileChromeDeadline] = useState(0);
-  const [startedAt] = useState(() => Date.now());
+  const [startedAt, setStartedAt] = useState(() => Date.now());
+  // Per-page dwell time for the presenter's slide budget. Banked when a page
+  // is left so returning to it resumes rather than restarts; reset on a deck
+  // switch since the Player stays mounted across decks. Folded during render
+  // so the state broadcast for the new index never carries the old split.
+  const [pageTimes, setPageTimes] = useState(() => createPageTimes(startedAt));
+  const [timedPage, setTimedPage] = useState({ slideId, index });
+  if (controls && (timedPage.slideId !== slideId || timedPage.index !== index)) {
+    const now = Date.now();
+    setTimedPage({ slideId, index });
+    setPageTimes(
+      timedPage.slideId !== slideId
+        ? createPageTimes(now)
+        : foldPageTime(pageTimes, timedPage.index, now),
+    );
+  }
   const [windowed, setWindowed] = useState(!fullscreen);
   // Mirror windowed into a ref so the fullscreenchange listener can read the
   // latest value without re-binding — exits from window mode must not call
@@ -237,8 +253,9 @@ export function Player({
       startedAt,
       stepIndex: stepAggregate.revealed,
       stepCount: stepAggregate.stepCount,
+      pageTimes,
     }),
-    [index, pages.length, blackout, startedAt, stepAggregate],
+    [index, pages.length, blackout, startedAt, stepAggregate, pageTimes],
   );
   const presenterStateRef = useRef(presenterState);
   presenterStateRef.current = presenterState;
@@ -251,6 +268,10 @@ export function Player({
         handleIndexChange(Math.max(0, Math.min(pages.length - 1, msg.index)));
       } else if (msg.type === 'toggle-blackout') {
         setBlackout((cur) => (cur === msg.mode ? null : msg.mode));
+      } else if (msg.type === 'reset-timer') {
+        const now = Date.now();
+        setStartedAt(now);
+        setPageTimes(createPageTimes(now));
       } else if (msg.type === 'request-state') {
         send({ type: 'state', state: presenterStateRef.current });
       } else if (msg.type === 'switch-slide') {
