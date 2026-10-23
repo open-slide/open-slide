@@ -15,6 +15,8 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.306",
+    "@openai/codex-sdk": "^0.163.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5"
   }
