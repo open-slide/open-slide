@@ -1,3 +1,4 @@
+import config from 'virtual:open-slide/config';
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { toast } from 'sonner';
 import { useLocale } from '@/lib/use-locale';
@@ -37,12 +38,17 @@ type State = {
   newDeck: string | null;
 };
 
-const ACTIVE_KEY = 'open-slide:agent-session';
+// Every project served on the same port shares one localStorage, so state
+// tied to a workspace is keyed by project. An inherited open dock would
+// otherwise auto-install SDKs into a project that never asked for them.
+const projectScoped = (key: string) => (config.projectKey ? `${key}:${config.projectKey}` : key);
+
+const ACTIVE_KEY = projectScoped('open-slide:agent-session');
 const PROVIDER_KEY = 'open-slide:agent-provider';
 const MODEL_KEY = 'open-slide:agent-model';
 const AUTO_APPROVE_KEY = 'open-slide:agent-auto-approve';
-const DOCK_KEY = 'open-slide:agent-dock';
-const NEW_DECK_KEY = 'open-slide:agent-new-deck';
+const DOCK_KEY = projectScoped('open-slide:agent-dock');
+const NEW_DECK_KEY = projectScoped('open-slide:agent-new-deck');
 
 function readStorage(key: string): string | null {
   try {

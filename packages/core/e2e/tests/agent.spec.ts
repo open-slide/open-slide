@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { openSlide } from './helpers.ts';
+import { devStorageKey, openSlide } from './helpers.ts';
 
 type ProviderStatus = {
   id: string;
@@ -169,6 +169,25 @@ test.describe('agent panel', () => {
     expect(requested).toEqual(['claude']);
   });
 
+  test("another project's open panel on the same port does not open or connect here", async ({
+    page,
+  }) => {
+    let installs = 0;
+    await mockStatus(page, () => ({ cliFound: true, ready: false, sdkVersion: null }));
+    await page.route('**/__agent/install', (route) => {
+      installs += 1;
+      return route.fulfill({ json: { ok: true } });
+    });
+    await page.addInitScript(() => {
+      localStorage.setItem('open-slide:agent-dock', '1');
+      localStorage.setItem('open-slide:agent-dock:0123456789ab', '1');
+    });
+    await openSlide(page, 'alpha');
+    await expect(page.getByRole('button', { name: 'Open the agent panel' })).toBeVisible();
+    await expect(page.locator('[data-agent-dock]')).toHaveCount(0);
+    expect(installs).toBe(0);
+  });
+
   test('transcript messages can be copied, and sent ones edited', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await mockStatus(page, (p) =>
@@ -212,7 +231,10 @@ test.describe('agent panel', () => {
       sent.push(route.request().postDataJSON());
       return route.fulfill({ status: 202, json: { ok: true } });
     });
-    await page.addInitScript(() => localStorage.setItem('open-slide:agent-session', 's-edit'));
+    await page.addInitScript(
+      (key) => localStorage.setItem(key, 's-edit'),
+      devStorageKey('open-slide:agent-session'),
+    );
 
     await openSlide(page, 'alpha');
     await page.keyboard.press('a');
@@ -274,10 +296,13 @@ test.describe('agent panel', () => {
       route.fulfill({ json: { sessions: [summary] } }),
     );
     await page.route('**/__agent/sessions/s-alpha', (route) => route.fulfill({ json: session }));
-    await page.addInitScript(() => {
-      localStorage.setItem('open-slide:agent-session', 's-alpha');
-      localStorage.setItem('open-slide:agent-dock', '1');
-    });
+    await page.addInitScript(
+      ([sessionKey, dockKey]) => {
+        localStorage.setItem(sessionKey, 's-alpha');
+        localStorage.setItem(dockKey, '1');
+      },
+      [devStorageKey('open-slide:agent-session'), devStorageKey('open-slide:agent-dock')],
+    );
 
     await openSlide(page, 'alpha');
     const dock = page.locator('[data-agent-dock]');
