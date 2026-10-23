@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { findSlideSource } from './fiber.ts';
+import { findCallSite, findSlideSource } from './fiber.ts';
 
 class FakeHTMLElement {
   dataset: Record<string, string> = {};
@@ -150,5 +150,56 @@ describe('findSlideSource fallback', () => {
     expect(hit).not.toBeNull();
     expect(hit?.line).toBe(99);
     expect(hit?.column).toBe(3);
+  });
+});
+
+describe('findCallSite', () => {
+  type OwnerFiber = {
+    return: null;
+    alternate?: OwnerFiber | null;
+    _debugOwner?: OwnerFiber | null;
+    memoizedProps?: Record<string, unknown>;
+  };
+
+  function owner(call: string | undefined, parent: OwnerFiber | null = null): OwnerFiber {
+    return {
+      return: null,
+      _debugOwner: parent,
+      memoizedProps: call ? { 'data-slide-call': call } : {},
+    };
+  }
+
+  function hostWith(fiber: OwnerFiber): HTMLElement {
+    const el = makeEl();
+    (el as unknown as Record<string, OwnerFiber>).__reactFiber$test = fiber;
+    return el as unknown as HTMLElement;
+  }
+
+  it('returns null when the element was written in the page itself', () => {
+    const el = hostWith({ return: null, _debugOwner: owner(undefined) });
+    expect(findCallSite(el)).toBeNull();
+  });
+
+  it('returns the call site of the component that rendered the element', () => {
+    const el = hostWith({ return: null, _debugOwner: owner('737:6', owner(undefined)) });
+    expect(findCallSite(el)).toEqual({ line: 737, column: 6 });
+  });
+
+  it('climbs to the outermost call through nested components', () => {
+    const page = owner(undefined);
+    const table = owner('800:2', page);
+    const row = owner('714:4', table);
+    const el = hostWith({ return: null, _debugOwner: row });
+    expect(findCallSite(el)).toEqual({ line: 800, column: 2 });
+  });
+
+  it('reads the committed fiber when the cached one is stale', () => {
+    const props = {};
+    const stale: OwnerFiber = { return: null, _debugOwner: owner('10:0'), memoizedProps: {} };
+    const fresh: OwnerFiber = { return: null, _debugOwner: owner('12:0'), memoizedProps: props };
+    stale.alternate = fresh;
+    const el = hostWith(stale);
+    (el as unknown as Record<string, unknown>).__reactProps$test = props;
+    expect(findCallSite(el)).toEqual({ line: 12, column: 0 });
   });
 });
