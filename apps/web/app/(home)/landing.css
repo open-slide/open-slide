@@ -394,3 +394,22 @@ html.dark .os-landing .agent-mono {
 .os-landing .cl-patches summary::-webkit-details-marker {
   display: none;
 }
+
+/* Entry labels hand over to the sticky ReleaseIndicator once it has reached
+   them, so only one version label shows in the gutter at a time. */
+.os-landing .cl-gutter-label {
+  transition:
+    opacity 240ms var(--ease-out-strong),
+    filter 240ms var(--ease-out-strong),
+    transform 240ms var(--ease-out-strong);
+}
+.os-landing .cl-entry[data-passed] .cl-gutter-label {
+  opacity: 0;
+  filter: blur(4px);
+  transform: translateY(-6px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .os-landing .cl-gutter-label {
+    transition: none;
+  }
+}

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { Era, Patch, Release, ReleaseKind } from '@/lib/changelog';
+import { type IndicatorEntry, ReleaseIndicator } from './release-indicator';
 
 const dateFormat = new Intl.DateTimeFormat('en-US', {
   month: 'short',
@@ -28,6 +29,7 @@ const kindLabel: Record<ReleaseKind, string> = {
 };
 
 const isHighlight = (release: Release) => release.kind === 'major' || !!release.shot;
+const versionLabel = (release: Release) => `v${release.versionLabel ?? release.version}`;
 
 export function Rich({ text }: { text: string }) {
   return (
@@ -50,8 +52,17 @@ export function Rich({ text }: { text: string }) {
 }
 
 export function Timeline({ eras, latest }: { eras: Era[]; latest: string }) {
+  const indicatorEntries: IndicatorEntry[] = eras.flatMap((era) =>
+    era.releases.map((release) => ({
+      id: `v${release.line}`,
+      version: versionLabel(release),
+      date: formatDate(release.date),
+    })),
+  );
+
   return (
-    <div className="cl-timeline">
+    <div className="cl-timeline relative">
+      <ReleaseIndicator entries={indicatorEntries} />
       <div className="mb-12 flex flex-wrap items-center justify-between gap-4 sm:mb-16">
         <fieldset className="cl-filter inline-flex items-center gap-0.5 rounded-full bg-[color:var(--color-panel)] p-1 shadow-[var(--shadow-edge)]">
           <legend className="sr-only">Show</legend>
@@ -116,7 +127,7 @@ function Entry({ release, latest, last }: { release: Release; latest: string; la
   const highlight = isHighlight(release);
   const isLatest = release.version === latest;
   const holdsLatest = isLatest || !!release.patches?.some((patch) => patch.version === latest);
-  const versionLabel = `v${release.versionLabel ?? release.version}`;
+  const label = versionLabel(release);
 
   return (
     <article
@@ -125,12 +136,12 @@ function Entry({ release, latest, last }: { release: Release; latest: string; la
       className="cl-entry relative scroll-mt-24"
     >
       <header className="absolute inset-y-0 right-full mr-10 hidden w-[160px] min-[1200px]:block">
-        <div className="sticky top-[92px] flex flex-col items-end gap-1.5 pt-[3px] text-right">
+        <div className="cl-gutter-label flex flex-col items-end gap-1.5 pt-[3px] text-right">
           <a
             href={`#v${release.line}`}
             className="nums font-[family-name:var(--font-mono)] text-[15px] font-medium text-[color:var(--color-text)] hover:text-[color:var(--color-accent)]"
           >
-            {versionLabel}
+            {label}
           </a>
           <time
             dateTime={release.date}
@@ -162,7 +173,7 @@ function Entry({ release, latest, last }: { release: Release; latest: string; la
               {kindLabel[release.kind]}
             </span>
             <span className="nums flex items-center gap-2 font-[family-name:var(--font-mono)] text-[12.5px] text-[color:var(--color-muted)] min-[1200px]:hidden">
-              {versionLabel}
+              {label}
               <span aria-hidden>·</span>
               <time dateTime={release.date}>{formatDate(release.date)}</time>
             </span>
