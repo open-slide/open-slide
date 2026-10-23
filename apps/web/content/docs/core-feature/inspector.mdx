@@ -31,6 +31,8 @@ adjusted independently without distorting the shape.
 The **Arrange** tab provides exact position, size, and rotation inputs,
 plus alignment and layer controls:
 
+![Open-slide Arrange tab showing position, size, rotation, align, and layer controls for a selected headline](/assets/screenshots/inspector-arrange.webp)
+
 - **Align** — align left, center, right, top, middle, or bottom. Choose the
   slide or the combined selection as the reference.
 - **Distribute** — select at least three elements to give them equal gaps
@@ -88,11 +90,9 @@ toggle bold and italic while editing text. When the panel is hidden, a compact
 toolbar provides the same text controls beside the selection.
 
 Line height and letter spacing sit in the **Typography** section, and
-**Content** lets you edit the object's complete text in a text area. Two
-expandable sections follow:
-
-- **Comment** — leave a note for your agent.
-- **Source** — inspect the element tag and agent connection.
+**Content** lets you edit the object's complete text in a text area. The
+expandable **Source** section at the bottom shows the element tag and agent
+connection. Notes for your agent live in [comment mode](#comments).
 
 Image replacement lets you choose any file in the deck's or the global assets
 folder; see the [assets manager](/docs/core-feature/assets-manager) for how the
@@ -104,15 +104,28 @@ Use **Undo**, **Redo**, or **Discard** to revise changes before saving.
 
 ## Comments
 
-Sometimes the change is easier to describe than to perform. Click an element,
-expand **Comment** in the Format panel, and type a note:
+Sometimes the change is easier to describe than to perform. Switch to
+**Comment** mode in the toolbar (or press `c`), then click an element — or
+drag across a region of the slide — and type a note:
 
 > use the accent colour on this title
 
-The inspector pins the note as an `@slide-comment` marker in the source. The
-marker travels with the element and is invisible at runtime. Run
-`/apply-comments` in your agent to turn the notes into edits — see
-[`/apply-comments`](/docs/skills/apply-comments).
+![Open-slide comment mode with a note being written on a selected headline](/assets/screenshots/comment.webp)
+
+Press `Cmd` / `Ctrl` + `Enter` to post it. The note is written to the source
+right away as an `@slide-comment` marker. A region note attaches to the
+smallest element that contains the region. The marker travels with the
+element and is invisible at runtime.
+
+Posted notes stay pinned on the canvas while comment mode is on. Click a pin
+to edit or delete its note. The Comment button shows how many notes the deck
+has, and the bar under the canvas reminds you to apply them. Press `c` or
+`Escape` to leave comment mode.
+
+Run `/apply-comments` in your agent to turn the notes into edits — see
+[`/apply-comments`](/docs/skills/apply-comments). With the
+[agent panel](/docs/core-feature/agent) connected, click **Apply with Claude
+Code** (or Codex) in that bar instead.
 
 ## Selection is visible to your agent
 
