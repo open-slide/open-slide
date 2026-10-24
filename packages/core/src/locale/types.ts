@@ -243,6 +243,9 @@ export type Locale = {
     sendBackward: string;
     sendToBack: string;
     smartGuides: string;
+    snapThirds: string;
+    snapGrid: string;
+    gridSize: string;
     selectParent: string;
     visualEditorHint: string;
     sharedLayoutHint: string;
