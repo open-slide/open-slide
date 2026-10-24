@@ -244,6 +244,8 @@ export type Locale = {
     sendToBack: string;
     smartGuides: string;
     selectParent: string;
+    removeElement: string;
+    removeBlocked: string;
     visualEditorHint: string;
     sharedLayoutHint: string;
     inlineLayoutHint: string;

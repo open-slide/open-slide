@@ -242,6 +242,8 @@ export const es: Locale = {
     sendToBack: 'Enviar al fondo',
     smartGuides: 'Guías inteligentes',
     selectParent: 'Seleccionar contenedor',
+    removeElement: 'Eliminar',
+    removeBlocked: 'Este elemento no se puede eliminar. Selecciona un hijo JSX único de la página.',
     visualEditorHint:
       'Mayús+clic para seleccionar más. ⌘A selecciona todo. Las flechas mueven 1 px; con Mayús, 10 px. Alt ignora las guías. Mayús restringe el arrastre o mantiene las proporciones.',
     sharedLayoutHint:

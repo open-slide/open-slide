@@ -2,6 +2,7 @@ import path from 'node:path';
 import * as t from '@babel/types';
 import type { Plugin } from 'vite';
 import { tryParse, walkJsx } from '../editing/babel-walk.ts';
+import { removableStarts, sourceRevision } from '../editing/remove-element.ts';
 
 // Inject `data-slide-loc="<line>:<col>"` onto every host JSX element in
 // slide source files so the inspector can map a click straight to a
@@ -23,9 +24,11 @@ function alreadyTagged(opening: t.JSXOpeningElement): boolean {
   );
 }
 
-export function injectLocTags(code: string): string | null {
+export function injectLocTags(code: string, entryFile = false): string | null {
   const ast = tryParse(code);
   if (!ast) return null;
+  const removable = entryFile ? removableStarts(code) : new Set<number>();
+  const revision = entryFile ? sourceRevision(code) : '';
 
   const insertions: { offset: number; text: string }[] = [];
   walkJsx(ast, (node) => {
@@ -35,7 +38,9 @@ export function injectLocTags(code: string): string | null {
     if (!isTaggableJsxName(name) || alreadyTagged(opening)) return;
     insertions.push({
       offset: name.end ?? 0,
-      text: ` data-slide-loc="${node.loc.start.line}:${node.loc.start.column}"`,
+      text: ` data-slide-loc="${node.loc.start.line}:${node.loc.start.column}"${
+        node.start != null && removable.has(node.start) ? ` data-slide-delete="${revision}"` : ''
+      }`,
     });
   });
 
@@ -76,7 +81,9 @@ export function locTagsPlugin(opts: LocTagsPluginOptions): Plugin {
     enforce: 'pre',
     transform(code, id) {
       if (!isSlideSourceFile(id, slidesRoot)) return null;
-      const next = injectLocTags(code);
+      const filePath = id.split(/[?#]/)[0].replace(/\\/g, '/');
+      const rel = filePath.slice(slidesRoot.length + 1);
+      const next = injectLocTags(code, /^[^/]+\/index\.tsx$/.test(rel));
       if (next === null) return null;
       return { code: next, map: null };
     },
