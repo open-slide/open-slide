@@ -15,8 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ReleaseNotes } from './release-notes';
 
-const CHANGELOG_URL =
-  'https://github.com/open-slide/open-slide/blob/main/packages/core/CHANGELOG.md';
+const CHANGELOG_URL = 'https://open-slide.dev/changelog';
 
 export function WhatsNewDialog() {
   const t = useLocale();

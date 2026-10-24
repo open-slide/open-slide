@@ -1,19 +1,18 @@
 import config from 'virtual:open-slide/config';
 import { useSyncExternalStore } from 'react';
 
-export type ReleaseChange = {
-  type: 'major' | 'minor' | 'patch';
-  text: string;
-  pr: number | null;
-  author: string | null;
-};
+export type ReleasePatch = { version: string; note: string };
+
+export type ReleaseCover = { url: string; width: number; height: number; alt: string };
 
 export type Release = {
   version: string;
   title: string;
-  image: string | null;
+  summary: string | null;
+  highlights: string[];
+  image: ReleaseCover | null;
   url: string | null;
-  changes: ReleaseChange[];
+  patches: ReleasePatch[];
 };
 
 export type UpdatePhase = 'idle' | 'installing' | 'syncing' | 'restarting' | 'done' | 'error';

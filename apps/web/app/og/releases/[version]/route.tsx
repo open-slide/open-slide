@@ -3,13 +3,13 @@ import path from 'node:path';
 import { notFound } from 'next/navigation';
 import { ImageResponse } from 'next/og';
 import { loadGoogleFont } from '@/lib/og-fonts';
-import { getCoreReleases } from '@/lib/releases';
+import { coreReleases } from '@/lib/releases';
 import { appName } from '@/lib/shared';
 
-export const revalidate = 86400;
+export const dynamicParams = false;
 
-export async function generateStaticParams() {
-  return (await getCoreReleases()).map((r) => ({ version: r.version }));
+export function generateStaticParams() {
+  return coreReleases.map((r) => ({ version: r.version }));
 }
 
 const NIGHT = '#0B0B0C';
@@ -19,7 +19,7 @@ const ACCENT = '#DE3B3D';
 
 export async function GET(_req: Request, { params }: RouteContext<'/og/releases/[version]'>) {
   const { version } = await params;
-  const release = (await getCoreReleases()).find((r) => r.version === version);
+  const release = coreReleases.find((r) => r.version === version);
   if (!release) notFound();
 
   const [geistMedium, mono, logoBuffer] = await Promise.all([

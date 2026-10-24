@@ -1,11 +1,10 @@
-import { getCoreReleases } from '@/lib/releases';
+import { coreReleases } from '@/lib/releases';
 
-export const revalidate = 600;
+export const dynamic = 'force-static';
 
-export async function GET() {
-  const releases = await getCoreReleases();
+export function GET() {
   return Response.json(
-    { package: '@open-slide/core', releases },
+    { package: '@open-slide/core', releases: coreReleases },
     { headers: { 'cache-control': 'public, s-maxage=600, stale-while-revalidate=86400' } },
   );
 }

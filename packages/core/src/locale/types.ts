@@ -531,9 +531,7 @@ export type Locale = {
     gotIt: string;
     whatsNewIn: string;
     updatedTo: string;
-    features: string;
     fixes: string;
-    breaking: string;
     stepInstall: string;
     stepSync: string;
     stepRestart: string;

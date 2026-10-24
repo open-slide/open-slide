@@ -18,8 +18,10 @@ import { executionId } from './restart.ts';
 //   manager, runs `open-slide sync:skills`, then restarts the dev server when
 //   it runs under the CLI supervisor. Returns immediately.
 // GET /__release-notes?from=<v>&to=<v> → { releases: Release[] | null }
-//   Release notes for versions in (from, to], newest first, from open-slide.dev.
-//   Without `from`, only the `to` release. null when they could not be loaded.
+//   Release notes for versions in (from, to], newest first, from the changelog
+//   on open-slide.dev. A release whose own version is older than `from` only
+//   brings its newer patches. Without `from`, only the release line holding
+//   `to`. null when they could not be loaded.
 
 const PKG = '@open-slide/core';
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -31,18 +33,16 @@ export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 type CommandSpec = { cmd: string; args: string[] };
 export type UpdatePhase = 'idle' | 'installing' | 'syncing' | 'restarting' | 'done' | 'error';
 type UpdateJob = { phase: UpdatePhase; target: string | null; error: string | null };
-export type ReleaseChange = {
-  type: 'major' | 'minor' | 'patch';
-  text: string;
-  pr: number | null;
-  author: string | null;
-};
+export type ReleasePatch = { version: string; note: string };
+export type ReleaseCover = { url: string; width: number; height: number; alt: string };
 export type Release = {
   version: string;
   title: string;
-  image: string | null;
+  summary: string | null;
+  highlights: string[];
+  image: ReleaseCover | null;
   url: string | null;
-  changes: ReleaseChange[];
+  patches: ReleasePatch[];
 };
 
 let cache: { at: number; latest: string | null } | null = null;
@@ -96,16 +96,30 @@ function httpsUrl(value: unknown): string | null {
   }
 }
 
-function sanitizeChange(value: unknown): ReleaseChange | null {
+function text(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function positive(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function sanitizeCover(value: unknown): ReleaseCover | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { type, text, pr, author } = value as Record<string, unknown>;
-  if (typeof text !== 'string' || !text.trim()) return null;
-  return {
-    type: type === 'major' || type === 'minor' ? type : 'patch',
-    text: text.trim(),
-    pr: typeof pr === 'number' && Number.isInteger(pr) ? pr : null,
-    author: typeof author === 'string' && /^[\w-]+$/.test(author) ? author : null,
-  };
+  const { url, width, height, alt } = value as Record<string, unknown>;
+  const src = httpsUrl(url);
+  const w = positive(width);
+  const h = positive(height);
+  if (!src || !w || !h) return null;
+  return { url: src, width: w, height: h, alt: text(alt) ?? '' };
+}
+
+function sanitizePatch(value: unknown): ReleasePatch | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { version, note } = value as Record<string, unknown>;
+  const body = text(note);
+  if (typeof version !== 'string' || !parseSemver(version) || !body) return null;
+  return { version, note: body };
 }
 
 // The payload comes from the network and its image URL ends up in an <img>,
@@ -116,29 +130,50 @@ export function sanitizeReleases(body: unknown): Release[] {
   const releases: Release[] = [];
   for (const item of list) {
     if (typeof item !== 'object' || item === null) continue;
-    const { version, title, image, url, changes } = item as Record<string, unknown>;
+    const { version, title, summary, highlights, image, url, patches } = item as Record<
+      string,
+      unknown
+    >;
     if (typeof version !== 'string' || !parseSemver(version)) continue;
     releases.push({
       version,
-      title: typeof title === 'string' && title.trim() ? title.trim() : `v${version}`,
-      image: httpsUrl(image),
+      title: text(title) ?? `v${version}`,
+      summary: text(summary),
+      highlights: Array.isArray(highlights)
+        ? highlights.map(text).filter((h): h is string => h !== null)
+        : [],
+      image: sanitizeCover(image),
       url: httpsUrl(url),
-      changes: Array.isArray(changes)
-        ? changes.map(sanitizeChange).filter((c): c is ReleaseChange => c !== null)
+      patches: Array.isArray(patches)
+        ? patches.map(sanitizePatch).filter((p): p is ReleasePatch => p !== null)
         : [],
     });
   }
   return releases;
 }
 
+function inRange(version: string, from: string, to: string): boolean {
+  return compareVersions(version, from) > 0 && compareVersions(version, to) <= 0;
+}
+
 export function selectReleases(releases: Release[], from: string | null, to: string): Release[] {
-  return releases
-    .filter((r) =>
-      from === null
-        ? compareVersions(r.version, to) === 0
-        : compareVersions(r.version, from) > 0 && compareVersions(r.version, to) <= 0,
-    )
-    .sort((a, b) => compareVersions(b.version, a.version));
+  const selected: Release[] = [];
+  for (const release of releases) {
+    if (from === null) {
+      const line = [release.version, ...release.patches.map((p) => p.version)];
+      if (!line.some((v) => compareVersions(v, to) === 0)) continue;
+      const patches = release.patches.filter((p) => compareVersions(p.version, to) <= 0);
+      selected.push({ ...release, patches });
+      continue;
+    }
+    const patches = release.patches.filter((p) => inRange(p.version, from, to));
+    if (inRange(release.version, from, to)) {
+      selected.push({ ...release, patches });
+    } else if (patches.length > 0 && compareVersions(release.version, to) <= 0) {
+      selected.push({ ...release, summary: null, highlights: [], image: null, patches });
+    }
+  }
+  return selected.sort((a, b) => compareVersions(b.version, a.version));
 }
 
 async function fetchReleases(now: number): Promise<Release[] | null> {

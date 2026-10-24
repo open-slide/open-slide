@@ -18,12 +18,11 @@ async function mockUpdate(page: Page, current: string) {
           {
             version: latest,
             title: 'Faster everything',
-            image: COVER_URL,
-            url: null,
-            changes: [
-              { type: 'minor', text: 'Add a `whats new` dialog.', pr: 1, author: 'octo' },
-              { type: 'patch', text: 'Fix a sidebar glitch.', pr: null, author: null },
-            ],
+            summary: 'Everything starts in half the time.',
+            highlights: ['Add a `whats new` dialog.'],
+            image: { url: COVER_URL, width: 2000, height: 1300, alt: 'The new sidebar' },
+            url: 'https://open-slide.dev/changelog#v99.1',
+            patches: [{ version: '99.1.1', note: 'Fix a sidebar glitch.' }],
           },
         ],
       },
@@ -65,10 +64,11 @@ test.describe('in-app update', () => {
 
     const dialog = page.getByRole('dialog', { name: `What's new in v${latest}` });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByText('Fix a sidebar glitch.')).toBeVisible();
-    await expect(dialog.getByRole('link', { name: '#1' })).toHaveAttribute(
+    await expect(dialog.getByText('Everything starts in half the time.')).toBeVisible();
+    await expect(dialog.getByRole('img', { name: 'The new sidebar' })).toBeVisible();
+    await expect(dialog.getByRole('link', { name: 'Faster everything' })).toHaveAttribute(
       'href',
-      'https://github.com/open-slide/open-slide/pull/1',
+      'https://open-slide.dev/changelog#v99.1',
     );
 
     await dialog.getByRole('button', { name: 'Later' }).click();
@@ -109,7 +109,17 @@ test.describe('in-app update', () => {
     await page.route('**/__release-notes?*', (route) =>
       route.fulfill({
         json: {
-          releases: [{ version: current, title: 'Shiny', image: null, url: null, changes: [] }],
+          releases: [
+            {
+              version: current,
+              title: 'Shiny',
+              summary: null,
+              highlights: [],
+              image: null,
+              url: null,
+              patches: [],
+            },
+          ],
         },
       }),
     );

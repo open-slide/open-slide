@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { format, useLocale } from '@/lib/use-locale';
 import {
+  compareVersions,
   dismissUpdate,
   isUpdateLocked,
   notesKey,
@@ -17,8 +18,10 @@ export function UpdateCard() {
   const { latest, dismissed, phase, notes } = useUpdate();
   if (!latest || dismissed || phase === 'done') return null;
 
+  // A release line older than the running version only contributes patch
+  // notes, so its title and cover would misdescribe the update.
   const newest = notes[notesKey(config.version, latest)]?.[0];
-  const release = newest?.version === latest ? newest : null;
+  const release = newest && compareVersions(newest.version, config.version) > 0 ? newest : null;
 
   return (
     <div className="rise-in mx-2 mb-2 overflow-hidden rounded-[8px] border border-border bg-card shadow-edge">
@@ -29,7 +32,7 @@ export function UpdateCard() {
           aria-label={t.update.whatsNew}
           className="block w-full outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:ring-inset"
         >
-          <ReleaseCover key={release.image} src={release.image} />
+          <ReleaseCover key={release.image.url} cover={release.image} />
         </button>
       )}
       <div className="flex flex-col gap-2 p-2.5">
