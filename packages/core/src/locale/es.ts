@@ -41,12 +41,6 @@ export const es: Locale = {
     menu: 'Menú',
     newFolder: 'Nueva carpeta',
     folderName: 'Nombre de la carpeta',
-    updateAvailable: 'open-slide {version} está disponible',
-    updatePackage: 'Actualizar',
-    updatingPackage: 'Actualizando',
-    updatePackageDone:
-      'Actualizado. Reinicia el servidor de desarrollo para usar la nueva versión.',
-    updatePackageFailed: 'Error al actualizar. Revisa la salida del servidor de desarrollo.',
     restartServer: 'Reiniciar servidor de desarrollo',
     restartingServer: 'Reiniciando',
     restartServerFailed: 'Error al reiniciar. Reinicia el servidor de desarrollo manualmente.',
@@ -472,6 +466,30 @@ export const es: Locale = {
     processing: 'Renderizando página {current} de {total}',
     generating: 'Generando presentación…',
     done: 'Hecho',
+  },
+
+  update: {
+    available: 'Actualización disponible',
+    cardFallbackTitle: 'open-slide {version}',
+    updateNow: 'Actualizar ahora',
+    whatsNew: 'Novedades',
+    dismiss: 'Descartar',
+    later: 'Más tarde',
+    gotIt: 'Entendido',
+    whatsNewIn: 'Novedades de v{version}',
+    updatedTo: 'Actualizado a v{version}',
+    fixes: 'Correcciones',
+    stepInstall: 'Instalar v{version}',
+    stepSync: 'Sincronizar skills',
+    stepRestart: 'Reiniciar',
+    keepTabOpen:
+      'Mantén esta pestaña abierta. open-slide se recarga solo cuando la actualización esté lista.',
+    restartToFinish: 'Actualizado. Reinicia el servidor de desarrollo para usar la nueva versión.',
+    failed: 'Error al actualizar. Revisa la salida del servidor de desarrollo.',
+    restartFailed: 'El servidor de desarrollo no volvió a iniciarse. Reinícialo manualmente.',
+    notesUnavailable: 'Las notas de la versión no están disponibles ahora.',
+    fullChangelog: 'Changelog completo',
+    commandUpdate: 'Actualizar open-slide a v{version}',
   },
 
   commandMenu: {
