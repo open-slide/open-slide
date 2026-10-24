@@ -103,8 +103,15 @@ export function imageFileName(image: SceneImage): string {
   return `image${image.id}.${image.format}`;
 }
 
+type RelEntry = {
+  id: string;
+  type: string;
+  target: string;
+  targetMode?: 'External';
+};
+
 class SlideRels {
-  readonly entries: { id: string; type: string; target: string }[] = [
+  readonly entries: RelEntry[] = [
     { id: 'rId1', type: `${OD_REL}/slideLayout`, target: '../slideLayouts/slideLayout1.xml' },
   ];
   private readonly byTarget = new Map<string, string>();
@@ -115,6 +122,21 @@ class SlideRels {
     const id = `rId${this.entries.length + 1}`;
     this.entries.push({ id, type: `${OD_REL}/image`, target: `../media/${target}` });
     this.byTarget.set(target, id);
+    return id;
+  }
+
+  hyperlink(url: string): string {
+    const key = `hyperlink:${url}`;
+    const existing = this.byTarget.get(key);
+    if (existing) return existing;
+    const id = `rId${this.entries.length + 1}`;
+    this.entries.push({
+      id,
+      type: `${OD_REL}/hyperlink`,
+      target: url,
+      targetMode: 'External',
+    });
+    this.byTarget.set(key, id);
     return id;
   }
 
@@ -246,7 +268,10 @@ function notesSlideRelsXml(idx: number): string {
 function slideRelsXml(rels: SlideRels, notesIdx: number | null): string {
   if (notesIdx !== null) rels.notes(notesIdx);
   const body = rels.entries
-    .map((r) => `<Relationship Id="${r.id}" Type="${r.type}" Target="${r.target}"/>`)
+    .map((r) => {
+      const mode = r.targetMode ? ` TargetMode="${r.targetMode}"` : '';
+      return `<Relationship Id="${r.id}" Type="${r.type}" Target="${escapeXml(r.target)}"${mode}/>`;
+    })
     .join('');
   return `${XML_DECL}<Relationships xmlns="${REL_NS}">${body}</Relationships>`;
 }
@@ -281,20 +306,22 @@ function nodeXml(node: SceneNode, ctx: EmitContext): string {
   }
 }
 
-function nvPr(id: number, name: string): string {
-  return `<p:cNvPr id="${id}" name="${escapeXml(name.slice(0, 200))}"/>`;
+function nvPr(id: number, name: string, href: string | null | undefined, ctx: EmitContext): string {
+  const hlink =
+    href && href.length > 0 ? `<a:hlinkClick r:id="${ctx.rels.hyperlink(href)}"/>` : '';
+  return `<p:cNvPr id="${id}" name="${escapeXml(name.slice(0, 200))}">${hlink}</p:cNvPr>`;
 }
 
 function shapeXml(node: ShapeNode, ctx: EmitContext): string {
   const id = ctx.nextId++;
-  return `<p:sp><p:nvSpPr>${nvPr(id, node.name)}<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${xfrmXml(node)}${geometryXml(node.geometry, node.box)}${node.fill ? fillXml(node.fill, ctx) : '<a:noFill/>'}${outlineXml(node.outline)}${shadowXml(node.shadow, node.box)}</p:spPr></p:sp>`;
+  return `<p:sp><p:nvSpPr>${nvPr(id, node.name, node.href, ctx)}<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${xfrmXml(node)}${geometryXml(node.geometry, node.box)}${node.fill ? fillXml(node.fill, ctx) : '<a:noFill/>'}${outlineXml(node.outline)}${shadowXml(node.shadow, node.box)}</p:spPr></p:sp>`;
 }
 
 function pictureXml(node: PictureNode, ctx: EmitContext): string {
   const id = ctx.nextId++;
   const image = ctx.imageById.get(node.imageId);
   if (!image) return '';
-  return `<p:pic><p:nvPicPr>${nvPr(id, node.name)}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>${blipXml(image, node.alpha, ctx)}${cropXml(node.crop)}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(node)}${geometryXml(node.geometry, node.box)}${outlineXml(node.outline)}${shadowXml(node.shadow, node.box)}</p:spPr></p:pic>`;
+  return `<p:pic><p:nvPicPr>${nvPr(id, node.name, node.href, ctx)}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>${blipXml(image, node.alpha, ctx)}${cropXml(node.crop)}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(node)}${geometryXml(node.geometry, node.box)}${outlineXml(node.outline)}${shadowXml(node.shadow, node.box)}</p:spPr></p:pic>`;
 }
 
 function blipXml(image: SceneImage, alpha: number, ctx: EmitContext): string {
@@ -318,7 +345,7 @@ function cropXml(crop: PictureNode['crop']): string {
 function textXml(node: TextNode, ctx: EmitContext): string {
   const id = ctx.nextId++;
   const paragraphs = node.paragraphs.map(paragraphXml).join('');
-  return `<p:sp><p:nvSpPr>${nvPr(id, node.name)}<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xfrmXml(node)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`;
+  return `<p:sp><p:nvSpPr>${nvPr(id, node.name, node.href, ctx)}<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xfrmXml(node)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`;
 }
 
 function paragraphXml(p: Paragraph): string {
