@@ -14,7 +14,7 @@ those into page copy.
 - Data: `apps/web/lib/changelog.ts` (types `Era`, `Release`, `Patch`, `Shot`).
 - Rendering: `apps/web/components/changelog/timeline.tsx`. You shouldn't need
   to touch it.
-- Guard: `apps/web/lib/changelog.test.ts` (runs in `pnpm test`). It fails when
+- Guard: `apps/web/lib/changelog.test.ts` (runs in `pnpm test:changelog`, its own CI job). It fails when
   a stable core version in `CHANGELOG.md` is missing from the page, when the
   page lists a version that was never published, or when the latest page
   version doesn't match `packages/core/package.json`.
@@ -38,7 +38,7 @@ shipped.
 
 ## Steps
 
-1. **Find what's missing.** Run `pnpm exec vitest run apps/web/lib`. The
+1. **Find what's missing.** Run `pnpm test:changelog`. The
    failure lists the versions. Read their sections in
    `packages/core/CHANGELOG.md`, and the same-date sections of
    `packages/cli/CHANGELOG.md`: CLI changes fold into the core entry they
@@ -98,7 +98,7 @@ shipped.
 
 5. **Verify.**
    ```bash
-   pnpm exec vitest run apps/web/lib
+   pnpm test:changelog
    pnpm --filter web typecheck
    pnpm check
    ```
