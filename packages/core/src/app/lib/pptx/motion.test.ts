@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAnimationDataset, stepAnimation } from './motion';
+import { mapSlideTransition, parseAnimationDataset, stepAnimation } from './motion';
 
 describe('parseAnimationDataset', () => {
   it('defaults to a fade that plays with the previous beat', () => {
@@ -86,5 +86,145 @@ describe('stepAnimation', () => {
 
   it('clamps zero to an instant 1ms effect', () => {
     expect(stepAnimation(0, 9).durationMs).toBe(1);
+  });
+});
+
+describe('mapSlideTransition', () => {
+  it('maps an opacity-only enter to fade', () => {
+    expect(
+      mapSlideTransition(
+        { duration: 320, enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] } },
+        undefined,
+      ),
+    ).toEqual({ effect: 'fade', durationMs: 320, direction: null });
+  });
+
+  it('keeps the documented fade-plus-lift as fade', () => {
+    expect(
+      mapSlideTransition(
+        {
+          duration: 260,
+          enter: {
+            keyframes: [
+              { opacity: 0, transform: 'translateY(6px)' },
+              { opacity: 1, transform: 'translateY(0)' },
+            ],
+          },
+        },
+        undefined,
+      )?.effect,
+    ).toBe('fade');
+  });
+
+  it('maps a large upward travel to push up', () => {
+    expect(
+      mapSlideTransition(
+        {
+          duration: 400,
+          enter: {
+            keyframes: [
+              { opacity: 0, transform: 'translateY(80px)' },
+              { opacity: 1, transform: 'translateY(0)' },
+            ],
+          },
+        },
+        undefined,
+      ),
+    ).toEqual({ effect: 'push', durationMs: 400, direction: 'up' });
+  });
+
+  it('maps horizontal travel to the direction of movement', () => {
+    expect(
+      mapSlideTransition(
+        {
+          duration: 400,
+          enter: { keyframes: [{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }] },
+        },
+        undefined,
+      ),
+    ).toEqual({ effect: 'push', durationMs: 400, direction: 'left' });
+  });
+
+  it('maps morph and uses the morph duration', () => {
+    expect(mapSlideTransition({ duration: 300, morph: { duration: 900 } }, undefined)).toEqual({
+      effect: 'morph',
+      durationMs: 900,
+      direction: null,
+    });
+  });
+
+  it('uses the previous page exit when the incoming page has no enter', () => {
+    expect(
+      mapSlideTransition(
+        { duration: 250 },
+        {
+          duration: 250,
+          exit: {
+            keyframes: [{ transform: 'translateY(0)' }, { transform: 'translateY(-80px)' }],
+          },
+        },
+      ),
+    ).toEqual({ effect: 'push', durationMs: 250, direction: 'up' });
+  });
+
+  it('prefers the incoming enter over the previous exit', () => {
+    expect(
+      mapSlideTransition(
+        { duration: 200, enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] } },
+        {
+          duration: 200,
+          exit: { keyframes: [{ transform: 'translateY(0)' }, { transform: 'translateY(80px)' }] },
+        },
+      )?.effect,
+    ).toBe('fade');
+  });
+
+  it('returns null when there is no motion', () => {
+    expect(mapSlideTransition(undefined, undefined)).toBeNull();
+    expect(mapSlideTransition({ duration: 250 }, undefined)).toBeNull();
+  });
+
+  it('uses the top-level duration for a boolean morph', () => {
+    expect(mapSlideTransition({ duration: 300, morph: true }, undefined)).toEqual({
+      effect: 'morph',
+      durationMs: 300,
+      direction: null,
+    });
+  });
+
+  it('falls back to fade for a scale-only change', () => {
+    expect(
+      mapSlideTransition(
+        {
+          duration: 200,
+          enter: { keyframes: [{ transform: 'scale(1)' }, { transform: 'scale(1.2)' }] },
+        },
+        undefined,
+      ),
+    ).toEqual({ effect: 'fade', durationMs: 200, direction: null });
+  });
+
+  it('falls back to fade for a clipPath-only change', () => {
+    expect(
+      mapSlideTransition(
+        {
+          duration: 200,
+          enter: { keyframes: [{ clipPath: 'inset(0)' }, { clipPath: 'inset(50%)' }] },
+        },
+        undefined,
+      ),
+    ).toEqual({ effect: 'fade', durationMs: 200, direction: null });
+  });
+
+  it('falls back to fade for an unrecognised change', () => {
+    expect(
+      mapSlideTransition(
+        {
+          duration: 200,
+          enter: { keyframes: [{ filter: 'blur(10px)' }, { filter: 'blur(0px)' }] },
+        },
+        undefined,
+      ),
+    ).toEqual({ effect: 'fade', durationMs: 200, direction: null });
   });
 });
