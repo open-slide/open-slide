@@ -1,5 +1,7 @@
 import { downloadBlob } from './dom';
+import { mapSlideTransition } from './pptx/motion';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, type SlideModule } from './sdk';
+import { resolveTransition } from './transition';
 
 const CAPTURE_CLASS = 'os-pptx-capture';
 const CAPTURE_PIXEL_RATIO = 2;
@@ -73,6 +75,10 @@ export async function exportSlideAsPptx(
     const slides = [];
     for (let i = 0; i < mounted.frames.length; i++) {
       const frame = mounted.frames[i];
+      const pageTransition = resolveTransition(pages, i, slide.transition);
+      const previousTransition =
+        i > 0 ? resolveTransition(pages, i - 1, slide.transition) : undefined;
+      const transition = mapSlideTransition(pageTransition, previousTransition);
       slides.push(
         await lib.measurePage({
           frame,
@@ -80,6 +86,7 @@ export async function exportSlideAsPptx(
           images,
           rasterizer: new lib.Rasterizer(frame),
           color,
+          transition,
         }),
       );
       onProgress?.({

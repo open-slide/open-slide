@@ -32,7 +32,7 @@ const deck: DeckScene = {
     {
       background: { kind: 'solid', color: { r: 247, g: 245, b: 240, a: 1 } },
       notes: 'Open with the quote.\n\nPause.',
-      transition: null,
+      transition: { effect: 'fade', durationMs: 320, direction: null },
       nodes: [
         {
           kind: 'shape',
@@ -238,6 +238,15 @@ describe('buildPptxFiles', () => {
     expect(rels).toContain(
       'Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/sheet?a=1&amp;b=2" TargetMode="External"',
     );
+  });
+
+  it('emits slide transitions after the color map', () => {
+    const slide = text('ppt/slides/slide1.xml');
+    expect(slide.indexOf('<p:transition')).toBeGreaterThan(slide.indexOf('<p:clrMapOvr>'));
+    expect(slide).toContain('<p:fade/>');
+    expect(slide).not.toContain('<p:timing');
+    expect(text('ppt/slides/slide2.xml')).not.toContain('<p:transition');
+    expect(text('ppt/slides/slide2.xml')).not.toContain('<p:timing');
   });
 
   it('strips control characters', () => {

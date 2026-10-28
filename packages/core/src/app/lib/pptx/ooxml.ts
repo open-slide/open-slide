@@ -18,6 +18,7 @@ import type {
   SlideScene,
   TextNode,
 } from './scene';
+import { transitionXml } from './timing';
 import { degrees, percent, px, pxToHundredthsPt, SLIDE_EMU_H, SLIDE_EMU_W } from './units';
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
@@ -286,7 +287,8 @@ export function slideXml(
     ? `<p:bg><p:bgPr>${fillXml(slide.background, ctx)}<a:effectLst/></p:bgPr></p:bg>`
     : '';
   const shapes = slide.nodes.map((node) => nodeXml(node, ctx)).join('');
-  return `${XML_DECL}<p:sld xmlns:a="${NS_A}" xmlns:r="${OD_REL}" xmlns:p="${NS_P}"><p:cSld>${bg}<p:spTree>${EMPTY_GROUP}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
+  const transition = transitionXml(slide.transition);
+  return `${XML_DECL}<p:sld xmlns:a="${NS_A}" xmlns:r="${OD_REL}" xmlns:p="${NS_P}"><p:cSld>${bg}<p:spTree>${EMPTY_GROUP}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transition}</p:sld>`;
 }
 
 type EmitContext = {

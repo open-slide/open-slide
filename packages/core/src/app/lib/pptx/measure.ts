@@ -45,6 +45,7 @@ import type {
   Outline,
   Paragraph,
   PictureNode,
+  PptxTransition,
   Rect,
   RunStyle,
   SceneNode,
@@ -102,6 +103,7 @@ export type MeasurePageOptions = {
   images: ImageStore;
   rasterizer: Rasterizer;
   color: ColorParser;
+  transition: PptxTransition | null;
 };
 
 export async function measurePage(options: MeasurePageOptions): Promise<SlideScene> {
@@ -181,7 +183,7 @@ export async function measurePage(options: MeasurePageOptions): Promise<SlideSce
     background = first.fill;
     nodes.shift();
   }
-  return { background, nodes, notes: options.notes, transition: null };
+  return { background, nodes, notes: options.notes, transition: options.transition };
 }
 
 function coversSlide(node: SceneNode): boolean {

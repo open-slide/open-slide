@@ -1,17 +1,6 @@
-import fs from 'node:fs/promises';
-import { expect, type Page, test } from '@playwright/test';
-import { strFromU8, unzipSync } from 'fflate';
-import { openSlide } from './helpers.ts';
-
-async function exportDeck(page: Page, label: string): Promise<Record<string, Uint8Array>> {
-  await page.getByRole('button', { name: 'Download' }).click();
-  const download = page.waitForEvent('download');
-  await page.getByRole('menuitem', { name: label, exact: true }).click();
-  const file = await download;
-  expect(file.suggestedFilename()).toBe('alpha.pptx');
-  const path = await file.path();
-  return unzipSync(new Uint8Array(await fs.readFile(path)));
-}
+import { expect, test } from '@playwright/test';
+import { strFromU8 } from 'fflate';
+import { exportDeck, openSlide } from './helpers.ts';
 
 test.describe('pptx export', () => {
   test('writes native text boxes, backgrounds and speaker notes', async ({ page }) => {
