@@ -167,6 +167,17 @@ describe('mapSlideTransition', () => {
     ).toEqual({ effect: 'push', durationMs: 250, direction: 'up' });
   });
 
+  it('uses the previous exit when the incoming page has no transition object', () => {
+    expect(
+      mapSlideTransition(undefined, {
+        duration: 250,
+        exit: {
+          keyframes: [{ transform: 'translateY(0)' }, { transform: 'translateY(-80px)' }],
+        },
+      }),
+    ).toEqual({ effect: 'push', durationMs: 250, direction: 'up' });
+  });
+
   it('prefers the incoming enter over the previous exit', () => {
     expect(
       mapSlideTransition(

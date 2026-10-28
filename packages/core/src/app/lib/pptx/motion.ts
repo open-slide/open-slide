@@ -250,15 +250,14 @@ export function mapSlideTransition(
   current: SlideTransition | undefined,
   previous: SlideTransition | undefined,
 ): PptxTransition | null {
-  if (!current) return null;
-  if (current.morph) {
+  if (current?.morph) {
     const rawDuration =
       typeof current.morph === 'object' && current.morph.duration !== undefined
         ? current.morph.duration
         : current.duration;
     return { effect: 'morph', durationMs: normalizeDuration(rawDuration), direction: null };
   }
-  if (current.enter) return transitionFromPhase(current.enter, current.duration);
+  if (current?.enter) return transitionFromPhase(current.enter, current.duration);
   if (previous?.exit) return transitionFromPhase(previous.exit, previous.duration);
   return null;
 }
