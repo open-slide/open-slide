@@ -234,7 +234,7 @@ function classifyPhase(phase: TransitionPhase): PhaseEffect | null {
 
 function normalizeDuration(raw: number | undefined): number {
   if (raw === undefined || !Number.isFinite(raw)) return TRANSITION_FALLBACK_MS;
-  return Math.min(Math.max(raw, 1), 60000);
+  return Math.min(Math.max(Math.round(raw), 1), 60000);
 }
 
 function transitionFromPhase(phase: TransitionPhase, fallbackDuration: number): PptxTransition {

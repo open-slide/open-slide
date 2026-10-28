@@ -99,6 +99,15 @@ describe('mapSlideTransition', () => {
     ).toEqual({ effect: 'fade', durationMs: 320, direction: null });
   });
 
+  it('rounds a fractional duration to integer milliseconds', () => {
+    expect(
+      mapSlideTransition(
+        { duration: 320.7, enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] } },
+        undefined,
+      )?.durationMs,
+    ).toBe(321);
+  });
+
   it('keeps the documented fade-plus-lift as fade', () => {
     expect(
       mapSlideTransition(
