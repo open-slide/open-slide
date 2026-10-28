@@ -608,6 +608,8 @@ export const en: Locale = {
     cliFoundNoVersion: 'CLI found',
     cliMissing: 'CLI not found on PATH',
     cliHint: 'Install the {name} CLI and sign in once; the panel reuses its login.',
+    acpMissing: 'Configured ACP command not found: {command}',
+    acpConfigured: 'Configured through Agent Client Protocol.',
     needCliTitle: 'Install Claude Code or Codex first',
     needCliDescription:
       'The panel drives the coding agent CLI on this machine, and none was found on your PATH. Install one, sign in once in a terminal, then check again.',

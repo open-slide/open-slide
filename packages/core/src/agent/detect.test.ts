@@ -65,6 +65,15 @@ describe('findOnPath', () => {
     expect(findOnPath('other-cli', { PATH: bin })).toBeNull();
     expect(findOnPath('fake-cli', { PATH: '' })).toBeNull();
   });
+
+  it('does not append PATHEXT when a Windows command includes an extension', async () => {
+    const bin = path.join(dir, 'bin');
+    await mkdir(bin);
+    const file = path.join(bin, 'fake-cli.cmd');
+    await writeFile(file, '@echo off\r\n');
+
+    expect(findOnPath('fake-cli.cmd', { PATH: bin, PATHEXT: '.EXE;.CMD' }, 'win32')).toBe(file);
+  });
 });
 
 describe('resolveWorkspacePackage', () => {

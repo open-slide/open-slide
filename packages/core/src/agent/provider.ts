@@ -37,6 +37,7 @@ export type ProviderRunOptions = {
 
 export interface AgentProvider {
   id: AgentProviderId;
+  type?: 'acp';
   name: string;
   sdkPackage: string;
   cliCommand: string;

@@ -1,13 +1,13 @@
-export const AGENT_PROVIDER_IDS = ['claude', 'codex'] as const;
-
-export type AgentProviderId = (typeof AGENT_PROVIDER_IDS)[number];
+export type AgentProviderId = string;
 
 export const AGENT_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
-
 export type AgentEffort = (typeof AGENT_EFFORTS)[number];
 
-export function isAgentProviderId(value: unknown): value is AgentProviderId {
-  return typeof value === 'string' && (AGENT_PROVIDER_IDS as readonly string[]).includes(value);
+export function isAgentProviderId(
+  value: unknown,
+  ids: readonly string[],
+): value is AgentProviderId {
+  return typeof value === 'string' && ids.includes(value);
 }
 
 export function isAgentEffort(value: unknown): value is AgentEffort {
@@ -23,6 +23,7 @@ export type AgentModelOption = {
 
 export type AgentProviderStatus = {
   id: AgentProviderId;
+  type?: 'acp';
   name: string;
   sdkPackage: string;
   sdkVersion: string | null;

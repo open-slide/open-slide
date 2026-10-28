@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import type { ServerResponse } from 'node:http';
 import path from 'node:path';
 import type { Connect } from 'vite';
+import type { OpenSlideAcpProviderConfig } from '../../config.ts';
 import { resolveSlideEntry } from '../../editing/slide-ops.ts';
 import { foldersManifestPath } from '../../files/folders.ts';
 
@@ -13,6 +14,8 @@ export type ApiContext = {
   manifestPath: string;
   coreVersion: string;
   agentEnabled: boolean;
+  agentProviders?: OpenSlideAcpProviderConfig[];
+  agentBuiltinProviders?: boolean;
 };
 
 export type ApiPluginOptions = {
@@ -21,6 +24,8 @@ export type ApiPluginOptions = {
   assetsDir?: string;
   coreVersion: string;
   agentEnabled: boolean;
+  agentProviders?: OpenSlideAcpProviderConfig[];
+  agentBuiltinProviders?: boolean;
 };
 
 export function makeContext(opts: ApiPluginOptions): ApiContext {
@@ -38,6 +43,8 @@ export function makeContext(opts: ApiPluginOptions): ApiContext {
     manifestPath,
     coreVersion: opts.coreVersion,
     agentEnabled: opts.agentEnabled,
+    agentProviders: opts.agentProviders,
+    agentBuiltinProviders: opts.agentBuiltinProviders,
   };
 }
 
