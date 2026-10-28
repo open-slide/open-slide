@@ -155,6 +155,7 @@ export async function measurePage(options: MeasurePageOptions): Promise<SlideSce
         box: result.rect,
         rotationDeg: 0,
         flipV: false,
+        animation: null,
         imageId: id,
         crop: null,
         alpha: 1,
@@ -180,7 +181,7 @@ export async function measurePage(options: MeasurePageOptions): Promise<SlideSce
     background = first.fill;
     nodes.shift();
   }
-  return { background, nodes, notes: options.notes };
+  return { background, nodes, notes: options.notes, transition: null };
 }
 
 function coversSlide(node: SceneNode): boolean {
@@ -813,6 +814,7 @@ function makeShape(
     box: p.box,
     rotationDeg: p.rotationDeg,
     flipV: p.flipV,
+    animation: null,
     geometry: scaledGeometry,
     fill,
     outline: scaledOutline,
@@ -912,6 +914,7 @@ function makePicture(
     box: p.box,
     rotationDeg: p.rotationDeg,
     flipV: p.flipV,
+    animation: null,
     imageId,
     crop: placement.crop,
     alpha,
@@ -1334,6 +1337,7 @@ function paintText(ctx: Ctx, m: Measured, atoms: Atom[]): void {
     box: p.box,
     rotationDeg: p.rotationDeg,
     flipV: p.flipV,
+    animation: null,
     paragraphs,
   };
   pushSlot(ctx, node);

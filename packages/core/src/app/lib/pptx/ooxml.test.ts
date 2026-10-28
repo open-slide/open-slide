@@ -32,6 +32,7 @@ const deck: DeckScene = {
     {
       background: { kind: 'solid', color: { r: 247, g: 245, b: 240, a: 1 } },
       notes: 'Open with the quote.\n\nPause.',
+      transition: null,
       nodes: [
         {
           kind: 'shape',
@@ -39,6 +40,7 @@ const deck: DeckScene = {
           box: { x: 100, y: 100, w: 400, h: 200 },
           rotationDeg: 0,
           flipV: false,
+          animation: null,
           geometry: { kind: 'roundRect', radius: 24 },
           fill: {
             kind: 'gradient',
@@ -64,6 +66,7 @@ const deck: DeckScene = {
           box: { x: 120, y: 120, w: 300, h: 128 },
           rotationDeg: -3,
           flipV: false,
+          animation: null,
           paragraphs: [
             {
               lineSpacingPx: 64,
@@ -86,6 +89,7 @@ const deck: DeckScene = {
           box: { x: 600, y: 100, w: 200, h: 100 },
           rotationDeg: 0,
           flipV: false,
+          animation: null,
           imageId: 1,
           crop: { l: 0.1, t: 0, r: 0.1, b: 0 },
           alpha: 0.8,
@@ -95,7 +99,7 @@ const deck: DeckScene = {
         },
       ],
     },
-    { background: null, notes: null, nodes: [] },
+    { background: null, notes: null, transition: null, nodes: [] },
   ],
 };
 

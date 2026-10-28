@@ -132,6 +132,7 @@ export async function exportSlideAsImagePptx(
       slides.push({
         background: null,
         notes: slide.notes?.[i]?.trim() || null,
+        transition: null,
         nodes: [
           {
             kind: 'picture' as const,
@@ -139,6 +140,7 @@ export async function exportSlideAsImagePptx(
             box: { x: 0, y: 0, w: CANVAS_WIDTH, h: CANVAS_HEIGHT },
             rotationDeg: 0,
             flipV: false,
+            animation: null,
             imageId,
             crop: null,
             alpha: 1,
