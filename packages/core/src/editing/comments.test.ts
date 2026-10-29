@@ -7,6 +7,7 @@ import {
   parseMarkers,
   removeMarker,
   resolveTargets,
+  spliceMarker,
   updateMarkerNote,
 } from './comments.ts';
 
@@ -174,6 +175,41 @@ describe('marker insertion and removal', () => {
     const next = source.slice(0, plan?.offset) + marker + source.slice(plan?.offset);
     expect(next.split('\n')[2]).toMatch(/^ {4}\{\/\* @slide-comment/);
     expect(removeMarker(next, 'c-00000002')).toBe(source);
+  });
+
+  it('opens a self-closing call site to hold the marker', () => {
+    const source = [
+      'export default [() => (',
+      '  <div>',
+      '    <Row what="A" />',
+      '    <Row what="B" />',
+      '  </div>',
+      ')];',
+    ].join('\n');
+    const plan = findInsertion(source, 4, 4, { call: true });
+    if (!plan) throw new Error('expected plan');
+    const marker = buildMarker(plan, 'c-00000004', ts, encoded);
+    const { source: next, line } = spliceMarker(source, plan, marker);
+    expect(next.split('\n')).toEqual([
+      'export default [() => (',
+      '  <div>',
+      '    <Row what="A" />',
+      '    <Row what="B">',
+      `      {/* @slide-comment id="c-00000004" ts="${ts}" text="${encoded}" */}`,
+      '    </Row>',
+      '  </div>',
+      ')];',
+    ]);
+    expect(line).toBe(5);
+    const [c] = resolveTargets(next, parseMarkers(next));
+    expect(c.target).toEqual({ line: 4, column: 4 });
+  });
+
+  it('still hoists a self-closing element when it is not a call site', () => {
+    const source = ['export default [() => (', '  <div>', '    <Row />', '  </div>', ')];'].join(
+      '\n',
+    );
+    expect(findInsertion(source, 3, 4)?.close).toBeUndefined();
   });
 
   it('keeps content that shares a line with a legacy marker', () => {

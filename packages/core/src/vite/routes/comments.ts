@@ -6,12 +6,12 @@ import {
   type CommentPayload,
   findInsertion,
   newCommentId,
-  offsetToLine,
   parseCommentPage,
   parseCommentRect,
   parseMarkers,
   removeMarker,
   resolveTargets,
+  spliceMarker,
   updateMarkerNote,
 } from '../../editing/comments.ts';
 import { validateMutationRequest } from '../../http/request-guard.ts';
@@ -36,6 +36,7 @@ type AddCommentBody = {
   hint?: string;
   rect?: unknown;
   page?: unknown;
+  call?: boolean;
 };
 
 export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): void {
@@ -70,7 +71,7 @@ export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): v
         const source = await readSlideSource(file);
         if (source === null) return json(res, 404, { error: 'slide not found' });
 
-        const plan = findInsertion(source, body.line, body.column);
+        const plan = findInsertion(source, body.line, body.column, { call: body.call === true });
         if (!plan) {
           return json(res, 422, {
             error:
@@ -90,9 +91,8 @@ export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): v
         const encoded = b64urlEncode(JSON.stringify(payload));
         const marker = buildMarker(plan, id, ts, encoded);
 
-        const next = source.slice(0, plan.offset) + marker + source.slice(plan.offset);
+        const { source: next, line: markerLine } = spliceMarker(source, plan, marker);
         await fs.writeFile(file, next, 'utf8');
-        const markerLine = offsetToLine(next, plan.offset + 1);
         return json(res, 200, { id, line: markerLine });
       }
 

@@ -19,6 +19,7 @@ export type AddCommentInput = {
   text: string;
   rect?: CommentRect;
   page?: number;
+  call?: boolean;
 };
 
 type ListResponse = { comments: SlideComment[] };
