@@ -167,9 +167,8 @@ export const transition: SlideTransition = {
 
 ## PPTX export
 
-The editable PPTX export resolves the same transition the runtime would play —
-including the page override and the previous page's `exit` fallback — and maps
-it to a native PowerPoint transition:
+The editable PPTX export resolves the page override and the previous page's
+`exit` fallback, then maps the result to a native PowerPoint transition:
 
 | Authored motion | PPTX |
 | --- | --- |
@@ -178,6 +177,12 @@ it to a native PowerPoint transition:
 | Translation of at least `24px` (or `2%`) on the dominant axis | Push along that axis, in the direction of travel |
 | `clipPath`-only, compound, or otherwise unrecognised phase | Fade |
 | No `enter`, but the previous page has an `exit` | The previous page's `exit`, classified the same way |
+
+Parity is close but not exact for exit-only opacity: the runtime drops
+`opacity` from `exit` keyframes unless `throughBackground` is set, while the
+mapper classifies an opacity-only phase as a Fade, so a previous page's exit can
+still become the incoming slide's transition. Put the fade on `enter` when the
+browser and PowerPoint must agree.
 
 Rules:
 

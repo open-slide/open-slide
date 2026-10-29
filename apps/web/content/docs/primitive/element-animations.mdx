@@ -3,17 +3,24 @@ title: Element animations
 description: Declarative entrance motion that also exports to PowerPoint.
 ---
 
-`data-os-anim` declares entrance motion for a single element. You write it once
-on the element and the editable PPTX export turns it into a native PowerPoint
-entrance effect. Nothing is implicit — an element without the attribute is
-static — so adding motion never changes a deck that does not ask for it.
+`data-os-anim` is PowerPoint-export metadata. It declares an entrance effect for
+one element, and the editable PPTX export turns it into a native PowerPoint
+effect. The viewer does not play it: an annotated element renders exactly as it
+would without the attribute, and its click waits and timings exist only in the
+generated deck.
 
-The browser is still the source of truth. The attributes describe the PowerPoint
-effect and inject no CSS of their own, so an element shows its settled frame in
-the viewer unless you also author the motion there. HTML export ships exactly
-what the deck renders, including that CSS or WAAPI motion. PPTX carries only the
-subset below; motion it cannot express is left out rather than baked into a
-screenshot, so the slide stays editable.
+Browser and HTML motion is authored the usual way — CSS keyframes, WAAPI, or
+[Step](/docs/primitive/step) — and stays the source of truth for what the deck
+looks like. `data-os-anim` changes nothing there; it only describes the same
+element's entrance in PowerPoint.
+
+Per element, nothing is implicit: an element without the attribute is static in
+the PPTX, so annotating one element never changes the rest of the deck. `Step`
+and [slide transitions](/docs/primitive/transition) have their own defaults.
+
+An effect the exporter cannot map is dropped; it never forces the element into a
+picture. An element may still be exported as a picture for other reasons — see
+[Limitations](#limitations).
 
 ## Attributes
 
@@ -27,10 +34,15 @@ screenshot, so the slide stays editable.
 
 - The nearest annotated ancestor owns the animation. Every shape generated from
   that element and its descendants joins one group and plays together, so a
-  card's fill, border, and text never drift apart.
+  card's box and its text never drift apart.
 - A descendant with its own `data-os-anim` starts a new group.
-- An unknown or missing effect leaves the element static in its final frame.
-- Invalid numbers fall back to the default; out-of-range values are clamped.
+- An unknown or missing effect adds no group of its own: at the top level the
+  element stays static, and inside an annotated ancestor it joins that
+  ancestor's group.
+- Non-numeric or negative numbers fall back to the default; positive values
+  outside the range are clamped.
+- The attribute has to land on a real DOM node. A custom component that ignores
+  extra props silently exports nothing.
 
 ## Fade on entry
 
@@ -44,8 +56,8 @@ screenshot, so the slide stays editable.
 </h1>
 ```
 
-`with-previous` is the default trigger, so the title arrives with the slide
-instead of waiting for a click.
+`with-previous` is the default trigger, so in PowerPoint the title arrives with
+the slide instead of waiting for a click.
 
 ## Fly on click
 
@@ -61,14 +73,17 @@ instead of waiting for a click.
 </div>
 ```
 
-`click` starts a new click group: the audience advances to it, and everything
-after it waits. Consecutive `with-previous` elements share a beat;
-`after-previous` starts a new beat once the previous one finishes.
+In the viewer the element is visible at rest, from slide entry: the attribute
+adds nothing there. In PowerPoint, `click` starts a new click group — the
+audience advances to it, and everything after it waits. Consecutive
+`with-previous` elements share a beat; `after-previous` starts a new beat once
+the previous one finishes.
 
 ## A coordinated card
 
-Annotate the card, not its pieces. The background, border, and text are separate
-PowerPoint shapes but one animation group:
+Annotate the card, not its pieces. A uniform border is drawn on the same
+PowerPoint shape as the fill; the box and its text are separate shapes, but both
+join one animation group:
 
 ```tsx
 <div
@@ -92,8 +107,9 @@ PowerPoint shapes but one animation group:
 
 `Step` is the click-reveal primitive and needs no annotation: each step becomes
 a `fade` with a `click` trigger, in document order, using the step's authored
-`duration`. An explicit `data-os-anim` on the step wrapper replaces that default
-fade. See [Step](/docs/primitive/step) for the reveal rules.
+`duration`. An explicit `data-os-anim` on `<Step>` replaces that default fade,
+e.g. `<Step data-os-anim="fly" data-os-anim-direction="left">`. See
+[Step](/docs/primitive/step) for the reveal rules.
 
 ## PPTX export
 
@@ -106,13 +122,15 @@ fade. See [Step](/docs/primitive/step) for the reveal rules.
 | `wipe` | Wipe, uncovering from the origin side |
 
 Triggers map to PowerPoint's start modes: `click` → On Click,
-`with-previous` → With Previous, `after-previous` → After Previous. Durations
-and delays are written through as authored; easing is not representable and is
-ignored.
+`with-previous` → With Previous, `after-previous` → After Previous. A leading
+`after-previous` is written as With Previous, so PowerPoint does not wait for a
+click that will never come. Durations and delays are written through as
+authored; easing is not representable and is ignored.
 
-Everything else falls back to the settled frame: an element whose effect is
-unknown, misspelled, or missing is exported as a normal static object, and the
-export never fails because of motion.
+An unknown, misspelled, or missing effect adds no group of its own: at the top
+level the element exports as a normal static object, and inside an annotated
+subtree it moves with its nearest annotated ancestor. The export never fails
+because of motion.
 
 ## Limitations
 
@@ -125,10 +143,13 @@ export never fails because of motion.
   PowerPoint text box, so an annotation on an inline span cannot move that span
   independently of its block.
 - Elements inside a rasterized subtree (filters, blend modes, masks, SVG, video,
-  and other effects PowerPoint cannot express) export as one picture, so
-  descendant animations are flattened into their nearest animated ancestor.
-- An element whose final state is `opacity: 0` is not exported at all. Author a
-  hidden start state through the animation attributes, not through CSS.
+  and other effects PowerPoint cannot express) export as one picture. An
+  annotation on a descendant is dropped; the picture carries the enclosing
+  annotation, if there is one.
+- An element whose settled state is `opacity: 0` is dropped from the export.
+  Keep the settled state visible and let `data-os-anim` supply the entrance;
+  hiding the start state in CSS leaves nothing to animate in and nothing to
+  export.
 - A standalone `Step` outside `<Steps>` renders fully revealed in the viewer, but
   the exporter still sees the step wrapper and turns it into a click reveal.
 - The PPTX uses the authored `Step` duration even when the exporting machine

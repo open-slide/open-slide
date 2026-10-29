@@ -38,6 +38,8 @@ test.describe('pptx export', () => {
     expect(slide2).toContain('<p:pic>');
     expect(slide2).toContain('<a:ext cx="12192000" cy="6858000"/>');
     expect(slide2).not.toContain('<a:t>');
+    expect(slide2).not.toContain('<p:transition');
+    expect(slide2).not.toContain('<p:timing');
     expect(Object.keys(parts).filter((n) => /^ppt\/media\/image\d+\.png$/.test(n))).toHaveLength(3);
   });
 });

@@ -55,10 +55,12 @@ order across every `Steps` group on the page. The effect is a fade with a
 `click` trigger, and its duration is the step's authored `duration` (the default
 `180`). Non-`Step` children of `Steps` are visible from slide entry.
 
-An explicit `data-os-anim` on the step wrapper overrides that default fade; its
-trigger still defaults to `click` inside a step. The PPTX uses the authored
-duration even when the exporting machine prefers reduced motion — only the
-viewer collapses the transition.
+An explicit `data-os-anim` on `<Step>` overrides that default fade, e.g.
+`<Step data-os-anim="fly" data-os-anim-direction="left">`. Its trigger still
+defaults to `click` inside a step, and the attribute only changes the PPTX — the
+viewer still fades the step. The PPTX uses the authored duration even when the
+exporting machine prefers reduced motion; only the viewer collapses the
+transition.
 
 See [Element animations](/docs/primitive/element-animations) for the other
 entrance effects.
