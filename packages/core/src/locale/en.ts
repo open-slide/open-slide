@@ -240,6 +240,8 @@ export const en: Locale = {
     sendToBack: 'Send to back',
     smartGuides: 'Smart guides',
     selectParent: 'Select parent',
+    removeElement: 'Remove',
+    removeBlocked: "This element can't be removed. Select a unique JSX child of the page.",
     visualEditorHint:
       'Shift-click to select more. ⌘A selects all. Arrows move 1 px; Shift moves 10 px. Alt ignores guides. Shift constrains drag or keeps resize proportions.',
     sharedLayoutHint:

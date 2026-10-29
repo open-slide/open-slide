@@ -1,5 +1,75 @@
 import { describe, expect, it } from 'vitest';
 import { applyEdit, safeAssetIdentifier } from './edit-ops.ts';
+import { sourceRevision } from './remove-element.ts';
+
+describe('applyEdit / remove-element', () => {
+  const remove = (source: string) => [
+    { kind: 'remove-element' as const, revision: sourceRevision(source) },
+  ];
+
+  it('removes exactly one JSX child without changing its siblings', () => {
+    const source = 'export default [() => <section><h1>Title</h1><p>Body</p></section>];';
+    const result = applyEdit(source, 1, source.indexOf('<h1'), remove(source));
+    expect(result).toEqual({
+      ok: true,
+      source: 'export default [() => <section><p>Body</p></section>];',
+    });
+  });
+
+  it('removes a child from a JSX fragment', () => {
+    const source = 'export default [() => <><p>First</p><p>Second</p></>];';
+    const result = applyEdit(source, 1, source.indexOf('<p'), remove(source));
+    expect(result).toEqual({ ok: true, source: 'export default [() => <><p>Second</p></>];' });
+  });
+
+  it('refuses a page root, expression child, and dynamically rendered child', () => {
+    for (const source of [
+      'export default [() => <section><p>Body</p></section>];',
+      'export default [() => <section>{show && <p>Body</p>}</section>];',
+      'export default [() => <section>{items.map(() => <div><p>Body</p></div>)}</section>];',
+    ]) {
+      const marker = source.includes('show') || source.includes('map') ? '<p' : '<section';
+      const result = applyEdit(source, 1, source.indexOf(marker), remove(source));
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  it('never falls back to an enclosing JSX element or mixes removal with another op', () => {
+    const source = 'export default [() => <section><p>Body</p></section>];';
+    expect(applyEdit(source, 1, source.indexOf('Body'), remove(source)).ok).toBe(false);
+    expect(
+      applyEdit(source, 1, source.indexOf('<p'), [
+        ...remove(source),
+        { kind: 'set-style', key: 'color', value: 'red' },
+      ]).ok,
+    ).toBe(false);
+  });
+
+  it('rejects children of reused components and aliased page functions', () => {
+    const shared =
+      'const Card = () => <div><p>Shared</p></div>; const Only = () => <section><Card /><Card /></section>; export default [Only];';
+    expect(applyEdit(shared, 1, shared.indexOf('<p'), remove(shared)).ok).toBe(false);
+    const aliased =
+      'const Only = () => <section><p>Body</p></section>; const Other = Only; export default [Only, Other];';
+    expect(applyEdit(aliased, 1, aliased.indexOf('<p'), remove(aliased)).ok).toBe(false);
+  });
+
+  it('rejects attached comments and adjacent meaningful text', () => {
+    const commented = 'export default [() => <div>{/* @slide-comment id="x" */}<p>Body</p></div>];';
+    expect(applyEdit(commented, 1, commented.indexOf('<p'), remove(commented)).ok).toBe(false);
+    const mixed = 'export default [() => <div>before <b>middle</b> after</div>];';
+    expect(applyEdit(mixed, 1, mixed.indexOf('<b'), remove(mixed)).ok).toBe(false);
+  });
+
+  it('rejects a stale source revision even if the location still exists', () => {
+    const source = 'export default [() => <section><p>Body</p></section>];';
+    expect(
+      applyEdit(source, 1, source.indexOf('<p'), [
+        { kind: 'remove-element', revision: sourceRevision(`${source}\n`) },
+      ]),
+    ).toEqual({ ok: false, status: 422, error: 'slide source changed since selection' });
+  });
+});
 
 describe('applyEdit / set-style', () => {
   // Every JSX opening tag in these synthetic sources sits at column 0;

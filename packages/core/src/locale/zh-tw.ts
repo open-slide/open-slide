@@ -239,6 +239,8 @@ export const zhTW: Locale = {
     sendToBack: '移到最下層',
     smartGuides: '智慧對齊線',
     selectParent: '選取父層',
+    removeElement: '刪除',
+    removeBlocked: '無法刪除此元素。請選取頁面中唯一的 JSX 子元素。',
     visualEditorHint:
       'Shift 點選可複選，⌘A 全選。方向鍵移動 1 px，按住 Shift 移動 10 px。Alt 暫停吸附。Shift 限制拖曳方向或等比例縮放。',
     sharedLayoutHint: '此元素與其他實例共用 JSX 定義。請選取獨立的父層容器，以單獨調整排列。',
