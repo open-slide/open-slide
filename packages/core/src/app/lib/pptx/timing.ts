@@ -94,7 +94,7 @@ type Row = {
   delay: number;
   grpId: number;
 };
-type Beat = { delay: number; rows: Row[] };
+type Beat = { delay: number; leadDelay: number; rows: Row[] };
 type ClickGroup = { autoStart: boolean; beats: Beat[] };
 
 class IdAllocator {
@@ -135,13 +135,14 @@ function buildClickGroups(groups: AnimationGroup[]): ClickGroup[] {
     }
 
     if (animation.trigger === 'with-previous' && currentBeat !== null) {
-      pushRows(currentBeat, animation, spids, NODE_TYPE[animation.trigger], grpId);
-      timelineEnd = Math.max(timelineEnd, beatStart + animation.delayMs + animation.durationMs);
+      const rowDelay = currentBeat.leadDelay + animation.delayMs;
+      pushRows(currentBeat, animation, spids, NODE_TYPE[animation.trigger], grpId, rowDelay);
+      timelineEnd = Math.max(timelineEnd, beatStart + rowDelay + animation.durationMs);
       continue;
     }
 
     beatStart = animation.trigger === 'after-previous' ? timelineEnd : 0;
-    currentBeat = { delay: beatStart, rows: [] };
+    currentBeat = { delay: beatStart, leadDelay: animation.delayMs, rows: [] };
     current.beats.push(currentBeat);
 
     const leading = current.beats.length === 1;
@@ -149,7 +150,7 @@ function buildClickGroups(groups: AnimationGroup[]): ClickGroup[] {
       leading && animation.trigger === 'after-previous'
         ? 'withEffect'
         : NODE_TYPE[animation.trigger];
-    pushRows(currentBeat, animation, spids, nodeType, grpId);
+    pushRows(currentBeat, animation, spids, nodeType, grpId, animation.delayMs);
     timelineEnd = Math.max(timelineEnd, beatStart + animation.delayMs + animation.durationMs);
   }
 
@@ -162,10 +163,11 @@ function pushRows(
   spids: number[],
   nodeType: string,
   grpId: number,
+  delay: number,
 ): void {
-  beat.rows.push({ animation, spid: spids[0], nodeType, delay: animation.delayMs, grpId });
+  beat.rows.push({ animation, spid: spids[0], nodeType, delay, grpId });
   for (const spid of spids.slice(1)) {
-    beat.rows.push({ animation, spid, nodeType: 'withEffect', delay: animation.delayMs, grpId });
+    beat.rows.push({ animation, spid, nodeType: 'withEffect', delay, grpId });
   }
 }
 

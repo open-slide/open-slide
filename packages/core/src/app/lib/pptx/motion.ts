@@ -74,7 +74,7 @@ export function parseAnimationDataset(
 }
 
 export function stepAnimation(durationMs: number, id: number): ElementAnimation {
-  const d = Number.isFinite(durationMs) ? durationMs : 180;
+  const d = Number.isFinite(durationMs) ? Math.round(durationMs) : 180;
   return {
     id,
     effect: 'fade',
@@ -91,7 +91,8 @@ type Axis = 'x' | 'y';
 type Translation = { axis: Axis; delta: number; isPercent: boolean };
 type PhaseEffect =
   | { effect: 'push'; direction: 'up' | 'down' | 'left' | 'right' }
-  | { effect: 'fade' };
+  | { effect: 'fade' }
+  | { effect: 'none' };
 type RawFrame = Record<string, string | number | null | undefined>;
 type KeyframeValue = string | number | null | undefined;
 
@@ -99,6 +100,15 @@ const PUSH_MIN_PX = 24;
 const PUSH_MIN_PERCENT = 2;
 const TRANSITION_FALLBACK_MS = 250;
 const IGNORED_KEYFRAME_KEYS = new Set(['offset', 'easing', 'composite']);
+const RECOGNIZED_KEYFRAME_KEYS = new Set([
+  'opacity',
+  'transform',
+  'translate',
+  'scale',
+  'rotate',
+  'clipPath',
+  'clip-path',
+]);
 const ZERO_LENGTH: Length = { value: 0, unit: 'px' };
 
 function toRawFrames(keyframes: Keyframe[] | PropertyIndexedKeyframes): RawFrame[] {
@@ -127,6 +137,15 @@ function hasAnyChange(first: RawFrame, last: RawFrame): boolean {
   for (const key of keys) {
     if (IGNORED_KEYFRAME_KEYS.has(key)) continue;
     if (first[key] !== last[key]) return true;
+  }
+  return false;
+}
+
+function hasRecognizedChange(first: RawFrame, last: RawFrame): boolean {
+  const keys = new Set([...Object.keys(first), ...Object.keys(last)]);
+  for (const key of keys) {
+    if (IGNORED_KEYFRAME_KEYS.has(key)) continue;
+    if (first[key] !== last[key] && RECOGNIZED_KEYFRAME_KEYS.has(key)) return true;
   }
   return false;
 }
@@ -214,10 +233,11 @@ function dominantTranslation(first: FrameTranslation, last: FrameTranslation): T
 
 function classifyPhase(phase: TransitionPhase): PhaseEffect | null {
   const frames = toRawFrames(phase.keyframes);
-  if (frames.length < 2) return null;
+  if (frames.length < 2) return { effect: 'none' };
   const first = frames[0];
   const last = frames[frames.length - 1];
-  if (!hasAnyChange(first, last)) return null;
+  if (!hasAnyChange(first, last)) return { effect: 'none' };
+  if (!hasRecognizedChange(first, last)) return null;
 
   const translation = dominantTranslation(extractTranslation(first), extractTranslation(last));
   if (translation !== null && translation.delta !== 0) {
@@ -237,27 +257,36 @@ function normalizeDuration(raw: number | undefined): number {
   return Math.min(Math.max(Math.round(raw), 1), 60000);
 }
 
-function transitionFromPhase(phase: TransitionPhase, fallbackDuration: number): PptxTransition {
+function transitionFromPhase(
+  phase: TransitionPhase,
+  fallbackDuration: number,
+): PptxTransition | null {
   const durationMs = normalizeDuration(phase.duration ?? fallbackDuration);
   const classified = classifyPhase(phase);
-  if (classified !== null && classified.effect === 'push') {
+  if (classified === null) {
+    return { effect: 'fade', durationMs, direction: null };
+  }
+  if (classified.effect === 'none') return null;
+  if (classified.effect === 'push') {
     return { effect: 'push', durationMs, direction: classified.direction };
   }
   return { effect: 'fade', durationMs, direction: null };
 }
 
-export function mapSlideTransition(
-  current: SlideTransition | undefined,
-  previous: SlideTransition | undefined,
-): PptxTransition | null {
-  if (current?.morph) {
+export function mapSlideTransition(current: SlideTransition | undefined): PptxTransition | null {
+  if (!current) return null;
+  if (current.morph) {
     const rawDuration =
       typeof current.morph === 'object' && current.morph.duration !== undefined
         ? current.morph.duration
         : current.duration;
     return { effect: 'morph', durationMs: normalizeDuration(rawDuration), direction: null };
   }
-  if (current?.enter) return transitionFromPhase(current.enter, current.duration);
-  if (previous?.exit) return transitionFromPhase(previous.exit, previous.duration);
+  if (current.enter) return transitionFromPhase(current.enter, current.duration);
+  if (current.exit) {
+    const exit = transitionFromPhase(current.exit, current.duration);
+    if (exit === null) return null;
+    return { effect: 'fade', durationMs: exit.durationMs, direction: null };
+  }
   return null;
 }

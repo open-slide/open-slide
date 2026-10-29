@@ -80,6 +80,10 @@ describe('stepAnimation', () => {
     });
   });
 
+  it('rounds a fractional step duration to integer milliseconds', () => {
+    expect(stepAnimation(240.5, 7).durationMs).toBe(241);
+  });
+
   it('falls back to the 180ms default', () => {
     expect(stepAnimation(Number.NaN, 8).durationMs).toBe(180);
   });
@@ -92,120 +96,123 @@ describe('stepAnimation', () => {
 describe('mapSlideTransition', () => {
   it('maps an opacity-only enter to fade', () => {
     expect(
-      mapSlideTransition(
-        { duration: 320, enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] } },
-        undefined,
-      ),
+      mapSlideTransition({
+        duration: 320,
+        enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+      }),
     ).toEqual({ effect: 'fade', durationMs: 320, direction: null });
   });
 
   it('rounds a fractional duration to integer milliseconds', () => {
     expect(
-      mapSlideTransition(
-        { duration: 320.7, enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] } },
-        undefined,
-      )?.durationMs,
+      mapSlideTransition({
+        duration: 320.7,
+        enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+      })?.durationMs,
     ).toBe(321);
   });
 
   it('keeps the documented fade-plus-lift as fade', () => {
     expect(
-      mapSlideTransition(
-        {
-          duration: 260,
-          enter: {
-            keyframes: [
-              { opacity: 0, transform: 'translateY(6px)' },
-              { opacity: 1, transform: 'translateY(0)' },
-            ],
-          },
+      mapSlideTransition({
+        duration: 260,
+        enter: {
+          keyframes: [
+            { opacity: 0, transform: 'translateY(6px)' },
+            { opacity: 1, transform: 'translateY(0)' },
+          ],
         },
-        undefined,
-      )?.effect,
+      })?.effect,
     ).toBe('fade');
   });
 
   it('maps a large upward travel to push up', () => {
     expect(
-      mapSlideTransition(
-        {
-          duration: 400,
-          enter: {
-            keyframes: [
-              { opacity: 0, transform: 'translateY(80px)' },
-              { opacity: 1, transform: 'translateY(0)' },
-            ],
-          },
+      mapSlideTransition({
+        duration: 400,
+        enter: {
+          keyframes: [
+            { opacity: 0, transform: 'translateY(80px)' },
+            { opacity: 1, transform: 'translateY(0)' },
+          ],
         },
-        undefined,
-      ),
+      }),
     ).toEqual({ effect: 'push', durationMs: 400, direction: 'up' });
   });
 
   it('maps horizontal travel to the direction of movement', () => {
     expect(
-      mapSlideTransition(
-        {
-          duration: 400,
-          enter: { keyframes: [{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }] },
-        },
-        undefined,
-      ),
+      mapSlideTransition({
+        duration: 400,
+        enter: { keyframes: [{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }] },
+      }),
     ).toEqual({ effect: 'push', durationMs: 400, direction: 'left' });
   });
 
   it('maps morph and uses the morph duration', () => {
-    expect(mapSlideTransition({ duration: 300, morph: { duration: 900 } }, undefined)).toEqual({
+    expect(mapSlideTransition({ duration: 300, morph: { duration: 900 } })).toEqual({
       effect: 'morph',
       durationMs: 900,
       direction: null,
     });
   });
 
-  it('uses the previous page exit when the incoming page has no enter', () => {
+  it('approximates an exit-only transition as fade', () => {
     expect(
-      mapSlideTransition(
-        { duration: 250 },
-        {
-          duration: 250,
-          exit: {
-            keyframes: [{ transform: 'translateY(0)' }, { transform: 'translateY(-80px)' }],
-          },
-        },
-      ),
-    ).toEqual({ effect: 'push', durationMs: 250, direction: 'up' });
-  });
-
-  it('uses the previous exit when the incoming page has no transition object', () => {
-    expect(
-      mapSlideTransition(undefined, {
+      mapSlideTransition({
         duration: 250,
         exit: {
           keyframes: [{ transform: 'translateY(0)' }, { transform: 'translateY(-80px)' }],
         },
       }),
-    ).toEqual({ effect: 'push', durationMs: 250, direction: 'up' });
+    ).toEqual({ effect: 'fade', durationMs: 250, direction: null });
   });
 
-  it('prefers the incoming enter over the previous exit', () => {
+  it('returns null for a deliberate hold on exit', () => {
     expect(
-      mapSlideTransition(
-        { duration: 200, enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] } },
-        {
-          duration: 200,
-          exit: { keyframes: [{ transform: 'translateY(0)' }, { transform: 'translateY(80px)' }] },
-        },
-      )?.effect,
+      mapSlideTransition({
+        duration: 250,
+        exit: { keyframes: [{ opacity: 1 }, { opacity: 1 }] },
+      }),
+    ).toBeNull();
+  });
+
+  it('returns null for a no-change enter', () => {
+    expect(
+      mapSlideTransition({
+        duration: 250,
+        enter: { keyframes: [{ opacity: 1 }, { opacity: 1 }] },
+      }),
+    ).toBeNull();
+  });
+
+  it('does not fall through to exit when the enter is a no-op', () => {
+    expect(
+      mapSlideTransition({
+        duration: 200,
+        enter: { keyframes: [{ opacity: 1 }, { opacity: 1 }] },
+        exit: { keyframes: [{ transform: 'translateY(0)' }, { transform: 'translateY(80px)' }] },
+      }),
+    ).toBeNull();
+  });
+
+  it('prefers the incoming enter over the incoming exit', () => {
+    expect(
+      mapSlideTransition({
+        duration: 200,
+        enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+        exit: { keyframes: [{ transform: 'translateY(0)' }, { transform: 'translateY(80px)' }] },
+      })?.effect,
     ).toBe('fade');
   });
 
-  it('returns null when there is no motion', () => {
-    expect(mapSlideTransition(undefined, undefined)).toBeNull();
-    expect(mapSlideTransition({ duration: 250 }, undefined)).toBeNull();
+  it('returns null when there is no transition', () => {
+    expect(mapSlideTransition(undefined)).toBeNull();
+    expect(mapSlideTransition({ duration: 250 })).toBeNull();
   });
 
   it('uses the top-level duration for a boolean morph', () => {
-    expect(mapSlideTransition({ duration: 300, morph: true }, undefined)).toEqual({
+    expect(mapSlideTransition({ duration: 300, morph: true })).toEqual({
       effect: 'morph',
       durationMs: 300,
       direction: null,
@@ -214,37 +221,28 @@ describe('mapSlideTransition', () => {
 
   it('falls back to fade for a scale-only change', () => {
     expect(
-      mapSlideTransition(
-        {
-          duration: 200,
-          enter: { keyframes: [{ transform: 'scale(1)' }, { transform: 'scale(1.2)' }] },
-        },
-        undefined,
-      ),
+      mapSlideTransition({
+        duration: 200,
+        enter: { keyframes: [{ transform: 'scale(1)' }, { transform: 'scale(1.2)' }] },
+      }),
     ).toEqual({ effect: 'fade', durationMs: 200, direction: null });
   });
 
   it('falls back to fade for a clipPath-only change', () => {
     expect(
-      mapSlideTransition(
-        {
-          duration: 200,
-          enter: { keyframes: [{ clipPath: 'inset(0)' }, { clipPath: 'inset(50%)' }] },
-        },
-        undefined,
-      ),
+      mapSlideTransition({
+        duration: 200,
+        enter: { keyframes: [{ clipPath: 'inset(0)' }, { clipPath: 'inset(50%)' }] },
+      }),
     ).toEqual({ effect: 'fade', durationMs: 200, direction: null });
   });
 
   it('falls back to fade for an unrecognised change', () => {
     expect(
-      mapSlideTransition(
-        {
-          duration: 200,
-          enter: { keyframes: [{ filter: 'blur(10px)' }, { filter: 'blur(0px)' }] },
-        },
-        undefined,
-      ),
+      mapSlideTransition({
+        duration: 200,
+        enter: { keyframes: [{ filter: 'blur(10px)' }, { filter: 'blur(0px)' }] },
+      }),
     ).toEqual({ effect: 'fade', durationMs: 200, direction: null });
   });
 });

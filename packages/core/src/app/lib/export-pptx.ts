@@ -76,9 +76,7 @@ export async function exportSlideAsPptx(
     for (let i = 0; i < mounted.frames.length; i++) {
       const frame = mounted.frames[i];
       const pageTransition = resolveTransition(pages, i, slide.transition);
-      const previousTransition =
-        i > 0 ? resolveTransition(pages, i - 1, slide.transition) : undefined;
-      const transition = mapSlideTransition(pageTransition, previousTransition);
+      const transition = mapSlideTransition(pageTransition);
       slides.push(
         await lib.measurePage({
           frame,

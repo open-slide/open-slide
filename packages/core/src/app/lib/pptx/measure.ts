@@ -211,11 +211,16 @@ function collectAnimations(frame: HTMLElement): Map<Element, ElementAnimation> {
   let nextId = 1;
   for (const el of frame.querySelectorAll<HTMLElement>('[data-os-anim], [data-osd-step]')) {
     const inStep = el.hasAttribute('data-osd-step');
+    const rawStepDuration = el.dataset.osdStepDuration;
+    const stepDuration =
+      rawStepDuration === undefined || rawStepDuration.trim() === ''
+        ? Number.NaN
+        : Number(rawStepDuration);
     const spec =
       el.dataset.osAnim !== undefined
         ? parseAnimationDataset(el.dataset, inStep, nextId)
         : inStep
-          ? stepAnimation(Number(el.dataset.osdStepDuration), nextId)
+          ? stepAnimation(stepDuration, nextId)
           : null;
     if (!spec) continue;
     out.set(el, spec);

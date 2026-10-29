@@ -167,27 +167,30 @@ export const transition: SlideTransition = {
 
 ## PPTX export
 
-The editable PPTX export resolves the page override and the previous page's
-`exit` fallback, then maps the result to a native PowerPoint transition:
+The editable PPTX export resolves the incoming page's transition, then maps it
+to a native PowerPoint transition:
 
 | Authored motion | PPTX |
 | --- | --- |
 | `morph` | Morph (`p159:morph`), with a plain fade in `mc:Fallback` |
-| Opacity-only phase, or a translation under the travel threshold | Fade |
+| Opacity-only `enter`, or a translation under the travel threshold | Fade |
+| Exit-only (no `enter`) | Fade approximation |
 | Translation of at least `24px` (or `2%`) on the dominant axis | Push along that axis, in the direction of travel |
 | `clipPath`-only, compound, or otherwise unrecognised phase | Fade |
-| No `enter`, but the previous page has an `exit` | The previous page's `exit`, classified the same way |
+| A deliberate hold (no property changes) | Nothing |
 
-Parity is close but not exact for exit-only opacity: the runtime drops
-`opacity` from `exit` keyframes unless `throughBackground` is set, while the
-mapper classifies an opacity-only phase as a Fade, so a previous page's exit can
-still become the incoming slide's transition. Put the fade on `enter` when the
-browser and PowerPoint must agree.
+The runtime plays the incoming page's `transition`: its `enter` runs on the
+incoming page, while its `exit` runs on the outgoing page. PowerPoint has no
+outgoing-slide transition, so an exit-only transition is approximated as a fade
+on the incoming slide; using the exit's push direction there would move the
+wrong page.
 
 Rules:
 
-- The incoming page's `enter` wins over the previous page's `exit`; `morph` wins
-  over both.
+- Priority is `morph` → `enter` → `exit`; the incoming page's transition is the
+  only one the exporter reads.
+- An `enter` that changes nothing stays a no-op and emits nothing; the exporter
+  does not fall through to `exit`.
 - A subtle fade-plus-lift stays a fade: travel below `24px` or `2%` is
   decoration, not a push.
 - A transition object with no `enter`, `exit`, or `morph` emits nothing.

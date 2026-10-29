@@ -157,7 +157,7 @@ describe('timingXml', () => {
       group({ trigger: 'after-previous', delayMs: 25 }, [4]),
     ]);
     expect((xml.match(/<p:cond delay="indefinite"\/>/g) ?? []).length).toBe(1);
-    expect(xml).toContain('<p:stCondLst><p:cond delay="600"/></p:stCondLst>');
+    expect(xml).toContain('<p:stCondLst><p:cond delay="650"/></p:stCondLst>');
   });
 
   it('gives every cTn a unique id after the fixed root ids', () => {
@@ -195,6 +195,42 @@ describe('timingXml', () => {
       ...xml.matchAll(/grpId="1" nodeType="[^"]+"><p:stCondLst><p:cond delay="(\d+)"\/>/g),
     ].map((match) => match[1]);
     expect(rowDelays).toEqual(['250', '250', '250']);
+  });
+
+  it('starts a with-previous follower after a delayed leader', () => {
+    const xml = timingXml([
+      group({ trigger: 'with-previous', delayMs: 200 }, [2]),
+      group({ trigger: 'with-previous', delayMs: 0 }, [3]),
+    ]);
+    const rowDelays = [
+      ...xml.matchAll(/grpId="\d+" nodeType="[^"]+"><p:stCondLst><p:cond delay="(\d+)"\/>/g),
+    ].map((match) => match[1]);
+    expect(rowDelays).toEqual(['200', '200']);
+    const beatDelays = [
+      ...xml.matchAll(
+        /<p:cTn id="\d+" fill="hold"><p:stCondLst><p:cond delay="(\d+)"\/><\/p:stCondLst><p:childTnLst>/g,
+      ),
+    ].map((match) => match[1]);
+    expect(beatDelays).toEqual(['0']);
+  });
+
+  it('offsets a delayed with-previous follower from a click leader delay', () => {
+    const xml = timingXml([
+      group({ trigger: 'click', delayMs: 100 }, [2]),
+      group({ trigger: 'with-previous', delayMs: 50 }, [3]),
+    ]);
+    const rowDelays = [
+      ...xml.matchAll(/grpId="\d+" nodeType="[^"]+"><p:stCondLst><p:cond delay="(\d+)"\/>/g),
+    ].map((match) => match[1]);
+    expect(rowDelays).toEqual(['100', '150']);
+    expect((xml.match(/nodeType="clickEffect"/g) ?? []).length).toBe(1);
+    expect((xml.match(/nodeType="withEffect"/g) ?? []).length).toBe(1);
+    const beatDelays = [
+      ...xml.matchAll(
+        /<p:cTn id="\d+" fill="hold"><p:stCondLst><p:cond delay="(\d+)"\/><\/p:stCondLst><p:childTnLst>/g,
+      ),
+    ].map((match) => match[1]);
+    expect(beatDelays).toEqual(['0']);
   });
 
   it('keeps multiple shapes from one element in one group', () => {
