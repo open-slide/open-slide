@@ -164,3 +164,33 @@ export const transition: SlideTransition = {
   },
 };
 ```
+
+## PPTX export
+
+The editable PPTX export resolves the same transition the runtime would play —
+including the page override and the previous page's `exit` fallback — and maps
+it to a native PowerPoint transition:
+
+| Authored motion | PPTX |
+| --- | --- |
+| `morph` | Morph (`p159:morph`), with a plain fade in `mc:Fallback` |
+| Opacity-only phase, or a translation under the travel threshold | Fade |
+| Translation of at least `24px` (or `2%`) on the dominant axis | Push along that axis, in the direction of travel |
+| `clipPath`-only, compound, or otherwise unrecognised phase | Fade |
+| No `enter`, but the previous page has an `exit` | The previous page's `exit`, classified the same way |
+
+Rules:
+
+- The incoming page's `enter` wins over the previous page's `exit`; `morph` wins
+  over both.
+- A subtle fade-plus-lift stays a fade: travel below `24px` or `2%` is
+  decoration, not a push.
+- A transition object with no `enter`, `exit`, or `morph` emits nothing.
+- Easing is not representable and is ignored. Duration is written as
+  PowerPoint's nearest speed preset (`fast` up to `500ms`, `med` up to `1000ms`,
+  `slow` above) plus the exact `p14:dur` where the build supports it, so older
+  viewers land on the preset.
+- [MorphElement](/docs/primitive/morph-element) ids are not written to the
+  file: PowerPoint matches objects itself under `morph`, so a pair it cannot
+  match simply fades in or out.
+- The image PPTX export is static — no transition or timing XML is written.
