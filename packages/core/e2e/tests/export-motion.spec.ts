@@ -89,4 +89,15 @@ test.describe('pptx motion export', () => {
       expect(xml).not.toContain('<p:timing');
     }
   });
+
+  test('image pptx of the motion deck stays static', async ({ page }) => {
+    await openSlide(page, 'motion');
+    const parts = await exportDeck(page, 'Export as image PPTX', 'motion.pptx');
+    for (const name of Object.keys(parts)) {
+      if (!/^ppt\/slides\/slide\d+\.xml$/.test(name)) continue;
+      const xml = strFromU8(parts[name]);
+      expect(xml).not.toContain('<p:transition');
+      expect(xml).not.toContain('<p:timing');
+    }
+  });
 });

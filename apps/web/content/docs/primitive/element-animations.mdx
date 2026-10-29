@@ -36,13 +36,14 @@ picture. An element may still be exported as a picture for other reasons — see
   that element and its descendants joins one group and plays together, so a
   card's box and its text never drift apart.
 - A descendant with its own `data-os-anim` starts a new group.
-- An unknown or missing effect adds no group of its own: at the top level the
-  element stays static, and inside an annotated ancestor it joins that
-  ancestor's group.
+- A plain element with no `data-os-anim`, or with an unknown effect, adds no
+  group: at the top level it stays static, and inside an annotated ancestor it
+  joins that ancestor's group. `Step` is the exception — no attribute means the
+  default fade, while a misspelled effect loses that fade and gets no group.
 - Non-numeric or negative numbers fall back to the default; positive values
   outside the range are clamped.
 - The attribute has to land on a real DOM node. A custom component that ignores
-  extra props silently exports nothing.
+  extra props silently exports no animation for that element.
 
 ## Fade on entry
 
@@ -107,9 +108,17 @@ join one animation group:
 
 `Step` is the click-reveal primitive and needs no annotation: each step becomes
 a `fade` with a `click` trigger, in document order, using the step's authored
-`duration`. An explicit `data-os-anim` on `<Step>` replaces that default fade,
-e.g. `<Step data-os-anim="fly" data-os-anim-direction="left">`. See
-[Step](/docs/primitive/step) for the reveal rules.
+`duration`. An explicit `data-os-anim` on `<Step>` replaces that default fade:
+
+```tsx
+<Step data-os-anim="fly" data-os-anim-direction="left" data-os-anim-duration={240}>
+  …
+</Step>
+```
+
+An explicit effect takes its duration from `data-os-anim-duration` (default
+`500`), not from the step's `duration`, so set both when the viewer and
+PowerPoint should match. See [Step](/docs/primitive/step) for the reveal rules.
 
 ## PPTX export
 
@@ -127,10 +136,11 @@ Triggers map to PowerPoint's start modes: `click` → On Click,
 click that will never come. Durations and delays are written through as
 authored; easing is not representable and is ignored.
 
-An unknown, misspelled, or missing effect adds no group of its own: at the top
-level the element exports as a normal static object, and inside an annotated
-subtree it moves with its nearest annotated ancestor. The export never fails
-because of motion.
+An unknown, misspelled, or missing effect on a plain element adds no group of its
+own: at the top level it exports as a normal static object, and inside an
+annotated subtree it moves with its nearest annotated ancestor. A `Step` is
+different — no effect means the default fade, and a misspelled one means no
+reveal at all. The export never fails because of motion.
 
 ## Limitations
 
