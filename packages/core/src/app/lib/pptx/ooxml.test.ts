@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { strFromU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { buildPptxFiles, escapeXml, geometryXml } from './ooxml';
-import type { DeckScene, RunStyle } from './scene';
+import type { DeckScene, ElementAnimation, RunStyle } from './scene';
 
 const PNG_1PX = Uint8Array.from(
   atob(
@@ -94,6 +94,74 @@ const deck: DeckScene = {
           crop: { l: 0.1, t: 0, r: 0.1, b: 0 },
           alpha: 0.8,
           geometry: { kind: 'ellipse' },
+          outline: null,
+          shadow: null,
+        },
+      ],
+    },
+    { background: null, notes: null, transition: null, nodes: [] },
+  ],
+};
+
+const animation: ElementAnimation = {
+  id: 1,
+  effect: 'fade',
+  trigger: 'with-previous',
+  durationMs: 300,
+  delayMs: 0,
+  direction: 'bottom',
+};
+
+const animatedDeck: DeckScene = {
+  images: [{ id: 1, bytes: PNG_1PX, format: 'png' }],
+  slides: [
+    {
+      background: null,
+      notes: null,
+      transition: { effect: 'fade', durationMs: 300, direction: null },
+      nodes: [
+        {
+          kind: 'shape',
+          name: 'Card',
+          box: { x: 100, y: 100, w: 400, h: 200 },
+          rotationDeg: 0,
+          flipV: false,
+          animation,
+          geometry: { kind: 'rect' },
+          fill: { kind: 'solid', color: { r: 28, g: 28, b: 34, a: 1 } },
+          outline: null,
+          shadow: null,
+        },
+        {
+          kind: 'text',
+          name: 'Text: Card title',
+          box: { x: 120, y: 120, w: 300, h: 64 },
+          rotationDeg: 0,
+          flipV: false,
+          animation,
+          paragraphs: [
+            {
+              lineSpacingPx: 64,
+              align: 'l',
+              bullet: null,
+              marginLeftPx: 0,
+              indentPx: 0,
+              endSizePx: 40,
+              lines: [{ runs: [{ text: 'Card title', style }], sizePx: 40 }],
+            },
+          ],
+        },
+        {
+          kind: 'picture',
+          name: 'Missing image',
+          box: { x: 600, y: 100, w: 200, h: 100 },
+          rotationDeg: 0,
+          flipV: false,
+          animation: { ...animation, id: 2 },
+          imageId: 99,
+          crop: null,
+          alpha: 1,
+          geometry: { kind: 'rect' },
           outline: null,
           shadow: null,
         },
@@ -247,6 +315,20 @@ describe('buildPptxFiles', () => {
     expect(slide).not.toContain('<p:timing');
     expect(text('ppt/slides/slide2.xml')).not.toContain('<p:transition');
     expect(text('ppt/slides/slide2.xml')).not.toContain('<p:timing');
+  });
+
+  it('groups every shape from one element into one animation group', () => {
+    const xml = strFromU8(buildPptxFiles(animatedDeck)['ppt/slides/slide1.xml']);
+    expect(xml).toContain('<p:timing>');
+    expect(xml.indexOf('<p:timing')).toBeGreaterThan(xml.indexOf('<p:transition'));
+
+    const spids = [...xml.matchAll(/<p:spTgt spid="(\d+)"/g)].map((m) => m[1]);
+    expect(new Set(spids)).toEqual(new Set(['2', '3']));
+
+    const grpIds = [...xml.matchAll(/grpId="(\d+)"/g)].map((m) => m[1]);
+    expect(grpIds).toHaveLength(2);
+    expect(new Set(grpIds)).toEqual(new Set(['1']));
+    expect(xml).not.toContain('<p:cNvPr id="4"');
   });
 
   it('strips control characters', () => {

@@ -26,7 +26,33 @@ One.transition = {
 
 const Two: Page = () => (
   <div style={fill}>
-    <h1 style={{ fontSize: 96, margin: 0 }}>Motion page two</h1>
+    <h1 data-os-anim="fade" data-os-anim-duration="450" style={{ fontSize: 96, margin: 0 }}>
+      Motion page two
+    </h1>
+    <div
+      data-os-anim="fly"
+      data-os-anim-direction="bottom"
+      data-os-anim-duration="600"
+      style={{
+        marginTop: 60,
+        padding: 40,
+        width: 720,
+        background: '#1c1c22',
+        border: '4px solid #f2f2ef',
+        borderRadius: 24,
+      }}
+    >
+      <h2 style={{ fontSize: 48, margin: 0 }}>Card title</h2>
+      <p style={{ fontSize: 28 }}>Card body copy</p>
+    </div>
+    <div
+      data-os-anim="zoom"
+      data-os-anim-trigger="click"
+      data-os-anim-duration="400"
+      style={{ marginTop: 40, padding: 24, width: 360, background: '#2a2a33' }}
+    >
+      Click to zoom
+    </div>
   </div>
 );
 Two.transition = {
@@ -49,4 +75,15 @@ const Three: Page = () => (
 );
 Three.transition = { duration: 600, morph: true };
 
-export default [One, Two, Three] satisfies Page[];
+const Four: Page = () => (
+  <div data-os-anim="fade" data-os-anim-duration="300" style={fill}>
+    <h1 style={{ fontSize: 96, margin: 0 }}>Motion page four</h1>
+    <p style={{ fontSize: 32 }}>The full-slide background is animated, not promoted.</p>
+  </div>
+);
+Four.transition = {
+  duration: 200,
+  enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+};
+
+export default [One, Two, Three, Four] satisfies Page[];
