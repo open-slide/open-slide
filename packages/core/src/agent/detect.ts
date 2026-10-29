@@ -39,16 +39,33 @@ export function commandVersion(file: string): Promise<string | null> {
   return cached;
 }
 
+type VersionSpawn = { file: string; args: string[]; shell?: boolean };
+
+// Node refuses .cmd/.bat without a shell, and DEP0190 forbids args + shell:
+// batch shims must run as a single pre-quoted command string instead.
+export function versionSpawnSpec(file: string, isWindows = IS_WINDOWS): VersionSpawn {
+  if (isWindows && /\.(cmd|bat)$/i.test(file)) {
+    return { file: `"${file}" --version`, args: [], shell: true };
+  }
+  return { file, args: ['--version'] };
+}
+
 function readVersion(file: string): Promise<string | null> {
   return new Promise((resolve) => {
     let out = '';
+    const spec = versionSpawnSpec(file);
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(file, ['--version'], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        shell: IS_WINDOWS,
-        windowsHide: true,
-      });
+      child = spec.shell
+        ? spawn(spec.file, {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            shell: true,
+            windowsHide: true,
+          })
+        : spawn(spec.file, spec.args, {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            windowsHide: true,
+          });
     } catch {
       resolve(null);
       return;
