@@ -1,7 +1,6 @@
 import type { AnimationOrigin, AnimationTrigger, ElementAnimation, PptxTransition } from './scene';
 
 const NS_MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
-const NS_P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const NS_P14 = 'http://schemas.microsoft.com/office/powerpoint/2010/main';
 const NS_P159 = 'http://schemas.microsoft.com/office/powerpoint/2015/09/main';
 
@@ -34,12 +33,12 @@ function effectXml(transition: PptxTransition): string {
 export function transitionXml(transition: PptxTransition | null): string {
   if (transition === null) return '';
   const spd = spdFor(transition.durationMs);
-  const root = `<mc:AlternateContent xmlns:mc="${NS_MC}" xmlns:p="${NS_P}">`;
+  const root = `<mc:AlternateContent xmlns:mc="${NS_MC}">`;
 
   if (transition.effect === 'morph') {
     const choice =
-      `<mc:Choice Requires="p159">` +
-      `<p:transition xmlns:p14="${NS_P14}" xmlns:p159="${NS_P159}" spd="${spd}" p14:dur="${transition.durationMs}">` +
+      `<mc:Choice Requires="p159" xmlns:p159="${NS_P159}" xmlns:p14="${NS_P14}">` +
+      `<p:transition spd="${spd}" p14:dur="${transition.durationMs}">` +
       `<p159:morph option="byObject"/>` +
       `</p:transition></mc:Choice>`;
     return (
@@ -51,8 +50,8 @@ export function transitionXml(transition: PptxTransition | null): string {
   }
 
   const choice =
-    `<mc:Choice Requires="p14">` +
-    `<p:transition xmlns:p14="${NS_P14}" spd="${spd}" p14:dur="${transition.durationMs}">` +
+    `<mc:Choice Requires="p14" xmlns:p14="${NS_P14}">` +
+    `<p:transition spd="${spd}" p14:dur="${transition.durationMs}">` +
     `${effectXml(transition)}` +
     `</p:transition></mc:Choice>`;
   return (

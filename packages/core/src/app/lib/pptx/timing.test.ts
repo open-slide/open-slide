@@ -2,21 +2,38 @@ import { describe, expect, it } from 'vitest';
 import type { ElementAnimation } from './scene';
 import { timingXml, transitionXml } from './timing';
 
+const NS_MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+const NS_P14 = 'http://schemas.microsoft.com/office/powerpoint/2010/main';
+const NS_P159 = 'http://schemas.microsoft.com/office/powerpoint/2015/09/main';
+
+function openingTag(xml: string, name: string): string {
+  return new RegExp(`<${name}\\b[^>]*>`).exec(xml)?.[0] ?? '';
+}
+
+function expectP14Choice(xml: string, durationMs: number): void {
+  const choice = openingTag(xml, 'mc:Choice');
+  expect(choice).toContain('Requires="p14"');
+  expect(choice).toContain(`xmlns:p14="${NS_P14}"`);
+
+  const transition = openingTag(xml, 'p:transition');
+  expect(transition).toContain(`p14:dur="${durationMs}"`);
+  expect(transition).not.toContain('xmlns:p14');
+}
+
 describe('transitionXml', () => {
   it('returns an empty string for no transition', () => {
     expect(transitionXml(null)).toBe('');
   });
 
-  it('emits fade with p14 duration and a plain fallback', () => {
+  it('emits fade with p14 duration on the transition and a plain fallback', () => {
     const xml = transitionXml({ effect: 'fade', durationMs: 320, direction: null });
-    expect(xml).toContain('<mc:AlternateContent');
-    expect(xml).toContain('Requires="p14"');
-    expect(xml).toContain('<p:transition');
-    expect(xml).toContain('p14:dur="320"');
+    expect(xml).toContain(`<mc:AlternateContent xmlns:mc="${NS_MC}">`);
+    expect(xml).not.toContain('xmlns:p="');
     expect(xml).toContain('<p:fade/>');
     expect(xml).toContain(
       '<mc:Fallback><p:transition spd="fast"><p:fade/></p:transition></mc:Fallback>',
     );
+    expectP14Choice(xml, 320);
   });
 
   it('maps push directions to p:push dir', () => {
@@ -40,13 +57,29 @@ describe('transitionXml', () => {
     );
   });
 
-  it('emits morph with a p159 choice and fade fallback', () => {
+  it('declares p14 on the mc choice and not on the transition', () => {
+    expectP14Choice(transitionXml({ effect: 'fade', durationMs: 320, direction: null }), 320);
+    expectP14Choice(transitionXml({ effect: 'push', durationMs: 400, direction: 'up' }), 400);
+    expectP14Choice(transitionXml({ effect: 'wipe', durationMs: 500, direction: 'left' }), 500);
+  });
+
+  it('emits morph with p159 and p14 namespaces on the choice', () => {
     const xml = transitionXml({ effect: 'morph', durationMs: 900, direction: null });
-    expect(xml).toContain('Requires="p159"');
     expect(xml).toContain('<p159:morph option="byObject"/>');
     expect(xml).toContain(
       '<mc:Fallback><p:transition spd="med"><p:fade/></p:transition></mc:Fallback>',
     );
+
+    const choice = openingTag(xml, 'mc:Choice');
+    expect(choice).toContain('Requires="p159"');
+    expect(choice).toContain(`xmlns:p159="${NS_P159}"`);
+    expect(choice).toContain(`xmlns:p14="${NS_P14}"`);
+
+    const transition = openingTag(xml, 'p:transition');
+    expect(transition).toContain('spd="med"');
+    expect(transition).toContain('p14:dur="900"');
+    expect(transition).not.toContain('xmlns:p159');
+    expect(transition).not.toContain('xmlns:p14');
   });
 });
 
