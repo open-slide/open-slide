@@ -33,13 +33,24 @@ test.describe('pptx motion export', () => {
     expect(slide2).toContain('<p:attrName>ppt_w</p:attrName>');
 
     const spids = [...slide2.matchAll(/<p:spTgt spid="(\d+)"/g)].map((m) => m[1]);
-    expect(spids.length).toBeGreaterThanOrEqual(4);
-    for (const spid of new Set(spids)) {
+    const targets = new Set(spids);
+    // h1, card background, card title, card body, zoom background, zoom text.
+    expect(targets.size).toBe(6);
+    // Each effect emits a visibility set plus one or two motion rows, so rows outnumber targets.
+    expect(spids.length).toBe(17);
+    for (const spid of targets) {
       expect(slide2).toContain(`<p:cNvPr id="${spid}"`);
     }
 
-    const cardPanes = [...slide2.matchAll(/grpId="(\d+)"/g)].map((m) => m[1]);
-    expect(new Set(cardPanes).size).toBeGreaterThanOrEqual(3);
+    const rows = [...slide2.matchAll(/grpId="(\d+)"[^>]*>([\s\S]*?)<\/p:cTn><\/p:par>/g)];
+    const groupTargets = new Map<string, Set<string>>();
+    for (const [, grp, body] of rows) {
+      const set = groupTargets.get(grp) ?? new Set<string>();
+      for (const m of body.matchAll(/<p:spTgt spid="(\d+)"/g)) set.add(m[1]);
+      groupTargets.set(grp, set);
+    }
+    expect([...groupTargets.keys()]).toEqual(['1', '2', '3']);
+    expect([...groupTargets.values()].map((set) => set.size)).toEqual([1, 3, 2]);
 
     expect(slide4).not.toContain('<p:bg><p:bgPr><a:solidFill><a:srgbClr val="101014">');
     expect(slide4).toContain('<p:timing>');
