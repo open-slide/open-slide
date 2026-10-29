@@ -56,6 +56,30 @@ test.describe('pptx motion export', () => {
     expect(slide4).toContain('<p:timing>');
   });
 
+  test('exports steps as click reveals in dom order', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await openSlide(page, 'steps');
+    const parts = await exportDeck(page, 'Export as PPTX', 'steps.pptx');
+    const slide2 = strFromU8(parts['ppt/slides/slide2.xml']);
+
+    expect(slide2).toContain('<p:timing>');
+    expect((slide2.match(/nodeType="clickEffect"/g) ?? []).length).toBe(2);
+    expect(slide2).toContain('presetID="10"');
+    expect(slide2).toContain('dur="180"');
+
+    const textShapeId = (text: string): string => {
+      const shape = slide2.split('<p:sp>').find((part) => part.includes(`<a:t>${text}</a:t>`));
+      expect(shape).toBeDefined();
+      return /<p:cNvPr id="(\d+)"/.exec(shape ?? '')?.[1] ?? '';
+    };
+
+    const first = textShapeId('Step item first');
+    const second = textShapeId('Step item second');
+    expect(first).not.toBe('');
+    expect(second).not.toBe('');
+    expect(slide2.indexOf(`spid="${first}"`)).toBeLessThan(slide2.indexOf(`spid="${second}"`));
+  });
+
   test('leaves static decks free of motion xml', async ({ page }) => {
     await openSlide(page, 'alpha');
     const parts = await exportDeck(page, 'Export as PPTX');

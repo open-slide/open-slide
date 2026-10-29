@@ -30,7 +30,7 @@ import {
 } from './css';
 import { resolveFontFamily } from './fonts';
 import type { ImageStore, LoadedImage } from './images';
-import { parseAnimationDataset } from './motion';
+import { parseAnimationDataset, stepAnimation } from './motion';
 import {
   clampToSlide,
   expandRect,
@@ -210,7 +210,13 @@ function collectAnimations(frame: HTMLElement): Map<Element, ElementAnimation> {
   const out = new Map<Element, ElementAnimation>();
   let nextId = 1;
   for (const el of frame.querySelectorAll<HTMLElement>('[data-os-anim], [data-osd-step]')) {
-    const spec = parseAnimationDataset(el.dataset, el.hasAttribute('data-osd-step'), nextId);
+    const inStep = el.hasAttribute('data-osd-step');
+    const spec =
+      el.dataset.osAnim !== undefined
+        ? parseAnimationDataset(el.dataset, inStep, nextId)
+        : inStep
+          ? stepAnimation(Number(el.dataset.osdStepDuration), nextId)
+          : null;
     if (!spec) continue;
     out.set(el, spec);
     nextId++;
