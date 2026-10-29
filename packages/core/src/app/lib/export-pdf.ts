@@ -182,8 +182,8 @@ export async function exportSlideAsPdf(
     const printDone = waitForAfterPrint();
     window.print();
     await printDone;
-  } finally {
     onProgress?.({ phase: 'done', current: total, total, percent: 100 });
+  } finally {
     document.title = previousTitle;
     for (const r of reactRoots) r.unmount();
     root.remove();
