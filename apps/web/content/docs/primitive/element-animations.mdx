@@ -119,8 +119,10 @@ a `fade` with a `click` trigger, in document order, using the step's authored
 An explicit effect takes its duration from `data-os-anim-duration` (default
 `500`), not from the step's `duration`, so set both when the viewer and
 PowerPoint should match. An annotation on a descendant of a `Step` also defaults
-to `click`, so nested motion waits for the same advance as the step. See
-[Step](/docs/primitive/step) for the reveal rules.
+to `click`, so nested motion waits for a click instead of playing at slide entry.
+If the `Step` also reveals unannotated content, PowerPoint may require an extra
+advance because the wrapper fade and the nested effect are separate click
+groups. See [Step](/docs/primitive/step) for the reveal rules.
 
 ## PPTX export
 
