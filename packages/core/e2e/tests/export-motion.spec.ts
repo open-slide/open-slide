@@ -79,6 +79,20 @@ test.describe('pptx motion export', () => {
     expect(slide2.indexOf(`spid="${first}"`)).toBeLessThan(slide2.indexOf(`spid="${second}"`));
   });
 
+  test('honors step triggers for nested annotations and ignores inline ones', async ({ page }) => {
+    await openSlide(page, 'motion');
+    const parts = await exportDeck(page, 'Export as PPTX', 'motion.pptx');
+    const slide5 = strFromU8(parts['ppt/slides/slide5.xml']);
+
+    expect(slide5).toContain('<p:timing>');
+    // The fly annotation on a Step descendant inherits the step's click default.
+    expect(slide5).toContain('presetID="2"');
+    expect(slide5).toContain('nodeType="clickEffect"');
+    expect(slide5).not.toContain('nodeType="withEffect"');
+    // An inline span joins its block's text box, so its zoom annotation is dropped.
+    expect(slide5).not.toContain('presetID="23"');
+  });
+
   test('leaves static decks free of motion xml', async ({ page }) => {
     await openSlide(page, 'alpha');
     const parts = await exportDeck(page, 'Export as PPTX');

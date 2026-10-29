@@ -1,4 +1,4 @@
-import type { Page, SlideMeta } from '@open-slide/core';
+import { type Page, type SlideMeta, Step, Steps } from '@open-slide/core';
 
 export const meta: SlideMeta = {
   title: 'Motion Deck',
@@ -86,4 +86,26 @@ Four.transition = {
   enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] },
 };
 
-export default [One, Two, Three, Four] satisfies Page[];
+const Five: Page = () => (
+  <div style={fill}>
+    <Steps>
+      <Step>
+        <div data-os-anim="fly" data-os-anim-duration="300">
+          Nested step
+        </div>
+      </Step>
+    </Steps>
+    <p style={{ fontSize: 32 }}>
+      Block copy{' '}
+      <span data-os-anim="zoom" style={{ background: '#333' }}>
+        inline
+      </span>
+    </p>
+  </div>
+);
+Five.transition = {
+  duration: 200,
+  enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+};
+
+export default [One, Two, Three, Four, Five] satisfies Page[];

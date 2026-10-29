@@ -210,7 +210,7 @@ function collectAnimations(frame: HTMLElement): Map<Element, ElementAnimation> {
   const out = new Map<Element, ElementAnimation>();
   let nextId = 1;
   for (const el of frame.querySelectorAll<HTMLElement>('[data-os-anim], [data-osd-step]')) {
-    const inStep = el.hasAttribute('data-osd-step');
+    const inStep = el.closest('[data-osd-step]') !== null;
     const rawStepDuration = el.dataset.osdStepDuration;
     const stepDuration =
       rawStepDuration === undefined || rawStepDuration.trim() === ''
@@ -568,9 +568,8 @@ function collectInline(
     if (SKIPPED_TAGS.has(tag) || tag === 'BR') continue;
     const cs = getComputedStyle(child);
     if (isHidden(cs)) continue;
-    const own = ctx.animations.get(child) ?? null;
-    const animation = own ?? inherited.animation;
     if (cs.display === 'contents') {
+      const animation = ctx.animations.get(child) ?? inherited.animation;
       collectInline(ctx, child, { ...inherited, animation }, atoms, blockChildren, inlineItems);
       continue;
     }
@@ -587,14 +586,14 @@ function collectInline(
       blockChildren.push(child);
       continue;
     }
-    const m = measureElement(ctx, child, cs, { ...inherited, animation });
+    const m = measureElement(ctx, child, cs, inherited);
     if (!m) continue;
     if (paintsAnything(cs, ctx.color)) inlineItems.push(m);
     const decoration = mergeDecoration(inherited.decoration, cs);
     collectInline(
       ctx,
       child,
-      { ...inherited, opacity: m.opacity, decoration, animation: m.animation },
+      { ...inherited, opacity: m.opacity, decoration },
       atoms,
       blockChildren,
       inlineItems,

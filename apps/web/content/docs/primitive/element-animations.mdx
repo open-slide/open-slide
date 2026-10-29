@@ -118,7 +118,9 @@ a `fade` with a `click` trigger, in document order, using the step's authored
 
 An explicit effect takes its duration from `data-os-anim-duration` (default
 `500`), not from the step's `duration`, so set both when the viewer and
-PowerPoint should match. See [Step](/docs/primitive/step) for the reveal rules.
+PowerPoint should match. An annotation on a descendant of a `Step` also defaults
+to `click`, so nested motion waits for the same advance as the step. See
+[Step](/docs/primitive/step) for the reveal rules.
 
 ## PPTX export
 
@@ -150,8 +152,8 @@ reveal at all. The export never fails because of motion.
 - The image PPTX export is static. Every page is one picture, so no transition
   or entrance effect survives.
 - Animate block-level elements. Inline spans are merged into their block's
-  PowerPoint text box, so an annotation on an inline span cannot move that span
-  independently of its block.
+  PowerPoint text box, so an annotation on an inline span is ignored — the span
+  and its text export as part of the block. Annotate the block instead.
 - Elements inside a rasterized subtree (filters, blend modes, masks, SVG, video,
   and other effects PowerPoint cannot express) export as one picture. An
   annotation on a descendant is dropped; the picture carries the enclosing
