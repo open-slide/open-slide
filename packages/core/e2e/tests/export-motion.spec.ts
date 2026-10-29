@@ -76,6 +76,8 @@ test.describe('pptx motion export', () => {
     const second = textShapeId('Step item second');
     expect(first).not.toBe('');
     expect(second).not.toBe('');
+    expect(slide2).toContain(`<p:spTgt spid="${first}"/>`);
+    expect(slide2).toContain(`<p:spTgt spid="${second}"/>`);
     expect(slide2.indexOf(`spid="${first}"`)).toBeLessThan(slide2.indexOf(`spid="${second}"`));
   });
 

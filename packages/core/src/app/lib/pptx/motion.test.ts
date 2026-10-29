@@ -58,6 +58,16 @@ describe('parseAnimationDataset', () => {
     ).toMatchObject({ durationMs: 500, delayMs: 0 });
   });
 
+  it('rejects partially numeric timing values', () => {
+    expect(
+      parseAnimationDataset(
+        { osAnim: 'fade', osAnimDuration: '250ms', osAnimDelay: '1e3' },
+        false,
+        8,
+      ),
+    ).toMatchObject({ durationMs: 500, delayMs: 0 });
+  });
+
   it('forces appear to an instant effect', () => {
     expect(
       parseAnimationDataset({ osAnim: 'appear', osAnimDuration: '900' }, false, 7),
@@ -147,6 +157,54 @@ describe('mapSlideTransition', () => {
         enter: { keyframes: [{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }] },
       }),
     ).toEqual({ effect: 'push', durationMs: 400, direction: 'left' });
+  });
+
+  it('sums every translation in a transform list', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { transform: 'translateX(100px) translate(0)' },
+            { transform: 'translate(0)' },
+          ],
+        },
+      }),
+    ).toEqual({ effect: 'push', durationMs: 300, direction: 'left' });
+  });
+
+  it('falls back to fade when translations are composed with a scale', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { transform: 'translateX(100px) scale(2) translateX(100px)' },
+            { transform: 'translateX(0)' },
+          ],
+        },
+      })?.effect,
+    ).toBe('fade');
+  });
+
+  it('falls back to fade for mixed-unit translation endpoints', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [{ transform: 'translateX(30px)' }, { transform: 'translateX(2%)' }],
+        },
+      }),
+    ).toEqual({ effect: 'fade', durationMs: 300, direction: null });
+  });
+
+  it('maps an enter that returns to its starting value to fade', () => {
+    expect(
+      mapSlideTransition({
+        duration: 200,
+        enter: { keyframes: [{ opacity: 0 }, { opacity: 1 }, { opacity: 0 }] },
+      }),
+    ).toEqual({ effect: 'fade', durationMs: 200, direction: null });
   });
 
   it('maps morph and uses the morph duration', () => {

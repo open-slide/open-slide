@@ -37,8 +37,8 @@ function parseTimingMs(
   max: number,
 ): number {
   if (raw === undefined) return fallback;
+  if (!/^\d+$/.test(raw)) return fallback;
   const n = Number.parseInt(raw, 10);
-  if (Number.isNaN(n) || n < 0) return fallback;
   return Math.min(Math.max(n, min), max);
 }
 
@@ -86,9 +86,11 @@ export function stepAnimation(durationMs: number, id: number): ElementAnimation 
 }
 
 type Length = { value: number; unit: 'px' | 'percent' };
-type FrameTranslation = { tx?: Length; ty?: Length };
+type FrameTranslation = { tx?: Length; ty?: Length; unsupported?: boolean };
 type Axis = 'x' | 'y';
-type Translation = { axis: Axis; delta: number; isPercent: boolean };
+type Translation =
+  | { kind: 'translation'; axis: Axis; delta: number; isPercent: boolean }
+  | { kind: 'unsupported' };
 type PhaseEffect =
   | { effect: 'push'; direction: 'up' | 'down' | 'left' | 'right' }
   | { effect: 'fade' }
@@ -174,32 +176,109 @@ function parseTranslateProperty(raw: KeyframeValue): FrameTranslation | undefine
   return { tx, ty };
 }
 
+const TRANSFORM_FUNCTIONS = /([a-zA-Z0-9]+)\(([^)]*)\)/g;
+const TRANSLATION_FUNCTIONS = new Set(['translate', 'translate3d', 'translateX', 'translateY']);
+const TRANSFORM_COMPOSITION_FUNCTIONS = new Set([
+  'matrix',
+  'matrix3d',
+  'perspective',
+  'rotate',
+  'rotate3d',
+  'rotateX',
+  'rotateY',
+  'rotateZ',
+  'scale',
+  'scale3d',
+  'scaleX',
+  'scaleY',
+  'scaleZ',
+  'skew',
+  'skewX',
+  'skewY',
+]);
+
+function parseTransformTranslation(name: string, args: string): FrameTranslation {
+  const parts = args.split(',').map((part) => part.trim());
+  switch (name) {
+    case 'translate3d': {
+      const tx = parseLength(parts[0]);
+      const ty = parseLength(parts[1]);
+      return tx && ty ? { tx, ty } : { unsupported: true };
+    }
+    case 'translate': {
+      const tx = parseLength(parts[0]);
+      if (!tx) return { unsupported: true };
+      if (parts.length === 1) return { tx };
+      const ty = parseLength(parts[1]);
+      return ty ? { tx, ty } : { unsupported: true };
+    }
+    case 'translateX': {
+      const tx = parseLength(parts[0]);
+      return tx ? { tx } : { unsupported: true };
+    }
+    case 'translateY': {
+      const ty = parseLength(parts[0]);
+      return ty ? { ty } : { unsupported: true };
+    }
+    default:
+      return {};
+  }
+}
+
+function addLength(total: Length, term: Length): Length | null {
+  if (total.unit === term.unit) return { value: total.value + term.value, unit: total.unit };
+  if (total.value === 0) return { value: term.value, unit: term.unit };
+  if (term.value === 0) return total;
+  return null;
+}
+
+function sumAxis(terms: Length[]): Length | undefined | null {
+  let total: Length | undefined;
+  for (const term of terms) {
+    if (total === undefined) {
+      total = term;
+      continue;
+    }
+    const sum = addLength(total, term);
+    if (sum === null) return null;
+    total = sum;
+  }
+  return total;
+}
+
 function transformTranslate(transform: string): FrameTranslation {
-  const t3d = /translate3d\(([^)]+)\)/.exec(transform);
-  if (t3d) {
-    const parts = t3d[1].split(',');
-    return { tx: parseLength(parts[0]), ty: parseLength(parts[1]) };
+  const xTerms: Length[] = [];
+  const yTerms: Length[] = [];
+  let translationCount = 0;
+  let hasComposition = false;
+
+  for (const match of transform.matchAll(TRANSFORM_FUNCTIONS)) {
+    const name = match[1];
+    if (TRANSLATION_FUNCTIONS.has(name)) {
+      translationCount += 1;
+      const parsed = parseTransformTranslation(name, match[2]);
+      if (parsed.unsupported) return { unsupported: true };
+      if (parsed.tx) xTerms.push(parsed.tx);
+      if (parsed.ty) yTerms.push(parsed.ty);
+    } else if (TRANSFORM_COMPOSITION_FUNCTIONS.has(name)) {
+      hasComposition = true;
+    }
   }
-  const t = /translate\(([^)]+)\)/.exec(transform);
-  if (t) {
-    const parts = t[1].split(',');
-    return {
-      tx: parseLength(parts[0]),
-      ty: parts.length > 1 ? parseLength(parts[1]) : ZERO_LENGTH,
-    };
-  }
-  const txMatch = /translateX\(([^)]+)\)/.exec(transform);
-  const tyMatch = /translateY\(([^)]+)\)/.exec(transform);
-  return {
-    tx: txMatch ? parseLength(txMatch[1]) : undefined,
-    ty: tyMatch ? parseLength(tyMatch[1]) : undefined,
-  };
+
+  if (translationCount === 0) return {};
+  // Translations commute, but a later translation is transformed by an earlier
+  // scale, rotate, skew, or matrix, so the axis deltas can no longer be summed.
+  if (translationCount > 1 && hasComposition) return { unsupported: true };
+
+  const tx = sumAxis(xTerms);
+  const ty = sumAxis(yTerms);
+  if (tx === null || ty === null) return { unsupported: true };
+  return { tx, ty };
 }
 
 function extractTranslation(raw: RawFrame): FrameTranslation {
   if (typeof raw.translate === 'string') {
-    const parsed = parseTranslateProperty(raw.translate);
-    if (parsed) return parsed;
+    return parseTranslateProperty(raw.translate) ?? { unsupported: true };
   }
   if (typeof raw.transform === 'string') return transformTranslate(raw.transform);
   return {};
@@ -208,26 +287,43 @@ function extractTranslation(raw: RawFrame): FrameTranslation {
 function axisDelta(
   first: Length | undefined,
   last: Length | undefined,
-): { delta: number; isPercent: boolean } | null {
+): { delta: number; isPercent: boolean } | null | 'unsupported' {
   if (first === undefined && last === undefined) return null;
-  const from = first ?? { value: 0, unit: last?.unit ?? 'px' };
-  const to = last ?? { value: 0, unit: first?.unit ?? 'px' };
+  // A zero length is unitless, so `translateX(0)` can settle a percentage move.
+  if (
+    first !== undefined &&
+    last !== undefined &&
+    first.unit !== last.unit &&
+    first.value !== 0 &&
+    last.value !== 0
+  ) {
+    return 'unsupported';
+  }
+  const from = first ?? ZERO_LENGTH;
+  const to = last ?? ZERO_LENGTH;
   return {
     delta: to.value - from.value,
-    isPercent: from.unit === 'percent' || to.unit === 'percent',
+    isPercent:
+      (from.value !== 0 && from.unit === 'percent') || (to.value !== 0 && to.unit === 'percent'),
   };
 }
 
 function dominantTranslation(first: FrameTranslation, last: FrameTranslation): Translation | null {
+  if (first.unsupported || last.unsupported) return { kind: 'unsupported' };
   const dx = axisDelta(first.tx, last.tx);
   const dy = axisDelta(first.ty, last.ty);
-  if (dx !== null && dy !== null) {
-    return Math.abs(dx.delta) >= Math.abs(dy.delta)
-      ? { axis: 'x', delta: dx.delta, isPercent: dx.isPercent }
-      : { axis: 'y', delta: dy.delta, isPercent: dy.isPercent };
+  if (dx === 'unsupported' || dy === 'unsupported') return { kind: 'unsupported' };
+
+  const x = dx === null ? null : { axis: 'x' as const, delta: dx.delta, isPercent: dx.isPercent };
+  const y = dy === null ? null : { axis: 'y' as const, delta: dy.delta, isPercent: dy.isPercent };
+  if (x !== null && y !== null) {
+    return {
+      kind: 'translation',
+      ...(Math.abs(x.delta) >= Math.abs(y.delta) ? x : y),
+    };
   }
-  if (dx !== null) return { axis: 'x', delta: dx.delta, isPercent: dx.isPercent };
-  if (dy !== null) return { axis: 'y', delta: dy.delta, isPercent: dy.isPercent };
+  if (x !== null) return { kind: 'translation', ...x };
+  if (y !== null) return { kind: 'translation', ...y };
   return null;
 }
 
@@ -236,17 +332,23 @@ function classifyPhase(phase: TransitionPhase): PhaseEffect | null {
   if (frames.length < 2) return { effect: 'none' };
   const first = frames[0];
   const last = frames[frames.length - 1];
-  if (!hasAnyChange(first, last)) return { effect: 'none' };
+  if (!hasAnyChange(first, last)) {
+    const hasIntermediateChange = frames.slice(1, -1).some((frame) => hasAnyChange(first, frame));
+    return hasIntermediateChange ? { effect: 'fade' } : { effect: 'none' };
+  }
   if (!hasRecognizedChange(first, last)) return null;
 
   const translation = dominantTranslation(extractTranslation(first), extractTranslation(last));
-  if (translation !== null && translation.delta !== 0) {
-    const threshold = translation.isPercent ? PUSH_MIN_PERCENT : PUSH_MIN_PX;
-    if (Math.abs(translation.delta) >= threshold) {
-      if (translation.axis === 'x') {
-        return { effect: 'push', direction: translation.delta < 0 ? 'left' : 'right' };
+  if (translation !== null) {
+    if (translation.kind === 'unsupported') return { effect: 'fade' };
+    if (translation.delta !== 0) {
+      const threshold = translation.isPercent ? PUSH_MIN_PERCENT : PUSH_MIN_PX;
+      if (Math.abs(translation.delta) >= threshold) {
+        if (translation.axis === 'x') {
+          return { effect: 'push', direction: translation.delta < 0 ? 'left' : 'right' };
+        }
+        return { effect: 'push', direction: translation.delta < 0 ? 'up' : 'down' };
       }
-      return { effect: 'push', direction: translation.delta < 0 ? 'up' : 'down' };
     }
   }
   return { effect: 'fade' };

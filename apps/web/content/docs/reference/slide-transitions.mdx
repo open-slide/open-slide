@@ -177,7 +177,9 @@ to a native PowerPoint transition:
 | Exit-only (no `enter`) | Fade approximation |
 | Translation of at least `24px` (or `2%`) on the dominant axis | Push along that axis, in the direction of travel |
 | `clipPath`-only, compound, or otherwise unrecognised phase | Fade |
+| A phase that returns to its starting values with changes in between | Fade |
 | A deliberate hold (no property changes) | Nothing |
+| A phase with fewer than two keyframes (its start is the element's underlying style) | Nothing |
 
 The runtime plays the incoming page's `transition`: its `enter` runs on the
 incoming page, while its `exit` runs on the outgoing page. PowerPoint has no
@@ -190,7 +192,11 @@ Rules:
 - Priority is `morph` → `enter` → `exit`; the incoming page's transition is the
   only one the exporter reads.
 - An `enter` that changes nothing stays a no-op and emits nothing; the exporter
-  does not fall through to `exit`.
+  does not fall through to `exit`. A phase that changes in between but ends on
+  its starting values is approximated as a fade.
+- A phase needs at least two keyframes. With fewer, it animates from the
+  element's underlying style, which the exporter cannot read, so it emits
+  nothing rather than guessing a fade.
 - A subtle fade-plus-lift stays a fade: travel below `24px` or `2%` is
   decoration, not a push.
 - A transition object with no `enter`, `exit`, or `morph` emits nothing.
