@@ -4,30 +4,49 @@ import path from 'node:path';
 import type { ViteDevServer } from 'vite';
 import { validateMutationRequest } from '../../http/request-guard.ts';
 import { type ApiContext, json } from './context.ts';
+import { executionId, isSupervised, RESTART_EXIT_CODE } from './restart.ts';
 
 // GET /__update-check  → { current, latest, outdated }
 //   Compares the running @open-slide/core version against the npm `latest`
 //   dist-tag. Network/parse failures degrade to { latest: null, outdated: false }.
-// POST /__update-package → { packageManager, command, latest, message }
-//   Installs @open-slide/core@latest with the detected package manager, then
-//   runs `open-slide sync:skills`.
+// GET /__update-package → UpdateStatus
+//   Progress of the in-app update. Polled by the client; a changed
+//   executionId means the supervisor respawned the server on the new version.
+// POST /__update-package → UpdateStatus
+//   Starts installing @open-slide/core@latest with the detected package
+//   manager, runs `open-slide sync:skills`, then restarts the dev server when
+//   it runs under the CLI supervisor. Returns immediately.
+// GET /__release-notes?from=<v>&to=<v> → { releases: Release[] | null }
+//   Release notes for versions in (from, to], newest first, from the changelog
+//   on open-slide.dev. A release whose own version is older than `from` only
+//   brings its newer patches. Without `from`, only the release line holding
+//   `to`. null when they could not be loaded.
 
 const PKG = '@open-slide/core';
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = 300_000;
+const RELEASES_URL = process.env.OPEN_SLIDE_RELEASES_URL ?? 'https://open-slide.dev/api/releases';
 
 type CheckResult = { current: string; latest: string | null; outdated: boolean };
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 type CommandSpec = { cmd: string; args: string[] };
-type UpdateResult = {
-  packageManager: PackageManager;
-  command: string;
-  latest: string | null;
-  message: string;
+export type UpdatePhase = 'idle' | 'installing' | 'syncing' | 'restarting' | 'done' | 'error';
+type UpdateJob = { phase: UpdatePhase; target: string | null; error: string | null };
+export type ReleasePatch = { version: string; note: string };
+export type ReleaseCover = { url: string; width: number; height: number; alt: string };
+export type Release = {
+  version: string;
+  title: string;
+  summary: string | null;
+  highlights: string[];
+  image: ReleaseCover | null;
+  url: string | null;
+  patches: ReleasePatch[];
 };
 
 let cache: { at: number; latest: string | null } | null = null;
-let updateInFlight: Promise<UpdateResult> | null = null;
+let releasesCache: { at: number; releases: Release[] } | null = null;
+let job: UpdateJob = { phase: 'idle', target: null, error: null };
 
 function parseSemver(v: string): [number, number, number] | null {
   const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(v.trim());
@@ -35,15 +54,19 @@ function parseSemver(v: string): [number, number, number] | null {
   return [Number(m[1]), Number(m[2]), Number(m[3])];
 }
 
-function isOutdated(current: string, latest: string): boolean {
-  const a = parseSemver(current);
-  const b = parseSemver(latest);
-  if (!a || !b) return false;
+export function compareVersions(a: string, b: string): number {
+  const x = parseSemver(a);
+  const y = parseSemver(b);
+  if (!x || !y) return 0;
   for (let i = 0; i < 3; i++) {
-    if (b[i] > a[i]) return true;
-    if (b[i] < a[i]) return false;
+    if (x[i] !== y[i]) return x[i] - y[i];
   }
-  return false;
+  return 0;
+}
+
+function isOutdated(current: string, latest: string): boolean {
+  if (!parseSemver(current) || !parseSemver(latest)) return false;
+  return compareVersions(latest, current) > 0;
 }
 
 async function fetchLatest(now: number): Promise<string | null> {
@@ -60,6 +83,111 @@ async function fetchLatest(now: number): Promise<string | null> {
     return latest;
   } catch {
     return cache?.latest ?? null;
+  }
+}
+
+function httpsUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  try {
+    return new URL(value).protocol === 'https:' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function text(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function positive(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function sanitizeCover(value: unknown): ReleaseCover | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { url, width, height, alt } = value as Record<string, unknown>;
+  const src = httpsUrl(url);
+  const w = positive(width);
+  const h = positive(height);
+  if (!src || !w || !h) return null;
+  return { url: src, width: w, height: h, alt: text(alt) ?? '' };
+}
+
+function sanitizePatch(value: unknown): ReleasePatch | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { version, note } = value as Record<string, unknown>;
+  const body = text(note);
+  if (typeof version !== 'string' || !parseSemver(version) || !body) return null;
+  return { version, note: body };
+}
+
+// The payload comes from the network and its image URL ends up in an <img>,
+// so keep only well-formed fields.
+export function sanitizeReleases(body: unknown): Release[] {
+  const list = (body as { releases?: unknown } | null)?.releases;
+  if (!Array.isArray(list)) return [];
+  const releases: Release[] = [];
+  for (const item of list) {
+    if (typeof item !== 'object' || item === null) continue;
+    const { version, title, summary, highlights, image, url, patches } = item as Record<
+      string,
+      unknown
+    >;
+    if (typeof version !== 'string' || !parseSemver(version)) continue;
+    releases.push({
+      version,
+      title: text(title) ?? `v${version}`,
+      summary: text(summary),
+      highlights: Array.isArray(highlights)
+        ? highlights.map(text).filter((h): h is string => h !== null)
+        : [],
+      image: sanitizeCover(image),
+      url: httpsUrl(url),
+      patches: Array.isArray(patches)
+        ? patches.map(sanitizePatch).filter((p): p is ReleasePatch => p !== null)
+        : [],
+    });
+  }
+  return releases;
+}
+
+function inRange(version: string, from: string, to: string): boolean {
+  return compareVersions(version, from) > 0 && compareVersions(version, to) <= 0;
+}
+
+export function selectReleases(releases: Release[], from: string | null, to: string): Release[] {
+  const selected: Release[] = [];
+  for (const release of releases) {
+    if (from === null) {
+      const line = [release.version, ...release.patches.map((p) => p.version)];
+      if (!line.some((v) => compareVersions(v, to) === 0)) continue;
+      const patches = release.patches.filter((p) => compareVersions(p.version, to) <= 0);
+      selected.push({ ...release, patches });
+      continue;
+    }
+    const patches = release.patches.filter((p) => inRange(p.version, from, to));
+    if (inRange(release.version, from, to)) {
+      selected.push({ ...release, patches });
+    } else if (patches.length > 0 && compareVersions(release.version, to) <= 0) {
+      selected.push({ ...release, summary: null, highlights: [], image: null, patches });
+    }
+  }
+  return selected.sort((a, b) => compareVersions(b.version, a.version));
+}
+
+async function fetchReleases(now: number): Promise<Release[] | null> {
+  if (releasesCache && now - releasesCache.at < CACHE_TTL_MS) return releasesCache.releases;
+  try {
+    const res = await fetch(RELEASES_URL, {
+      signal: AbortSignal.timeout(4000),
+      headers: { accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`releases ${res.status}`);
+    const releases = sanitizeReleases(await res.json());
+    releasesCache = { at: now, releases };
+    return releases;
+  } catch {
+    return releasesCache?.releases ?? null;
   }
 }
 
@@ -160,22 +288,34 @@ export async function runCommand(
   });
 }
 
-async function updatePackage(ctx: ApiContext): Promise<UpdateResult> {
-  const packageManager = await detectPackageManager(ctx.userCwd);
-  const updateCommand = updateCommandFor(packageManager);
-  const syncCommand = localOpenSlideCommand(ctx.userCwd);
+function isBusy(phase: UpdatePhase): boolean {
+  return phase === 'installing' || phase === 'syncing' || phase === 'restarting';
+}
 
-  await runCommand(updateCommand, ctx.userCwd);
-  await runCommand(syncCommand, ctx.userCwd);
+function updateStatus() {
+  return { executionId, canRestart: isSupervised(), ...job };
+}
 
-  cache = null;
-  const latest = await fetchLatest(Date.now());
-  return {
-    packageManager,
-    command: `${formatCommand(updateCommand)} && open-slide sync:skills`,
-    latest,
-    message: 'Updated @open-slide/core and synced skills.',
-  };
+async function runUpdate(ctx: ApiContext): Promise<void> {
+  job = { phase: 'installing', target: cache?.latest ?? null, error: null };
+  try {
+    job.target = (await fetchLatest(Date.now())) ?? job.target;
+    const packageManager = await detectPackageManager(ctx.userCwd);
+    await runCommand(updateCommandFor(packageManager), ctx.userCwd);
+    job.phase = 'syncing';
+    await runCommand(localOpenSlideCommand(ctx.userCwd), ctx.userCwd);
+    cache = null;
+  } catch (err) {
+    job = { ...job, phase: 'error', error: err instanceof Error ? err.message : 'update failed' };
+    return;
+  }
+  if (!isSupervised()) {
+    job.phase = 'done';
+    return;
+  }
+  job.phase = 'restarting';
+  // A short grace period lets pollers see `restarting` before the socket drops.
+  setTimeout(() => process.exit(RESTART_EXIT_CODE), 300);
 }
 
 export function registerUpdateRoutes(server: ViteDevServer, ctx: ApiContext): void {
@@ -191,20 +331,31 @@ export function registerUpdateRoutes(server: ViteDevServer, ctx: ApiContext): vo
     json(res, 200, result);
   });
 
-  server.middlewares.use('/__update-package', async (req, res, next) => {
-    if ((req.method ?? 'GET') !== 'POST') return next();
+  server.middlewares.use('/__update-package', (req, res, next) => {
+    const method = req.method ?? 'GET';
+    if (method === 'GET') {
+      res.setHeader('cache-control', 'no-store');
+      return json(res, 200, updateStatus());
+    }
+    if (method !== 'POST') return next();
 
     const guard = validateMutationRequest(req);
     if (!guard.ok) return json(res, guard.status, { error: guard.error });
 
-    try {
-      updateInFlight ??= updatePackage(ctx).finally(() => {
-        updateInFlight = null;
-      });
-      const result = await updateInFlight;
-      json(res, 200, result);
-    } catch (err) {
-      json(res, 500, { error: err instanceof Error ? err.message : 'update failed' });
+    if (!isBusy(job.phase)) void runUpdate(ctx);
+    json(res, 200, updateStatus());
+  });
+
+  server.middlewares.use('/__release-notes', async (req, res, next) => {
+    if ((req.method ?? 'GET') !== 'GET') return next();
+    const params = new URL(req.url ?? '/', 'http://localhost').searchParams;
+    const to = params.get('to') ?? ctx.coreVersion;
+    const from = params.get('from');
+    if (!parseSemver(to) || (from !== null && !parseSemver(from))) {
+      return json(res, 400, { error: 'invalid version' });
     }
+    const releases = await fetchReleases(Date.now());
+    res.setHeader('cache-control', 'no-store');
+    json(res, 200, { releases: releases ? selectReleases(releases, from, to) : null });
   });
 }
