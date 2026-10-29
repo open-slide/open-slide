@@ -166,7 +166,7 @@ function pushRows(
 ): void {
   beat.rows.push({ animation, spid: spids[0], nodeType, delay: animation.delayMs, grpId });
   for (const spid of spids.slice(1)) {
-    beat.rows.push({ animation, spid, nodeType: 'withEffect', delay: 0, grpId });
+    beat.rows.push({ animation, spid, nodeType: 'withEffect', delay: animation.delayMs, grpId });
   }
 }
 

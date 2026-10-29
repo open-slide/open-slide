@@ -148,12 +148,20 @@ describe('timingXml', () => {
     expect(xml).not.toContain('grpId="3"');
   });
 
-  it('emits later shapes from one group as withEffect rows with no delay', () => {
+  it('emits later shapes from one group as withEffect rows with the group delay', () => {
     const xml = timingXml([group({ trigger: 'click', delayMs: 400 }, [2, 3])]);
     expect((xml.match(/nodeType="clickEffect"/g) ?? []).length).toBe(1);
     expect((xml.match(/nodeType="withEffect"/g) ?? []).length).toBe(1);
-    expect((xml.match(/delay="400"/g) ?? []).length).toBe(1);
-    expect(xml).toMatch(/nodeType="withEffect"><p:stCondLst><p:cond delay="0"\/><\/p:stCondLst>/);
+    expect((xml.match(/delay="400"/g) ?? []).length).toBe(2);
+    expect(xml).toMatch(/nodeType="withEffect"><p:stCondLst><p:cond delay="400"\/><\/p:stCondLst>/);
+  });
+
+  it('gives every shape in a delayed group the same row delay as its leader', () => {
+    const xml = timingXml([group({ trigger: 'with-previous', delayMs: 250 }, [2, 3, 4])]);
+    const rowDelays = [
+      ...xml.matchAll(/grpId="1" nodeType="[^"]+"><p:stCondLst><p:cond delay="(\d+)"\/>/g),
+    ].map((match) => match[1]);
+    expect(rowDelays).toEqual(['250', '250', '250']);
   });
 
   it('keeps multiple shapes from one element in one group', () => {
