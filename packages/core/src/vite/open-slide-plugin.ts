@@ -6,6 +6,7 @@ import { loadConfigFromFile, normalizePath, type Plugin, type ViteDevServer } fr
 import type { OpenSlideConfig } from '../config.ts';
 import { SLIDE_ID_RE } from '../editing/slide-ops.ts';
 import { foldersManifestPath, readManifest } from '../files/folders.ts';
+import { projectKey } from './project-key.ts';
 import { hasRecentWrite } from './recent-writes.ts';
 
 export type { OpenSlideConfig };
@@ -234,7 +235,12 @@ export function openSlidePlugin(opts: OpenSlidePluginOptions): Plugin {
               showSlideUi: userBuild.showSlideUi ?? true,
               allowHtmlDownload: userBuild.allowHtmlDownload ?? true,
             };
-        const resolvedConfig = { ...config, build: buildResolved, version: coreVersion };
+        const resolvedConfig = {
+          ...config,
+          build: buildResolved,
+          version: coreVersion,
+          ...(isDev ? { projectKey: projectKey(userCwd) } : {}),
+        };
         return `export default ${JSON.stringify(resolvedConfig)};\n`;
       }
       if (id === resolved(FOLDERS_VMOD)) {

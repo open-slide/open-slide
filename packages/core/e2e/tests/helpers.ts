@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type APIRequestContext, expect, type Locator, type Page } from '@playwright/test';
 import { DEV_SERVER_PORT } from '../../playwright.config.ts';
+import { projectKey } from '../../src/vite/project-key.ts';
 
 export { fixtureDir, prepareScratchProject } from '../scratch.mjs';
 
@@ -14,6 +15,10 @@ export const devServerUrl = `http://127.0.0.1:${DEV_SERVER_PORT}`;
 export const coreRoot = path.resolve(here, '..', '..');
 export const coreBin = path.join(coreRoot, 'bin.js');
 export const devScratchDir = path.join(coreRoot, 'e2e', '.scratch', 'dev');
+
+export function devStorageKey(key: string): string {
+  return `${key}:${projectKey(devScratchDir)}`;
+}
 
 export function slideSourcePath(slideId: string, projectDir = devScratchDir): string {
   return path.join(projectDir, 'slides', slideId, 'index.tsx');
