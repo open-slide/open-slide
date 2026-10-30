@@ -205,8 +205,10 @@ function parseTransformTranslation(name: string, args: string): FrameTranslation
       const tx = parseLength(parts[0]);
       const ty = parseLength(parts[1]);
       const tz = parseLength(parts[2]);
-      // CSS requires a length for the z argument; percentages are invalid.
-      return tx && ty && tz && tz.unit === 'px' ? { tx, ty } : { unsupported: true };
+      // CSS requires a length for the z argument. Unitless nonzero values are invalid.
+      const zIsLength =
+        tz !== undefined && tz.unit === 'px' && (tz.value === 0 || parts[2].endsWith('px'));
+      return tx && ty && zIsLength ? { tx, ty } : { unsupported: true };
     }
     case 'translate': {
       if (parts.length < 1 || parts.length > 2) return { unsupported: true };

@@ -215,14 +215,42 @@ describe('mapSlideTransition', () => {
     ).toEqual({ effect: 'fade', durationMs: 300, direction: null });
   });
 
+  it('rejects a unitless nonzero z argument in translate3d', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { transform: 'translate3d(100px, 0px, 10)' },
+            { transform: 'translate3d(0px, 0px, 0)' },
+          ],
+        },
+      }),
+    ).toEqual({ effect: 'fade', durationMs: 300, direction: null });
+  });
+
+  it('accepts a unitless zero z argument in translate3d', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { transform: 'translate3d(100px, 0px, 0)' },
+            { transform: 'translate3d(0px, 0px, 0)' },
+          ],
+        },
+      }),
+    ).toEqual({ effect: 'push', durationMs: 300, direction: 'left' });
+  });
+
   it('sums translations that all precede a composition function', () => {
     expect(
       mapSlideTransition({
         duration: 300,
         enter: {
           keyframes: [
-            { transform: 'translateX(100px) translateY(5px) scale(2)' },
-            { transform: 'translateX(0px) translateY(5px) scale(2)' },
+            { transform: 'translateX(10px) translateX(20px) translateY(5px) scale(2)' },
+            { transform: 'translateX(0px) translateX(0px) translateY(5px) scale(2)' },
           ],
         },
       }),
