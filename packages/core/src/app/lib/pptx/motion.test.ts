@@ -257,6 +257,20 @@ describe('mapSlideTransition', () => {
     ).toEqual({ effect: 'push', durationMs: 300, direction: 'left' });
   });
 
+  it('selects the vertical axis for a composed transform with larger Y motion', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { transform: 'translateX(10px) translateY(100px) scale(2)' },
+            { transform: 'translateX(0px) translateY(0px) scale(2)' },
+          ],
+        },
+      }),
+    ).toEqual({ effect: 'push', durationMs: 300, direction: 'up' });
+  });
+
   it('falls back to fade for a translation after a composition function', () => {
     expect(
       mapSlideTransition({
