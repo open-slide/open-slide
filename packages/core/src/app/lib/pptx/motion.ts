@@ -201,11 +201,13 @@ function parseTransformTranslation(name: string, args: string): FrameTranslation
   const parts = args.split(',').map((part) => part.trim());
   switch (name) {
     case 'translate3d': {
+      if (parts.length !== 3) return { unsupported: true };
       const tx = parseLength(parts[0]);
       const ty = parseLength(parts[1]);
       return tx && ty ? { tx, ty } : { unsupported: true };
     }
     case 'translate': {
+      if (parts.length < 1 || parts.length > 2) return { unsupported: true };
       const tx = parseLength(parts[0]);
       if (!tx) return { unsupported: true };
       if (parts.length === 1) return { tx };
@@ -213,10 +215,12 @@ function parseTransformTranslation(name: string, args: string): FrameTranslation
       return ty ? { tx, ty } : { unsupported: true };
     }
     case 'translateX': {
+      if (parts.length !== 1) return { unsupported: true };
       const tx = parseLength(parts[0]);
       return tx ? { tx } : { unsupported: true };
     }
     case 'translateY': {
+      if (parts.length !== 1) return { unsupported: true };
       const ty = parseLength(parts[0]);
       return ty ? { ty } : { unsupported: true };
     }
@@ -246,6 +250,23 @@ function sumAxis(terms: Length[]): Length | undefined | null {
   return total;
 }
 
+function combineAxis(
+  first: Length | undefined,
+  second: Length | undefined,
+): Length | undefined | null {
+  if (first === undefined) return second;
+  if (second === undefined) return first;
+  return addLength(first, second);
+}
+
+function combineTranslations(first: FrameTranslation, second: FrameTranslation): FrameTranslation {
+  if (first.unsupported || second.unsupported) return { unsupported: true };
+  const tx = combineAxis(first.tx, second.tx);
+  const ty = combineAxis(first.ty, second.ty);
+  if (tx === null || ty === null) return { unsupported: true };
+  return { tx, ty };
+}
+
 function transformTranslate(transform: string): FrameTranslation {
   const xTerms: Length[] = [];
   const yTerms: Length[] = [];
@@ -255,6 +276,9 @@ function transformTranslate(transform: string): FrameTranslation {
   for (const match of transform.matchAll(TRANSFORM_FUNCTIONS)) {
     const name = match[1];
     if (TRANSLATION_FUNCTIONS.has(name)) {
+      // A translation after a composition function runs in the transformed
+      // coordinate space, so its axis delta is no longer reliable.
+      if (hasComposition) return { unsupported: true };
       translationCount += 1;
       const parsed = parseTransformTranslation(name, match[2]);
       if (parsed.unsupported) return { unsupported: true };
@@ -277,11 +301,17 @@ function transformTranslate(transform: string): FrameTranslation {
 }
 
 function extractTranslation(raw: RawFrame): FrameTranslation {
-  if (typeof raw.translate === 'string') {
-    return parseTranslateProperty(raw.translate) ?? { unsupported: true };
-  }
-  if (typeof raw.transform === 'string') return transformTranslate(raw.transform);
-  return {};
+  const translate =
+    typeof raw.translate === 'string'
+      ? (parseTranslateProperty(raw.translate) ?? { unsupported: true })
+      : undefined;
+  const transform =
+    typeof raw.transform === 'string' ? transformTranslate(raw.transform) : undefined;
+  if (translate === undefined) return transform ?? {};
+  if (transform === undefined) return translate;
+  // The translate property is applied before transform, so their translation
+  // terms add up when the transform itself stays translation-only.
+  return combineTranslations(translate, transform);
 }
 
 function axisDelta(

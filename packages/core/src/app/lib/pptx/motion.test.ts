@@ -173,6 +173,58 @@ describe('mapSlideTransition', () => {
     ).toEqual({ effect: 'push', durationMs: 300, direction: 'left' });
   });
 
+  it('combines the translate property with transform translations', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { translate: '0px', transform: 'translateX(100px)' },
+            { translate: '0px', transform: 'translateX(0px)' },
+          ],
+        },
+      }),
+    ).toEqual({ effect: 'push', durationMs: 300, direction: 'left' });
+  });
+
+  it('falls back to fade for a translation after a composition function', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { transform: 'rotate(90deg) translateX(100px)' },
+            { transform: 'rotate(90deg) translateX(0px)' },
+          ],
+        },
+      }),
+    ).toEqual({ effect: 'fade', durationMs: 300, direction: null });
+  });
+
+  it('keeps a translation that precedes a composition function', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { transform: 'translateX(100px) scale(2)' },
+            { transform: 'translateX(0px) scale(2)' },
+          ],
+        },
+      }),
+    ).toEqual({ effect: 'push', durationMs: 300, direction: 'left' });
+  });
+
+  it('rejects translateX and translateY values with extra arguments', () => {
+    const effect = (first: string, last: string) =>
+      mapSlideTransition({
+        duration: 300,
+        enter: { keyframes: [{ transform: first }, { transform: last }] },
+      })?.effect;
+    expect(effect('translateX(100px, 20px)', 'translateX(0px)')).toBe('fade');
+    expect(effect('translateY(100px, 20px)', 'translateY(0px)')).toBe('fade');
+  });
+
   it('falls back to fade when translations are composed with a scale', () => {
     expect(
       mapSlideTransition({
