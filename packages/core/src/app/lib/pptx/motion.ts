@@ -204,7 +204,9 @@ function parseTransformTranslation(name: string, args: string): FrameTranslation
       if (parts.length !== 3) return { unsupported: true };
       const tx = parseLength(parts[0]);
       const ty = parseLength(parts[1]);
-      return tx && ty ? { tx, ty } : { unsupported: true };
+      const tz = parseLength(parts[2]);
+      // CSS requires a length for the z argument; percentages are invalid.
+      return tx && ty && tz && tz.unit === 'px' ? { tx, ty } : { unsupported: true };
     }
     case 'translate': {
       if (parts.length < 1 || parts.length > 2) return { unsupported: true };
@@ -290,9 +292,6 @@ function transformTranslate(transform: string): FrameTranslation {
   }
 
   if (translationCount === 0) return {};
-  // Translations commute, but a later translation is transformed by an earlier
-  // scale, rotate, skew, or matrix, so the axis deltas can no longer be summed.
-  if (translationCount > 1 && hasComposition) return { unsupported: true };
 
   const tx = sumAxis(xTerms);
   const ty = sumAxis(yTerms);

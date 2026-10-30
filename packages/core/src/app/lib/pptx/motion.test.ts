@@ -179,8 +179,50 @@ describe('mapSlideTransition', () => {
         duration: 300,
         enter: {
           keyframes: [
-            { translate: '0px', transform: 'translateX(100px)' },
+            { translate: '-80px', transform: 'translateX(100px)' },
             { translate: '0px', transform: 'translateX(0px)' },
+          ],
+        },
+      }),
+    ).toEqual({ effect: 'fade', durationMs: 300, direction: null });
+  });
+
+  it('keeps a valid pixel z argument in translate3d', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { transform: 'translate3d(100px, 0px, 10px)' },
+            { transform: 'translate3d(0px, 0px, 0px)' },
+          ],
+        },
+      }),
+    ).toEqual({ effect: 'push', durationMs: 300, direction: 'left' });
+  });
+
+  it('rejects a percentage z argument in translate3d', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { transform: 'translate3d(100px, 0px, 10%)' },
+            { transform: 'translate3d(0px, 0px, 0%)' },
+          ],
+        },
+      }),
+    ).toEqual({ effect: 'fade', durationMs: 300, direction: null });
+  });
+
+  it('sums translations that all precede a composition function', () => {
+    expect(
+      mapSlideTransition({
+        duration: 300,
+        enter: {
+          keyframes: [
+            { transform: 'translateX(100px) translateY(5px) scale(2)' },
+            { transform: 'translateX(0px) translateY(5px) scale(2)' },
           ],
         },
       }),
