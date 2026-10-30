@@ -37,11 +37,31 @@ export type Geometry =
   | { kind: 'ellipse' }
   | { kind: 'custom'; radii: Radii };
 
+export type AnimationEffect = 'appear' | 'fade' | 'fly' | 'zoom' | 'wipe';
+export type AnimationTrigger = 'click' | 'with-previous' | 'after-previous';
+export type AnimationOrigin = 'top' | 'bottom' | 'left' | 'right';
+
+export type ElementAnimation = {
+  id: number;
+  effect: AnimationEffect;
+  trigger: AnimationTrigger;
+  durationMs: number;
+  delayMs: number;
+  direction: AnimationOrigin;
+};
+
+export type PptxTransition = {
+  effect: 'fade' | 'push' | 'wipe' | 'morph';
+  durationMs: number;
+  direction: 'up' | 'down' | 'left' | 'right' | null;
+};
+
 type NodeBase = {
   name: string;
   box: Rect;
   rotationDeg: number;
   flipV: boolean;
+  animation: ElementAnimation | null;
 };
 
 export type ShapeNode = NodeBase & {
@@ -108,6 +128,7 @@ export type SlideScene = {
   background: Fill | null;
   nodes: SceneNode[];
   notes: string | null;
+  transition: PptxTransition | null;
 };
 
 export type DeckScene = {

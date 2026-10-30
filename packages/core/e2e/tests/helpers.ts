@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type APIRequestContext, expect, type Locator, type Page } from '@playwright/test';
+import { unzipSync } from 'fflate';
 import { DEV_SERVER_PORT } from '../../playwright.config.ts';
 
 export { fixtureDir, prepareScratchProject } from '../scratch.mjs';
@@ -42,6 +43,25 @@ export async function openSlide(page: Page, slideId: string, query = ''): Promis
       await page.reload();
     }
   }
+}
+
+export async function exportDeck(
+  page: Page,
+  label: string,
+  expectedFilename = 'alpha.pptx',
+  saveTo?: string,
+): Promise<Record<string, Uint8Array>> {
+  await page.getByRole('button', { name: 'Download' }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: label, exact: true }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe(expectedFilename);
+  const filePath = await file.path();
+  if (saveTo) {
+    await fs.mkdir(path.dirname(saveTo), { recursive: true });
+    await fs.copyFile(filePath, saveTo);
+  }
+  return unzipSync(new Uint8Array(await fs.readFile(filePath)));
 }
 
 export async function enterPlayMode(page: Page): Promise<void> {
