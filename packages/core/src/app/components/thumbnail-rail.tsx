@@ -568,7 +568,7 @@ function HorizontalVirtualThumbList({
         aria-label={format(t.thumbnailRail.goToPageAria, { n: i + 1 })}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'group/thumb relative flex shrink-0 flex-col items-center gap-1.5 rounded-[6px] outline-none motion-safe:transition-[scale] motion-safe:duration-100 active:scale-[0.985]',
+          'group/thumb relative flex shrink-0 flex-col items-center gap-1.5 rounded-[6px] text-left outline-none motion-safe:transition-[scale] motion-safe:duration-100 active:scale-[0.985]',
           'focus-visible:ring-1 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar',
         )}
       >
