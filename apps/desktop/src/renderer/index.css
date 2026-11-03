@@ -17,6 +17,17 @@ body {
   cursor: default;
 }
 
+/* The raw material lets saturated wallpaper bleed across the whole frame, so
+   the shell lays one neutral wash over it. Deck views stay clear above this
+   page and pick up the same wash, keeping every chrome region one tone. */
+html[data-translucent] body {
+  background-color: oklch(0.975 0 0 / 0.72);
+}
+
+html[data-translucent].dark body {
+  background-color: oklch(0.1 0 0 / 0.72);
+}
+
 input,
 textarea,
 .selectable {
