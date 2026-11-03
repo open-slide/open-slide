@@ -4,8 +4,22 @@ import { fileURLToPath } from 'node:url';
 import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import { Command } from 'commander';
+import {
+  AGENT_IDS,
+  AGENTS,
+  type AgentId,
+  addDevDependencyArgs,
+  findOnPath,
+  parseAgentFlag,
+} from './agents.ts';
 import { gitInitAndCommit } from './git.ts';
-import { installDependencies, isDirNonEmpty, sanitizeDirName, scaffold } from './init.ts';
+import {
+  installDependencies,
+  isDirNonEmpty,
+  runPackageManager,
+  sanitizeDirName,
+  scaffold,
+} from './init.ts';
 import { detectPackageManager, PACKAGE_MANAGERS, type PackageManager } from './package-manager.ts';
 
 async function readVersion(): Promise<string> {
@@ -25,6 +39,7 @@ interface InitCliFlags {
   useBun?: boolean;
   install?: boolean;
   git?: boolean;
+  agent?: string | boolean;
 }
 
 function unwrap<T>(value: T | symbol): T {
@@ -74,6 +89,26 @@ function step(label: string, isTTY: boolean) {
   };
 }
 
+type AgentChoice = 'none' | AgentId | 'all';
+
+async function promptAgents(): Promise<AgentId[]> {
+  const cliHint = (id: AgentId) =>
+    findOnPath(AGENTS[id].cliCommand) ? `${AGENTS[id].cliCommand} CLI found` : 'CLI not found';
+  const choice = unwrap(
+    await p.select<AgentChoice>({
+      message: `Connect a coding agent to the in-app panel? ${chalk.dim('(installs its SDK, ~300 MB each)')}`,
+      options: [
+        { value: 'none', label: 'Not now', hint: 'connect later from the agent panel' },
+        ...AGENT_IDS.map((id) => ({ value: id, label: AGENTS[id].name, hint: cliHint(id) })),
+        { value: 'all', label: 'Both' },
+      ],
+      initialValue: 'none',
+    }),
+  );
+  if (choice === 'none') return [];
+  return choice === 'all' ? [...AGENT_IDS] : [choice];
+}
+
 function tail(output: string, lines = 12): string {
   return output.split('\n').slice(-lines).join('\n');
 }
@@ -86,6 +121,7 @@ async function runInit(dirArg: string | undefined, flags: InitCliFlags): Promise
   let force = flags.force ?? false;
   const install = flags.install !== false;
   const git = flags.git !== false;
+  let agents = parseAgentFlag(flags.agent);
 
   if (isTTY && dir === undefined) {
     dir = unwrap(
@@ -133,6 +169,13 @@ async function runInit(dirArg: string | undefined, flags: InitCliFlags): Promise
     );
   }
 
+  if (install && agents === undefined) {
+    agents = isTTY ? await promptAgents() : [];
+  } else if (!install && agents?.length) {
+    p.log.warn(`Skipped agent SDK install ${chalk.dim('· --no-install was passed')}`);
+    agents = [];
+  }
+
   const resolvedDir = dir ?? '.';
   const target = resolve(process.cwd(), resolvedDir);
 
@@ -168,6 +211,32 @@ async function runInit(dirArg: string | undefined, flags: InitCliFlags): Promise
     } else {
       task.fail('Dependency install failed');
       p.log.message(chalk.dim(tail(result.output)));
+    }
+  }
+
+  if (installed && agents?.length) {
+    const names = agents.map((id) => AGENTS[id].name).join(' and ');
+    const task = step(`Installing ${names} SDK`, isTTY);
+    const result = await runPackageManager(
+      pm,
+      addDevDependencyArgs(
+        pm,
+        agents.map((id) => AGENTS[id].sdkPackage),
+      ),
+      target,
+    );
+    if (result.ok) {
+      task.done(`Connected ${names}`);
+    } else {
+      task.fail(`${names} SDK install failed ${chalk.dim('· retry from the agent panel')}`);
+      p.log.message(chalk.dim(tail(result.output)));
+    }
+    for (const id of agents) {
+      const agent = AGENTS[id];
+      if (findOnPath(agent.cliCommand)) continue;
+      p.log.warn(
+        `${agent.name} CLI (${agent.cliCommand}) not found on PATH. Install it and sign in once:\n${chalk.cyan(agent.cliInstall)}`,
+      );
     }
   }
 
@@ -214,6 +283,11 @@ export async function run(argv: string[]): Promise<void> {
     .option('--use-bun', 'use bun to install dependencies')
     .option('--no-install', 'skip dependency installation')
     .option('--no-git', 'skip git init and initial commit')
+    .option(
+      '--agent <agents>',
+      'connect coding agents by installing their SDK: claude, codex, all, or none',
+    )
+    .option('--no-agent', 'skip the coding agent step')
     .action(async (dir: string | undefined, flags: InitCliFlags) => {
       p.intro(`${chalk.inverse.bold(' open-slide ')} ${chalk.dim(`v${version}`)}`);
       try {
