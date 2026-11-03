@@ -71,7 +71,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 <a href="https://vercel.com/open-source-program"><img alt="Vercel OSS Program" src="https://vercel.com/oss/program-badge-2026.svg" /></a>
 
-If open-slide is useful to you, you can [buy me a coffee](https://buymeacoffee.com/1weiho).
+If open-slide is useful to you, consider supporting development:
+
+<a href="https://buymeacoffee.com/1weiho"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="40"></a>
 
 ## License
 
