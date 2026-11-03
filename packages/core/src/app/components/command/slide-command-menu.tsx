@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { openHomeInHost } from '@/lib/desktop';
 import { format, useLocale } from '@/lib/use-locale';
 import { type CommandGroupSpec, CommandMenu, type CommandSpec } from './command-menu';
 
@@ -122,7 +123,9 @@ export function SlideCommandMenu({
         label: t.commandMenu.backToSlides,
         icon: <ChevronLeft />,
         keywords: ['home', 'back', 'slides'],
-        run: () => navigate('/'),
+        run: () => {
+          if (!openHomeInHost()) navigate('/');
+        },
       });
     }
 

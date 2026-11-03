@@ -64,6 +64,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { setDockOpen, useAgentActivity, useAgentDock } from '@/lib/agent/use-agent';
+import { openHomeInHost } from '@/lib/desktop';
 import { useFolders } from '@/lib/folders';
 import {
   hasModifier,
@@ -120,6 +121,7 @@ export function Slide() {
   // react-router records its entry index in history.state; going back is only
   // safe when we actually pushed an entry, otherwise land on the last home view.
   const goBack = useCallback(() => {
+    if (openHomeInHost()) return;
     const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
     if (idx > 0) {
       navigate(-1);

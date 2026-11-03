@@ -3,10 +3,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  AGENT_MODULES_ENV,
   entryFromPackageJson,
   findOnPath,
-  importWorkspacePackage,
+  importAgentPackage,
   parseVersion,
+  resolveAgentPackage,
   resolveWorkspacePackage,
 } from './detect.ts';
 
@@ -85,13 +87,46 @@ describe('resolveWorkspacePackage', () => {
 
     const resolved = resolveWorkspacePackage(dir, '@scope/fake-sdk');
     expect(resolved).toMatchObject({ version: '9.9.9', entry: path.join(pkgDir, 'sdk.mjs') });
-    const mod = await importWorkspacePackage<{ hello: string }>(dir, '@scope/fake-sdk');
+    const mod = await importAgentPackage<{ hello: string }>(dir, '@scope/fake-sdk');
     expect(mod?.hello).toBe('world');
   });
 
   it('returns null when the package is missing', async () => {
     await writeFile(path.join(dir, 'package.json'), '{"name":"ws"}');
     expect(resolveWorkspacePackage(dir, '@scope/nope')).toBeNull();
-    expect(await importWorkspacePackage(dir, '@scope/nope')).toBeNull();
+    expect(await importAgentPackage(dir, '@scope/nope')).toBeNull();
+  });
+});
+
+describe('resolveAgentPackage', () => {
+  const writeFakeSdk = async (root: string, version: string) => {
+    const pkgDir = path.join(root, '@scope', 'fake-sdk');
+    await mkdir(pkgDir, { recursive: true });
+    await writeFile(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({ name: '@scope/fake-sdk', version, main: 'index.js' }),
+    );
+    return pkgDir;
+  };
+
+  it('falls back to the host-provided node_modules', async () => {
+    const workspace = path.join(dir, 'ws');
+    await mkdir(workspace);
+    const hostDir = await writeFakeSdk(path.join(dir, 'host', 'node_modules'), '1.0.0');
+    const env = {
+      [AGENT_MODULES_ENV]: `${path.join(dir, 'missing')}${path.delimiter}${path.join(dir, 'host', 'node_modules')}`,
+    };
+    expect(resolveAgentPackage(workspace, '@scope/fake-sdk', env)).toMatchObject({
+      dir: hostDir,
+      version: '1.0.0',
+    });
+    expect(resolveAgentPackage(workspace, '@scope/fake-sdk', {})).toBeNull();
+  });
+
+  it("prefers the workspace's own copy", async () => {
+    await writeFakeSdk(path.join(dir, 'node_modules'), '2.0.0');
+    await writeFakeSdk(path.join(dir, 'host', 'node_modules'), '1.0.0');
+    const env = { [AGENT_MODULES_ENV]: path.join(dir, 'host', 'node_modules') };
+    expect(resolveAgentPackage(dir, '@scope/fake-sdk', env)?.version).toBe('2.0.0');
   });
 });

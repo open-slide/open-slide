@@ -1,0 +1,120 @@
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { app } from 'electron';
+import type { DesktopSettings, PackageManager } from '../shared/types';
+
+export type DeckSession = { decks: { slideId: string; title: string }[]; active: string | null };
+
+type Bounds = { x: number; y: number; width: number; height: number };
+
+type Stored = DesktopSettings & {
+  workspace: string | null;
+  recent: string[];
+  sessions: Record<string, DeckSession>;
+  ports: Record<string, number>;
+  bounds: Bounds | null;
+};
+
+const RECENT_LIMIT = 8;
+
+const defaults: Stored = {
+  translucent: true,
+  packageManager: null,
+  workspace: null,
+  recent: [],
+  sessions: {},
+  ports: {},
+  bounds: null,
+};
+
+function file(): string {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
+function load(): Stored {
+  try {
+    return { ...defaults, ...(JSON.parse(readFileSync(file(), 'utf8')) as Partial<Stored>) };
+  } catch {
+    return { ...defaults };
+  }
+}
+
+let stored: Stored | null = null;
+let writeTimer: NodeJS.Timeout | null = null;
+
+function current(): Stored {
+  stored ??= load();
+  return stored;
+}
+
+function flush() {
+  if (writeTimer) clearTimeout(writeTimer);
+  writeTimer = null;
+  const target = file();
+  mkdirSync(path.dirname(target), { recursive: true });
+  const tmp = `${target}.tmp`;
+  writeFileSync(tmp, JSON.stringify(current(), null, 2));
+  renameSync(tmp, target);
+}
+
+function save() {
+  if (writeTimer) clearTimeout(writeTimer);
+  writeTimer = setTimeout(flush, 200);
+}
+
+export const settings = {
+  flush,
+  get(): DesktopSettings {
+    const { translucent, packageManager } = current();
+    return { translucent, packageManager };
+  },
+  update(patch: Partial<DesktopSettings>): DesktopSettings {
+    Object.assign(current(), patch);
+    save();
+    return settings.get();
+  },
+  workspace(): string | null {
+    return current().workspace;
+  },
+  recent(): string[] {
+    return current().recent;
+  },
+  setWorkspace(root: string | null) {
+    const s = current();
+    s.workspace = root;
+    if (root) s.recent = [root, ...s.recent.filter((r) => r !== root)].slice(0, RECENT_LIMIT);
+    save();
+  },
+  forget(root: string) {
+    const s = current();
+    s.recent = s.recent.filter((r) => r !== root);
+    delete s.sessions[root];
+    delete s.ports[root];
+    save();
+  },
+  session(root: string): DeckSession {
+    return current().sessions[root] ?? { decks: [], active: null };
+  },
+  setSession(root: string, session: DeckSession) {
+    current().sessions[root] = session;
+    save();
+  },
+  port(root: string): number | null {
+    return current().ports[root] ?? null;
+  },
+  setPort(root: string, port: number) {
+    if (current().ports[root] === port) return;
+    current().ports[root] = port;
+    save();
+  },
+  packageManager(): PackageManager | null {
+    return current().packageManager;
+  },
+  bounds(): Bounds | null {
+    return current().bounds;
+  },
+  setBounds(bounds: Bounds) {
+    current().bounds = bounds;
+    save();
+  },
+};

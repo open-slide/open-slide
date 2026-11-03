@@ -1,0 +1,32 @@
+@import "../../../../packages/core/src/app/styles.css";
+
+@source "./";
+@source "../../../../packages/core/src/app/components/ui";
+@source "../../../../packages/core/src/app/components/agent/provider-logo.tsx";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--sidebar);
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+input,
+textarea,
+.selectable {
+  user-select: text;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}

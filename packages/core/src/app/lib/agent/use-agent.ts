@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { toast } from 'sonner';
+import { openDeckInHost } from '@/lib/desktop';
 import { useLocale } from '@/lib/use-locale';
 import {
   type AgentEffort,
@@ -432,7 +433,9 @@ function startBlankDeck(): Promise<void> {
     writeStorage(NEW_DECK_KEY, slideId);
     setActiveSession(null);
     setDockOpen(true);
-    window.location.assign(`${basePath()}/s/${encodeURIComponent(slideId)}`);
+    if (!openDeckInHost(slideId)) {
+      window.location.assign(`${basePath()}/s/${encodeURIComponent(slideId)}`);
+    }
   })().finally(() => {
     creatingDeck = null;
   });

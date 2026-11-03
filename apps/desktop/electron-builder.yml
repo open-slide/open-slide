@@ -1,0 +1,21 @@
+appId: dev.open-slide.desktop
+productName: open-slide
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - package.json
+# Every dependency here is loaded by another process as plain files: the dev
+# server imports the agent SDKs, the SDKs spawn their native CLIs, and init
+# runs the CLI. None of them can read inside app.asar.
+asarUnpack:
+  - node_modules/**
+mac:
+  category: public.app-category.productivity
+  target: [dmg, zip]
+win:
+  target: [nsis]
+linux:
+  target: [AppImage]
+  category: Office

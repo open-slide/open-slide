@@ -196,6 +196,28 @@
   }
 }
 
+/* Inside the desktop app the window paints a native material (macOS
+   vibrancy, Windows Mica) behind the page; clearing the chrome ground lets
+   it through while content cards stay opaque. Surfaces that float over
+   scrolling content frost instead, so what slides beneath stays legible. */
+html[data-translucent] {
+  --sidebar: transparent;
+  --chrome-overlay: oklch(0.975 0 0 / 0.6);
+}
+
+html[data-translucent].dark {
+  --chrome-overlay: oklch(0.1 0 0 / 0.55);
+}
+
+html[data-translucent] body {
+  background-color: transparent;
+}
+
+html[data-translucent] .chrome-overlay {
+  background-color: var(--chrome-overlay);
+  backdrop-filter: blur(20px) saturate(1.8);
+}
+
 /*
  * Grid entrance — a quiet rise used by card grids. Pair with a small
  * per-item animation-delay for a capped stagger.

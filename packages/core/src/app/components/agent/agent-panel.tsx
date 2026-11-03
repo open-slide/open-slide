@@ -37,6 +37,7 @@ import {
   useAgentStatus,
   useCreateDeck,
 } from '@/lib/agent/use-agent';
+import { openDeckInHost } from '@/lib/desktop';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import { applyCommentsPrompt } from '../../../agent/prompt';
@@ -302,7 +303,9 @@ export function AgentPanel({
           onSelect={(s) => {
             setActiveSession(s.id);
             setView('chat');
-            if (s.slideId && s.slideId !== context.slideId) navigate(`/s/${s.slideId}`);
+            if (s.slideId && s.slideId !== context.slideId) {
+              if (!openDeckInHost(s.slideId)) navigate(`/s/${s.slideId}`);
+            }
           }}
           onDelete={async (id) => {
             try {

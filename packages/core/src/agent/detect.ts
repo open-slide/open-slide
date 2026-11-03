@@ -132,27 +132,47 @@ function pickCondition(target: unknown): string | null {
 export function resolveWorkspacePackage(userCwd: string, name: string): ResolvedPackage | null {
   let dir = path.resolve(userCwd);
   while (true) {
-    const pkgJsonPath = path.join(dir, 'node_modules', name, 'package.json');
-    if (existsSync(pkgJsonPath)) {
-      let pkg: PackageJson;
-      try {
-        pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as PackageJson;
-      } catch {
-        return null;
-      }
-      const entry = entryFromPackageJson(pkg);
-      if (!entry) return null;
-      const pkgDir = path.dirname(pkgJsonPath);
-      return { dir: pkgDir, version: pkg.version ?? '0.0.0', entry: path.resolve(pkgDir, entry) };
-    }
+    const pkgDir = path.join(dir, 'node_modules', name);
+    if (existsSync(path.join(pkgDir, 'package.json'))) return readPackageAt(pkgDir);
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
   }
 }
 
-export async function importWorkspacePackage<T>(userCwd: string, name: string): Promise<T | null> {
-  const resolved = resolveWorkspacePackage(userCwd, name);
+function readPackageAt(pkgDir: string): ResolvedPackage | null {
+  let pkg: PackageJson;
+  try {
+    pkg = JSON.parse(readFileSync(path.join(pkgDir, 'package.json'), 'utf8')) as PackageJson;
+  } catch {
+    return null;
+  }
+  const entry = entryFromPackageJson(pkg);
+  if (!entry) return null;
+  return { dir: pkgDir, version: pkg.version ?? '0.0.0', entry: path.resolve(pkgDir, entry) };
+}
+
+// node_modules directories a host (the desktop app) ships the agent SDKs in,
+// so a workspace can connect without installing them. The workspace's own
+// copy still wins, keeping a version the user pinned.
+export const AGENT_MODULES_ENV = 'OPEN_SLIDE_AGENT_MODULES';
+
+export function resolveAgentPackage(
+  userCwd: string,
+  name: string,
+  env: NodeJS.ProcessEnv = process.env,
+): ResolvedPackage | null {
+  const own = resolveWorkspacePackage(userCwd, name);
+  if (own) return own;
+  for (const dir of (env[AGENT_MODULES_ENV] ?? '').split(path.delimiter).filter(Boolean)) {
+    const pkgDir = path.join(dir, name);
+    if (existsSync(path.join(pkgDir, 'package.json'))) return readPackageAt(pkgDir);
+  }
+  return null;
+}
+
+export async function importAgentPackage<T>(userCwd: string, name: string): Promise<T | null> {
+  const resolved = resolveAgentPackage(userCwd, name);
   if (!resolved) return null;
   return (await import(pathToFileURL(resolved.entry).href)) as T;
 }

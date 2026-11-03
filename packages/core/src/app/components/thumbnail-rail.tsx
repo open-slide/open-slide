@@ -328,7 +328,7 @@ export function ThumbnailRail({
 
   const list = (
     <aside className="flex flex-col gap-2 px-3 pb-3">
-      <div className="-mx-3 sticky top-0 z-10 bg-sidebar px-4 pt-3 pb-1">
+      <div className="chrome-overlay -mx-3 sticky top-0 z-10 bg-sidebar px-4 pt-3 pb-1">
         <div className="flex items-center justify-between gap-2">
           <span className="eyebrow">{t.thumbnailRail.pages}</span>
           <div className="flex items-center gap-1.5">
