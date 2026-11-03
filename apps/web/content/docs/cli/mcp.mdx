@@ -1,0 +1,75 @@
+---
+title: open-slide mcp
+description: Create and edit decks from any MCP client through a local MCP server.
+---
+
+```npm
+open-slide mcp
+```
+
+Starts a [Model Context Protocol](https://modelcontextprotocol.io) server
+over stdio for the workspace in the current directory. MCP clients such as
+Claude Desktop, Claude Code, Codex, or Cursor launch it themselves; you
+only add it to the client's config once. Every write lands in `slides/`
+or `assets/`, so a running `open-slide dev` hot-reloads the deck while
+the agent writes it.
+
+## Flags
+
+| Flag            | Default           | Description                       |
+| --------------- | ----------------- | --------------------------------- |
+| `--cwd <dir>`   | current directory | The open-slide workspace to edit. |
+
+## Add it to a client
+
+Claude Code, from the workspace:
+
+```bash
+claude mcp add open-slide -- npx open-slide mcp
+```
+
+Codex, from the workspace:
+
+```bash
+codex mcp add open-slide -- npx open-slide mcp
+```
+
+Claude Desktop, Cursor, and other clients that start servers from their own
+directory take a JSON entry. Point `--cwd` at the workspace:
+
+```json
+{
+  "mcpServers": {
+    "open-slide": {
+      "command": "npx",
+      "args": ["open-slide", "mcp", "--cwd", "/path/to/my-slides"]
+    }
+  }
+}
+```
+
+Then ask for a deck in plain words, for example *"make a 6 page deck
+about our Q3 roadmap"*, and open the preview link the agent returns.
+
+## Tools
+
+| Tool                                          | What it does                                                                     |
+| --------------------------------------------- | -------------------------------------------------------------------------------- |
+| `read_guide`                                  | Reads the bundled skills (`slide-authoring`, `create-slide`, …) and their references. |
+| `list_themes`, `read_theme`                   | Lists themes and reads a theme's guide and demo deck.                            |
+| `list_decks`, `read_deck`                     | Lists decks with titles and page counts, and reads a deck's source.             |
+| `create_deck`                                 | Creates `slides/<id>/` from a title, a slug, and optional source.               |
+| `edit_deck`, `write_deck`                     | Replaces a snippet, or the whole file. Sources that don't parse are refused.    |
+| `set_deck_title`                              | Writes `meta.title`.                                                             |
+| `reorder_pages`, `duplicate_page`, `delete_page` | Page operations; speaker notes move with their pages.                         |
+| `delete_deck`                                 | Removes a deck folder.                                                           |
+| `list_assets`, `add_asset`                    | Lists and adds files in a deck's `assets/` or the global `assets/`.             |
+| `preview_page`                                | Screenshots one page through the dev server's preview route.                    |
+| `get_current_view`                            | Reads the deck, page, and element the user has open in the browser.             |
+
+`preview_page` needs `open-slide dev` running and a Playwright install the
+workspace or machine can resolve. Without one it returns the preview URL
+instead.
+
+The server is local only: it talks to the client over stdin and stdout and
+never opens a port.
