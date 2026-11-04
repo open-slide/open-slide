@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { IntroTarget } from '../../shared/types';
 import { desktop } from '../lib/desktop';
+import { createIntroSound, type ScoreCues } from '../lib/intro-score';
 import { type SketchVariant, SlideSketch } from './slide-sketch';
 
 const SWIFT = 'cubic-bezier(0.22, 1, 0.36, 1)';
@@ -44,6 +45,12 @@ const FLIGHT_MS = 1700;
 const FLATTEN_MS = 2600;
 const MORPH_MS = 1350;
 const SHEEN_MS = 1100;
+const FLATTEN_SHEEN = at.flatten + 1700;
+// COLLAPSE covers most of its travel early, so the mark reads as landed before
+// the morph formally ends. The bloom and the score's hit both start here.
+const MARK_LANDS = at.morph + MORPH_MS - 350;
+// SETTLE has nearly arrived by this share of a flight; a dock sounds on arrival.
+const DOCK_SHARE = 0.65;
 
 const GRAIN = `url("data:image/svg+xml;utf8,${encodeURIComponent(
   "<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>",
@@ -136,6 +143,20 @@ const SCATTER: {
     blur: 0,
   },
 ];
+
+const SCORE_CUES: ScoreCues = {
+  glow: at.glow,
+  gather: at.gather,
+  flatten: at.flatten,
+  sheen: FLATTEN_SHEEN,
+  morph: at.morph,
+  lands: MARK_LANDS,
+  settled: at.morph + MORPH_MS,
+  exit: at.exit,
+  docks: SCATTER.map((card) => at.gather + card.land + FLIGHT_MS * DOCK_SHARE).sort(
+    (a, b) => a - b,
+  ),
+};
 
 type Rect = { x: number; y: number; width: number; height: number };
 type Stop = [ms: number, keyframe: Keyframe];
@@ -259,6 +280,7 @@ export function Intro() {
     const timers: ReturnType<typeof setTimeout>[] = [];
     const later = (ms: number, fn: () => void) => timers.push(setTimeout(fn, ms));
     let target: IntroTarget | null = null;
+    const sound = createIntroSound(SCORE_CUES);
 
     const animate = (
       el: Element | null | undefined,
@@ -274,6 +296,7 @@ export function Intro() {
       if (exiting || cancelled) return;
       exiting = true;
       for (const timer of timers) clearTimeout(timer);
+      sound.fadeOut(fast ? 0.9 : 2.4);
       const fadeOut = animate(
         content,
         [{ opacity: 0, filter: 'blur(12px)', transform: 'scale(0.985)' }],
@@ -354,8 +377,8 @@ export function Intro() {
       const gatherEnd = at.gather + RISE_MS;
       const flattenEnd = at.flatten + FLATTEN_MS;
       const morphEnd = at.morph + MORPH_MS;
-      const flattenSheen = at.flatten + 1700;
 
+      if (!exiting) sound.start();
       animate(scene, [{ opacity: 0 }, { opacity: 1 }], { duration: 1200, easing: 'ease-out' });
       track(scene, [
         [at.gather, { backgroundColor: VEIL, easing: IN_OUT }],
@@ -371,7 +394,7 @@ export function Intro() {
         [gatherEnd + 150, { ...halo(1, 1.08), easing: IN_OUT }],
         [flattenEnd, { ...halo(0.7, 0.8), easing: 'linear' }],
         [at.morph + 150, { ...halo(0.7, 0.8), easing: IN_OUT }],
-        [morphEnd - 350, { ...halo(0.5, 0.4), easing: SOFT_OUT }],
+        [MARK_LANDS, { ...halo(0.5, 0.4), easing: SOFT_OUT }],
         [morphEnd + 500, { ...halo(1, 0.95), easing: 'linear' }],
         [at.exit, halo(0.85, 1.02)],
       ]);
@@ -486,9 +509,9 @@ export function Intro() {
         [at.morph + MORPH_MS * 0.55, { opacity: 1 }],
       ]);
       track(sheenRef.current, [
-        [flattenSheen, { transform: 'translateX(-130%) skewX(-18deg)', easing: IN_OUT }],
+        [FLATTEN_SHEEN, { transform: 'translateX(-130%) skewX(-18deg)', easing: IN_OUT }],
         [
-          flattenSheen + SHEEN_MS,
+          FLATTEN_SHEEN + SHEEN_MS,
           { transform: 'translateX(230%) skewX(-18deg)', easing: 'linear' },
         ],
         [morphEnd - 1, { transform: 'translateX(230%) skewX(-18deg)', easing: 'linear' }],
@@ -530,7 +553,7 @@ export function Intro() {
     };
 
     const fonts = Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 600))]);
-    void Promise.all([desktop.intro.target().catch(() => null), fonts]).then(([t]) => {
+    void Promise.all([desktop.intro.target().catch(() => null), fonts, sound.ready]).then(([t]) => {
       if (cancelled) return;
       target = t as IntroTarget | null;
       run();
@@ -548,6 +571,7 @@ export function Intro() {
       for (const timer of timers) clearTimeout(timer);
       window.removeEventListener('keydown', skip);
       window.removeEventListener('pointerdown', skip);
+      sound.dispose();
       for (const animation of scene.getAnimations({ subtree: true })) animation.cancel();
     };
   }, [stage]);
