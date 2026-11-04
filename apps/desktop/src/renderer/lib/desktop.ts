@@ -46,7 +46,7 @@ export function useLog(task: LogTask, initial = ''): [string, (text: string) => 
 
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-export function useColorScheme() {
+export function useWindowAppearance() {
   const state = useAppState();
   const translucent = state?.translucent ?? false;
   useEffect(() => {
@@ -62,4 +62,18 @@ export function useColorScheme() {
   useEffect(() => {
     document.documentElement.toggleAttribute('data-translucent', translucent);
   }, [translucent]);
+
+  const accent = state?.accent ?? null;
+  useEffect(() => {
+    const style = document.documentElement.style;
+    if (accent) style.setProperty('--ring', accent);
+    else style.removeProperty('--ring');
+  }, [accent]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const apply = (focused: boolean) => root.toggleAttribute('data-inactive', !focused);
+    void desktop.window.isFocused().then(apply);
+    return desktop.window.onFocus(apply);
+  }, []);
 }

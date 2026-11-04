@@ -12,6 +12,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { cn } from '@/lib/utils';
 import type { PackageManager } from '../../shared/types';
 import { desktop, useAppState, useLog } from '../lib/desktop';
 import { joinPath, sanitizeName, tildify } from '../lib/paths';
@@ -81,7 +82,17 @@ export function CreateWorkspaceDialog({
         if (!open && !running) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-[480px]" showCloseButton={!running}>
+      <DialogContent
+        showCloseButton={false}
+        className={cn(
+          // A sheet: it drops from just under the tab strip instead of
+          // zooming in at the center of the window.
+          'top-12 translate-y-0 rounded-[12px] sm:max-w-[480px]',
+          'transition-[translate,opacity] duration-200 ease-(--ease-swift)',
+          'data-starting-style:-translate-y-3 data-starting-style:scale-100',
+          'data-ending-style:-translate-y-3 data-ending-style:scale-100',
+        )}
+      >
         <DialogHeader>
           <DialogTitle>{fixed ? 'Set up this folder' : 'Create workspace'}</DialogTitle>
           <DialogDescription>

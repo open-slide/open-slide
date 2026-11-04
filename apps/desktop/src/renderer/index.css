@@ -41,3 +41,19 @@ textarea,
 .no-drag {
   -webkit-app-region: no-drag;
 }
+
+/* Native chrome loses its ink when the window isn't key; backgrounds stay so
+   the selected tab or pane still reads as selected. */
+[data-inactive] .window-chrome :is(svg, img, span):not(:has(svg, img, span)) {
+  opacity: 0.55;
+}
+
+/* Sheets dim what they cover lightly and never blur it. */
+[data-slot="dialog-overlay"] {
+  backdrop-filter: none;
+  background-color: oklch(0 0 0 / 0.08);
+}
+
+.dark [data-slot="dialog-overlay"] {
+  background-color: oklch(0 0 0 / 0.3);
+}

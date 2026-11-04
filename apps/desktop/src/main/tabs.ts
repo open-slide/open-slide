@@ -177,6 +177,39 @@ export class TabManager {
     }
   }
 
+  private closeAround(anchor: Tab, keep: (tab: Tab, index: number) => boolean) {
+    const closing = this.tabs.filter((t, i) => t.kind !== 'home' && !keep(t, i));
+    if (!closing.length) return;
+    this.tabs = this.tabs.filter((t) => !closing.includes(t));
+    for (const tab of closing) this.destroyView(tab);
+    if (this.fullscreenTab && closing.includes(this.fullscreenTab)) this.leaveHtmlFullscreen();
+    if (!this.tabs.some((t) => t.id === this.activeId)) this.activeId = anchor.id;
+    this.activate(this.activeId);
+  }
+
+  showMenu(id: string) {
+    const index = this.tabs.findIndex((t) => t.id === id);
+    const tab = this.tabs[index];
+    if (!tab) return;
+    const decks = this.tabs.filter((t) => t.kind === 'deck');
+    const items: MenuItemConstructorOptions[] = [
+      { label: 'Reload Tab', click: () => tab.view?.webContents.reload(), enabled: !!tab.view },
+      { type: 'separator' },
+      { label: 'Close Tab', enabled: tab.kind === 'deck', click: () => this.close(id) },
+      {
+        label: 'Close Other Tabs',
+        enabled: decks.some((t) => t !== tab),
+        click: () => this.closeAround(tab, (t) => t === tab),
+      },
+      {
+        label: 'Close Tabs to the Right',
+        enabled: index < this.tabs.length - 1,
+        click: () => this.closeAround(tab, (_t, i) => i <= index),
+      },
+    ];
+    Menu.buildFromTemplate(items).popup({ window: this.opts.window });
+  }
+
   closeActive(): boolean {
     const tab = this.active();
     if (!tab || tab.kind === 'home') return false;

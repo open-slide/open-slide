@@ -25,6 +25,8 @@ export type WorkspaceInfo = { root: string; name: string };
 export type AppState = {
   platform: string;
   translucent: boolean;
+  // The system accent as #rrggbbaa, or null where the platform has none.
+  accent: string | null;
   fullscreen: boolean;
   workspace: WorkspaceInfo | null;
   recent: string[];
@@ -74,7 +76,7 @@ export type LogTask = 'server' | 'install' | 'create';
 
 export type LogEvent = { task: LogTask; chunk: string };
 
-export type ShellCommand = 'open-settings' | 'open-workspace' | 'new-workspace';
+export type ShellCommand = 'open-workspace' | 'new-workspace';
 
 export type ShellApi = {
   getState(): Promise<AppState>;
@@ -83,6 +85,13 @@ export type ShellApi = {
   onCommand(listener: (command: ShellCommand) => void): () => void;
   setOverlay(open: boolean): void;
   openExternal(url: string): void;
+  sendCommand(command: ShellCommand): void;
+  window: {
+    isFocused(): Promise<boolean>;
+    onFocus(listener: (focused: boolean) => void): () => void;
+    fitContent(height: number): void;
+    openSettings(): void;
+  };
   settings: {
     get(): Promise<DesktopSettings>;
     update(patch: Partial<DesktopSettings>): Promise<DesktopSettings>;
@@ -91,6 +100,7 @@ export type ShellApi = {
     activate(id: string): void;
     close(id: string): void;
     move(id: string, toIndex: number): void;
+    showMenu(id: string): void;
   };
   workspace: {
     choose(): Promise<WorkspaceInspection | null>;

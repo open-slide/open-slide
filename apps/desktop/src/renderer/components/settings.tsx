@@ -1,110 +1,146 @@
-import { Bot, ChevronLeft, FolderClosed, Info, Palette } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Bot, FolderClosed, Palette } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import type { AppState, DesktopSettings, PackageManager } from '../../shared/types';
-import { desktop, useLog } from '../lib/desktop';
+import { desktop, useAppState, useLog } from '../lib/desktop';
 import { splitPath, tildify } from '../lib/paths';
 import { AgentsSection } from './agents-section';
 import { LogView, SectionCard, StatusDot } from './primitives';
 
-type SectionId = 'workspace' | 'agents' | 'appearance' | 'about';
+type SectionId = 'workspace' | 'agents' | 'appearance';
 
 const SECTIONS: { id: SectionId; label: string; icon: React.ReactNode }[] = [
   { id: 'workspace', label: 'Workspace', icon: <FolderClosed /> },
   { id: 'agents', label: 'Agents', icon: <Bot /> },
   { id: 'appearance', label: 'Appearance', icon: <Palette /> },
-  { id: 'about', label: 'About', icon: <Info /> },
 ];
 
-export function Settings({
-  state,
-  error,
-  onClose,
-  onChooseWorkspace,
-  onCreateWorkspace,
-  onOpenRecent,
-}: {
-  state: AppState;
-  error: string | null;
-  onClose: () => void;
-  onChooseWorkspace: () => void;
-  onCreateWorkspace: () => void;
-  onOpenRecent: (path: string) => void;
-}) {
-  const [section, setSection] = useState<SectionId>('workspace');
+const SECTION_KEY = 'settings-section';
+
+function storedSection(): SectionId {
+  try {
+    const value = localStorage.getItem(SECTION_KEY);
+    if (SECTIONS.some((s) => s.id === value)) return value as SectionId;
+  } catch {}
+  return 'workspace';
+}
+
+export function SettingsWindow() {
+  const state = useAppState();
+  const [section, setSection] = useState<SectionId>(storedSection);
   const [prefs, setPrefs] = useState<DesktopSettings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const label = SECTIONS.find((s) => s.id === section)?.label ?? 'Settings';
+  const ready = state !== null;
 
   useEffect(() => {
     void desktop.settings.get().then(setPrefs);
   }, []);
 
   useEffect(() => {
+    document.title = label;
+    try {
+      localStorage.setItem(SECTION_KEY, section);
+    } catch {}
+  }, [label, section]);
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
+      if (e.key === 'Escape' && !e.defaultPrevented) window.close();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
 
+  // Settings windows size themselves to the pane, so the window follows the
+  // content's natural height instead of scrolling inside a fixed frame.
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    const body = bodyRef.current;
+    if (!ready || !header || !body) return;
+    const report = () => desktop.window.fitContent(header.offsetHeight + body.offsetHeight);
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(header);
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, [ready]);
+
+  if (!state) return null;
+
+  const isMac = state.platform === 'darwin';
   const update = async (patch: Partial<DesktopSettings>) =>
     setPrefs(await desktop.settings.update(patch));
 
   return (
-    <div className="flex h-full min-h-0">
-      <nav className="flex w-[13.5rem] shrink-0 flex-col gap-0.5 px-3 pt-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="mb-3 flex h-7 items-center gap-1 self-start rounded-[6px] pr-2 pl-1 text-[12.5px] font-medium text-foreground/60 outline-none transition-colors hover:bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+    <div className="flex h-full flex-col text-foreground">
+      <header
+        ref={headerRef}
+        className="window-chrome drag-region shrink-0 border-b border-hairline"
+      >
+        {isMac && (
+          <h1 className="flex h-8 items-center justify-center text-[13px] font-semibold">
+            <span>{label}</span>
+          </h1>
+        )}
+        <nav
+          aria-label="Settings"
+          className={cn('flex justify-center gap-1 px-3 pb-1.5', !isMac && 'pt-1.5')}
         >
-          <ChevronLeft className="size-4" aria-hidden />
-          {state.workspace ? 'Back to decks' : 'Back'}
-        </button>
-        <span className="eyebrow mb-1.5 px-2">Settings</span>
-        {SECTIONS.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            aria-current={section === s.id ? 'page' : undefined}
-            onClick={() => setSection(s.id)}
-            className={cn(
-              'flex h-8 items-center gap-2 rounded-[6px] px-2 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/30 [&_svg]:size-4 [&_svg]:text-muted-foreground',
-              section === s.id
-                ? 'bg-foreground/[0.07] font-medium text-foreground'
-                : 'text-foreground/75 hover:bg-foreground/[0.04] hover:text-foreground',
-            )}
-          >
-            {s.icon}
-            {s.label}
-          </button>
-        ))}
-      </nav>
+          {SECTIONS.map((s) => {
+            const selected = section === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                aria-current={selected ? 'page' : undefined}
+                onClick={() => setSection(s.id)}
+                className={cn(
+                  'no-drag flex h-[50px] min-w-[76px] flex-col items-center justify-center gap-1 rounded-[8px] px-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                  '[&_svg]:size-[21px] [&_svg]:stroke-[1.6]',
+                  selected ? 'bg-foreground/[0.07] text-ring' : 'text-foreground/55',
+                )}
+              >
+                {s.icon}
+                <span
+                  className={cn(
+                    'text-[11px] font-medium',
+                    selected ? 'text-foreground' : 'text-foreground/70',
+                  )}
+                >
+                  {s.label}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+      </header>
 
-      <div className="flex min-w-0 flex-1 flex-col py-2 pr-2">
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-[10px] bg-background shadow-edge ring-1 ring-foreground/[0.06]">
-          <div className="mx-auto flex w-full max-w-[680px] flex-col gap-4 px-8 py-9">
-            <h1 className="font-heading text-[20px] font-semibold tracking-tight">
-              {SECTIONS.find((s) => s.id === section)?.label}
-            </h1>
-            {section === 'workspace' && (
-              <WorkspaceSection
-                state={state}
-                error={error}
-                prefs={prefs}
-                onUpdate={update}
-                onChoose={onChooseWorkspace}
-                onCreate={onCreateWorkspace}
-                onOpenRecent={onOpenRecent}
-              />
-            )}
-            {section === 'agents' && <AgentsSection />}
-            {section === 'appearance' && (
-              <AppearanceSection state={state} prefs={prefs} onUpdate={update} />
-            )}
-            {section === 'about' && <AboutSection />}
-          </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={bodyRef} className="flex flex-col gap-3 px-5 pt-4 pb-5">
+          {section === 'workspace' && (
+            <WorkspaceSection
+              state={state}
+              error={error}
+              prefs={prefs}
+              onUpdate={update}
+              onChoose={() => desktop.sendCommand('open-workspace')}
+              onCreate={() => desktop.sendCommand('new-workspace')}
+              onOpenRecent={async (path) => {
+                setError(null);
+                const result = await desktop.workspace.open(path);
+                if (!result.ok) setError(result.error);
+              }}
+            />
+          )}
+          {section === 'agents' && <AgentsSection />}
+          {section === 'appearance' && (
+            <AppearanceSection state={state} prefs={prefs} onUpdate={update} />
+          )}
         </div>
       </div>
     </div>
@@ -308,34 +344,6 @@ function AppearanceSection({
         <ToggleGroupItem value="translucent">Translucent</ToggleGroupItem>
         <ToggleGroupItem value="solid">Solid</ToggleGroupItem>
       </ToggleGroup>
-    </SectionCard>
-  );
-}
-
-function AboutSection() {
-  return (
-    <SectionCard>
-      <p className="text-[13px] leading-relaxed">
-        open-slide for desktop runs each workspace’s own{' '}
-        <code className="font-mono text-[12px]">@open-slide/core</code> dev server and opens every
-        deck in its own tab.
-      </p>
-      <div className="mt-3 flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => desktop.openExternal('https://open-slide.dev/docs')}
-        >
-          Docs
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => desktop.openExternal('https://github.com/open-slide/open-slide')}
-        >
-          GitHub
-        </Button>
-      </div>
     </SectionCard>
   );
 }

@@ -8,8 +8,13 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
+  Menu,
+  type MenuItemConstructorOptions,
   nativeTheme,
+  screen,
   shell,
+  systemPreferences,
+  type WebContents,
 } from 'electron';
 import {
   type AgentId,
@@ -25,7 +30,7 @@ import {
   type WorkspaceInfo,
 } from '../shared/types';
 import { cancelAllLogins, cancelLogin, listAgents, login, logout, sendLoginInput } from './agents';
-import { installMenu } from './menu';
+import { installMenu, type MenuActions } from './menu';
 import { DevServer } from './server';
 import { settings } from './settings';
 import { shellEnv } from './shell-env';
@@ -46,8 +51,10 @@ const isWindows = process.platform === 'win32';
 const SHELL_PRELOAD = path.join(import.meta.dirname, '../preload/shell.cjs');
 const VIEW_PRELOAD = path.join(import.meta.dirname, '../preload/view.cjs');
 const THEMES = new Set(['light', 'dark', 'system']);
+const SETTINGS_WIDTH = 640;
 
 let window: BrowserWindow | null = null;
+let settingsWindow: BrowserWindow | null = null;
 let tabs: TabManager | null = null;
 let workspace: WorkspaceInfo | null = null;
 
@@ -79,11 +86,18 @@ function translucent(): boolean {
   return translucencySupported() && settings.get().translucent;
 }
 
+function accent(): string | null {
+  if (!translucencySupported()) return null;
+  const hex = systemPreferences.getAccentColor();
+  return hex ? `#${hex}` : null;
+}
+
 function state(): AppState {
   const info = tabs?.info ?? { tabs: [], activeTabId: null };
   return {
     platform: process.platform,
     translucent: translucent(),
+    accent: accent(),
     fullscreen: window?.isFullScreen() ?? false,
     workspace,
     recent: settings.recent(),
@@ -93,17 +107,37 @@ function state(): AppState {
   };
 }
 
+function shellWindows(): BrowserWindow[] {
+  return [window, settingsWindow].filter((w): w is BrowserWindow => !!w && !w.isDestroyed());
+}
+
+function sendAll(channel: string, payload: unknown) {
+  for (const win of shellWindows()) win.webContents.send(channel, payload);
+}
+
+let menuRecent = '';
+
+function refreshMenu() {
+  const recent = settings.recent();
+  const key = recent.join('\n');
+  if (key === menuRecent) return;
+  menuRecent = key;
+  installMenu(menuActions, recent);
+}
+
 function broadcast() {
-  if (window && !window.isDestroyed()) window.webContents.send('state', state());
+  sendAll('state', state());
+  refreshMenu();
 }
 
 function sendLog(task: LogTask, chunk: string) {
-  if (window && !window.isDestroyed()) window.webContents.send('log', { task, chunk });
+  sendAll('log', { task, chunk });
 }
 
 function sendCommand(command: ShellCommand) {
   if (window) {
     window.show();
+    window.focus();
     window.webContents.send('command', command);
     return;
   }
@@ -168,6 +202,112 @@ function applyMaterial(win: BrowserWindow) {
   win.setBackgroundColor(windowBackground());
 }
 
+function loadShell(win: BrowserWindow, hash?: string) {
+  if (process.env.ELECTRON_RENDERER_URL) {
+    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}${hash ? `#${hash}` : ''}`);
+  } else {
+    void win.loadFile(path.join(import.meta.dirname, '../renderer/index.html'), { hash });
+  }
+}
+
+function editMenu(params: Electron.ContextMenuParams): MenuItemConstructorOptions[] {
+  if (params.isEditable) {
+    return [
+      { role: 'cut', enabled: params.editFlags.canCut },
+      { role: 'copy', enabled: params.editFlags.canCopy },
+      { role: 'paste', enabled: params.editFlags.canPaste },
+      { type: 'separator' },
+      { role: 'selectAll' },
+    ];
+  }
+  return params.selectionText ? [{ role: 'copy' }] : [];
+}
+
+// Shared by every window that runs the shell renderer.
+function wireShell(win: BrowserWindow) {
+  const contents = win.webContents;
+  const sendFocus = (focused: boolean) => {
+    if (!contents.isDestroyed()) contents.send('window:focus', focused);
+  };
+  win.on('focus', () => sendFocus(true));
+  win.on('blur', () => sendFocus(false));
+  contents.on('will-navigate', (e) => e.preventDefault());
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.on('context-menu', (_e, params) => {
+    const items = editMenu(params);
+    if (!app.isPackaged) {
+      if (items.length) items.push({ type: 'separator' });
+      items.push({
+        label: 'Inspect Element',
+        click: () => contents.inspectElement(params.x, params.y),
+      });
+    }
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+  });
+}
+
+function openSettingsWindow() {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.show();
+    settingsWindow.focus();
+    return;
+  }
+  const win = new BrowserWindow({
+    width: SETTINGS_WIDTH,
+    height: 520,
+    show: false,
+    title: 'Settings',
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    backgroundColor: windowBackground(),
+    ...(isMac
+      ? {
+          titleBarStyle: 'hidden' as const,
+          trafficLightPosition: { x: 14, y: 10 },
+          vibrancy: translucent() ? ('sidebar' as const) : undefined,
+          visualEffectState: 'followWindow' as const,
+        }
+      : {
+          autoHideMenuBar: true,
+          ...(isWindows && translucent() ? { backgroundMaterial: 'mica' as const } : {}),
+        }),
+    webPreferences: {
+      preload: SHELL_PRELOAD,
+      sandbox: true,
+      contextIsolation: true,
+    },
+  });
+  settingsWindow = win;
+  wireShell(win);
+  // The first fit-content shows the window at its final height; this only
+  // covers a renderer that never reports one.
+  win.once('ready-to-show', () => {
+    setTimeout(() => {
+      if (!win.isDestroyed() && !win.isVisible()) win.show();
+    }, 400);
+  });
+  win.on('closed', () => {
+    if (settingsWindow === win) settingsWindow = null;
+  });
+  loadShell(win, 'settings');
+}
+
+function fitSettingsWindow(win: BrowserWindow, height: number) {
+  const { workAreaSize } = screen.getDisplayMatching(win.getBounds());
+  const max = Math.min(760, workAreaSize.height - 80);
+  const next = Math.round(Math.max(240, Math.min(max, height)));
+  const [width, current] = win.getContentSize();
+  if (!win.isVisible()) {
+    win.setContentSize(width, next);
+    win.center();
+    win.show();
+  } else if (next !== current) {
+    win.setContentSize(width, next, true);
+  }
+}
+
 function createWindow(): BrowserWindow {
   const bounds = settings.bounds();
   const win = new BrowserWindow({
@@ -223,16 +363,17 @@ function createWindow(): BrowserWindow {
     tabs = null;
     window = null;
   });
-  win.webContents.on('will-navigate', (e) => e.preventDefault());
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-
-  if (process.env.ELECTRON_RENDERER_URL) void win.loadURL(process.env.ELECTRON_RENDERER_URL);
-  else void win.loadFile(path.join(import.meta.dirname, '../renderer/index.html'));
+  wireShell(win);
+  loadShell(win);
   return win;
 }
 
 function fromShell(e: IpcMainEvent | IpcMainInvokeEvent): boolean {
-  return window !== null && e.sender === window.webContents;
+  return shellWindows().some((w) => w.webContents === e.sender);
+}
+
+function senderWindow(sender: WebContents): BrowserWindow | null {
+  return shellWindows().find((w) => w.webContents === sender) ?? null;
 }
 
 function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => R | Promise<R>) {
@@ -264,6 +405,17 @@ function registerIpc() {
   listen('external:open', (url: unknown) => {
     if (isHttpUrl(url)) void shell.openExternal(url);
   });
+  listen('shell:command', (command: unknown) => {
+    if (command === 'open-workspace' || command === 'new-workspace') sendCommand(command);
+  });
+  listen('settings:open-window', () => openSettingsWindow());
+  ipcMain.handle('window:is-focused', (e) => senderWindow(e.sender)?.isFocused() ?? false);
+  ipcMain.on('window:fit-content', (e, height: unknown) => {
+    const win = senderWindow(e.sender);
+    if (win && win === settingsWindow && typeof height === 'number' && Number.isFinite(height)) {
+      fitSettingsWindow(win, height);
+    }
+  });
 
   handle('settings:get', () => settings.get());
   handle('settings:update', (patch: Partial<DesktopSettings>) => {
@@ -274,8 +426,8 @@ function registerIpc() {
     }
     const before = translucent();
     const result = settings.update(next);
-    if (window && translucent() !== before) {
-      applyMaterial(window);
+    if (translucent() !== before) {
+      for (const win of shellWindows()) applyMaterial(win);
       tabs?.reloadAll();
     }
     broadcast();
@@ -285,6 +437,7 @@ function registerIpc() {
   listen('tabs:activate', (id: string) => tabs?.activate(id));
   listen('tabs:close', (id: string) => tabs?.close(id));
   listen('tabs:move', (id: string, index: number) => tabs?.move(id, index));
+  listen('tabs:menu', (id: string) => tabs?.showMenu(String(id)));
 
   handle('workspace:choose', async () => {
     if (!window) return null;
@@ -335,7 +488,7 @@ function registerIpc() {
     login(
       id,
       await childEnv(),
-      (event) => window?.webContents.send('agents:login-event', event),
+      (event) => sendAll('agents:login-event', event),
       (url) => void shell.openExternal(url),
     ),
   );
@@ -362,8 +515,39 @@ function registerIpc() {
 }
 
 nativeTheme.on('updated', () => {
-  if (window && !window.isDestroyed()) window.setBackgroundColor(windowBackground());
+  for (const win of shellWindows()) win.setBackgroundColor(windowBackground());
 });
+
+const menuActions: MenuActions = {
+  openSettings: () => openSettingsWindow(),
+  openWorkspace: () => sendCommand('open-workspace'),
+  newWorkspace: () => sendCommand('new-workspace'),
+  revealWorkspace: () => workspace && void shell.openPath(workspace.root),
+  closeTab: () => {
+    // Settings and presenter windows have no tabs, so ⌘W closes them outright.
+    const focused = BrowserWindow.getFocusedWindow();
+    if (focused && focused !== window) {
+      focused.close();
+      return;
+    }
+    if (!tabs?.closeActive() && !isMac) window?.close();
+  },
+  goHome: () => tabs?.openHome(),
+  selectTab: (index) => tabs?.activateIndex(index),
+  cycleTab: (delta) => tabs?.cycle(delta),
+  reloadTab: () => tabs?.activeContents()?.reload(),
+  toggleTabDevTools: () => tabs?.activeContents()?.toggleDevTools(),
+  openRecent: (root) => {
+    window?.focus();
+    void openWorkspace(root);
+  },
+  clearRecent: () => {
+    for (const root of settings.recent()) {
+      if (root !== workspace?.root) settings.forget(root);
+    }
+    broadcast();
+  },
+};
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -376,20 +560,21 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     registerIpc();
-    installMenu({
-      openSettings: () => sendCommand('open-settings'),
-      openWorkspace: () => sendCommand('open-workspace'),
-      newWorkspace: () => sendCommand('new-workspace'),
-      revealWorkspace: () => workspace && void shell.openPath(workspace.root),
-      closeTab: () => {
-        if (!tabs?.closeActive() && !isMac) window?.close();
-      },
-      goHome: () => tabs?.openHome(),
-      selectTab: (index) => tabs?.activateIndex(index),
-      cycleTab: (delta) => tabs?.cycle(delta),
-      reloadTab: () => tabs?.activeContents()?.reload(),
-      toggleTabDevTools: () => tabs?.activeContents()?.toggleDevTools(),
+    refreshMenu();
+    app.setAboutPanelOptions({
+      applicationName: 'open-slide',
+      applicationVersion: bundledCore().version,
+      version: '',
+      credits: 'Slides as React code, edited alongside your agent.',
+      website: 'https://open-slide.dev',
     });
+    if (isMac) {
+      systemPreferences.subscribeNotification('AppleColorPreferencesChangedNotification', () =>
+        broadcast(),
+      );
+    } else {
+      systemPreferences.on('accent-color-changed', () => broadcast());
+    }
     void shellEnv();
     createWindow();
     const saved = settings.workspace();

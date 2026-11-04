@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { app, Menu, type MenuItemConstructorOptions, shell } from 'electron';
 
 export type MenuActions = {
@@ -11,9 +12,11 @@ export type MenuActions = {
   cycleTab: (delta: number) => void;
   reloadTab: () => void;
   toggleTabDevTools: () => void;
+  openRecent: (root: string) => void;
+  clearRecent: () => void;
 };
 
-export function installMenu(actions: MenuActions) {
+export function installMenu(actions: MenuActions, recent: string[]) {
   const isMac = process.platform === 'darwin';
   const tabItems: MenuItemConstructorOptions[] = Array.from({ length: 8 }, (_, i) => ({
     label: `Tab ${i + 1}`,
@@ -49,11 +52,24 @@ export function installMenu(actions: MenuActions) {
         { label: 'Open Workspace…', accelerator: 'CmdOrCtrl+O', click: actions.openWorkspace },
         { label: 'New Workspace…', accelerator: 'CmdOrCtrl+Shift+N', click: actions.newWorkspace },
         {
+          label: 'Open Recent',
+          submenu: [
+            ...recent.map((root) => ({
+              label: path.basename(root) || root,
+              toolTip: root,
+              click: () => actions.openRecent(root),
+            })),
+            { type: 'separator' as const },
+            { label: 'Clear Menu', enabled: recent.length > 0, click: actions.clearRecent },
+          ],
+        },
+        {
           label: isMac ? 'Reveal Workspace in Finder' : 'Show Workspace Folder',
           click: actions.revealWorkspace,
         },
         { type: 'separator' },
         { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: actions.closeTab },
+        { role: 'close', label: 'Close Window', accelerator: 'CmdOrCtrl+Shift+W' },
         ...(isMac
           ? []
           : [
@@ -112,6 +128,7 @@ export function installMenu(actions: MenuActions) {
     {
       role: 'help',
       submenu: [
+        ...(isMac ? [] : [{ role: 'about' as const }, { type: 'separator' as const }]),
         {
           label: 'open-slide Docs',
           click: () => shell.openExternal('https://open-slide.dev/docs'),

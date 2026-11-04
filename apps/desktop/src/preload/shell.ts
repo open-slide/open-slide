@@ -14,6 +14,13 @@ const api: ShellApi = {
   onCommand: (listener) => subscribe('command', listener),
   setOverlay: (open) => ipcRenderer.send('overlay:set', open),
   openExternal: (url) => ipcRenderer.send('external:open', url),
+  sendCommand: (command) => ipcRenderer.send('shell:command', command),
+  window: {
+    isFocused: () => ipcRenderer.invoke('window:is-focused'),
+    onFocus: (listener) => subscribe('window:focus', listener),
+    fitContent: (height) => ipcRenderer.send('window:fit-content', height),
+    openSettings: () => ipcRenderer.send('settings:open-window'),
+  },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     update: (patch) => ipcRenderer.invoke('settings:update', patch),
@@ -22,6 +29,7 @@ const api: ShellApi = {
     activate: (id) => ipcRenderer.send('tabs:activate', id),
     close: (id) => ipcRenderer.send('tabs:close', id),
     move: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),
+    showMenu: (id) => ipcRenderer.send('tabs:menu', id),
   },
   workspace: {
     choose: () => ipcRenderer.invoke('workspace:choose'),

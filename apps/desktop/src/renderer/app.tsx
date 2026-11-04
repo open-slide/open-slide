@@ -2,35 +2,30 @@ import { useCallback, useEffect, useState } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { type CreateTarget, CreateWorkspaceDialog } from './components/create-workspace-dialog';
 import { ServerScreen } from './components/server-screen';
-import { Settings } from './components/settings';
+import { SettingsWindow } from './components/settings';
 import { TabStrip } from './components/tab-strip';
 import { Welcome } from './components/welcome';
-import { desktop, useAppState, useColorScheme } from './lib/desktop';
+import { desktop, useAppState, useWindowAppearance } from './lib/desktop';
 import { useWorkspaceActions } from './lib/workspace-actions';
 
+const isSettingsWindow = window.location.hash === '#settings';
+
 export function App() {
-  useColorScheme();
+  useWindowAppearance();
+  return isSettingsWindow ? <SettingsWindow /> : <MainWindow />;
+}
+
+function MainWindow() {
   const state = useAppState();
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [createTarget, setCreateTarget] = useState<CreateTarget | null>(null);
   const actions = useWorkspaceActions(setCreateTarget);
 
-  const chooseWorkspace = useCallback(async () => {
-    if (await actions.choose()) setSettingsOpen(false);
-  }, [actions.choose]);
-
-  const openRecent = useCallback(
-    async (path: string) => {
-      if (await actions.open(path)) setSettingsOpen(false);
-    },
-    [actions.open],
-  );
+  const chooseWorkspace = useCallback(() => void actions.choose(), [actions.choose]);
 
   useEffect(
     () =>
       desktop.onCommand((command) => {
-        if (command === 'open-settings') setSettingsOpen(true);
-        else if (command === 'open-workspace') void chooseWorkspace();
+        if (command === 'open-workspace') chooseWorkspace();
         else void actions.createNew();
       }),
     [chooseWorkspace, actions.createNew],
@@ -38,13 +33,11 @@ export function App() {
 
   const screen = !state
     ? 'loading'
-    : settingsOpen
-      ? 'settings'
-      : !state.workspace
-        ? 'welcome'
-        : state.server.state !== 'ready'
-          ? 'server'
-          : 'tabs';
+    : !state.workspace
+      ? 'welcome'
+      : state.server.state !== 'ready'
+        ? 'server'
+        : 'tabs';
 
   // Tab contents are native views stacked above this page, so anything the
   // shell draws in the content area (screens, dialogs) needs them hidden.
@@ -56,12 +49,7 @@ export function App() {
   return (
     <TooltipProvider delay={200}>
       <div className="flex h-full flex-col text-foreground">
-        <TabStrip
-          state={state}
-          showTabs={state.workspace !== null && state.server.state === 'ready'}
-          settingsOpen={settingsOpen}
-          onToggleSettings={() => setSettingsOpen((open) => !open)}
-        />
+        <TabStrip state={state} showTabs={screen === 'tabs'} />
         <main className="relative min-h-0 flex-1">
           {screen === 'welcome' && (
             <Welcome
@@ -69,31 +57,18 @@ export function App() {
               error={actions.error}
               onChoose={chooseWorkspace}
               onCreate={actions.createNew}
-              onOpenRecent={openRecent}
+              onOpenRecent={(path) => void actions.open(path)}
             />
           )}
           {screen === 'server' && (
             <ServerScreen state={state} onChooseWorkspace={chooseWorkspace} />
-          )}
-          {screen === 'settings' && (
-            <Settings
-              state={state}
-              error={actions.error}
-              onClose={() => setSettingsOpen(false)}
-              onChooseWorkspace={chooseWorkspace}
-              onCreateWorkspace={actions.createNew}
-              onOpenRecent={openRecent}
-            />
           )}
         </main>
       </div>
       <CreateWorkspaceDialog
         target={createTarget}
         onClose={() => setCreateTarget(null)}
-        onCreated={() => {
-          setCreateTarget(null);
-          setSettingsOpen(false);
-        }}
+        onCreated={() => setCreateTarget(null)}
       />
     </TooltipProvider>
   );

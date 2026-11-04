@@ -102,12 +102,12 @@ function ActionTile({
       type="button"
       onClick={onClick}
       className={cn(
-        'group flex flex-col items-start gap-3 rounded-[10px] border border-border bg-card p-4 text-left shadow-edge outline-none',
-        'transition-[box-shadow,border-color,scale] duration-150 hover:border-foreground/15 hover:shadow-floating active:scale-[0.99]',
+        'flex flex-col items-start gap-3 rounded-[10px] border border-border bg-card p-4 text-left shadow-edge outline-none',
+        'transition-[background-color] duration-100 active:bg-muted/70',
         'focus-visible:ring-2 focus-visible:ring-ring/40',
       )}
     >
-      <span className="flex size-8 items-center justify-center rounded-[7px] bg-muted text-foreground/80 transition-colors group-hover:bg-foreground group-hover:text-background">
+      <span className="flex size-8 items-center justify-center rounded-[7px] bg-muted text-foreground/80">
         {icon}
       </span>
       <span>
