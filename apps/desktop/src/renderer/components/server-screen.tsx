@@ -30,7 +30,7 @@ export function ServerScreen({
         </h2>
         <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
           <span className="font-medium text-foreground">{workspace?.name}</span> hasn’t installed
-          its dependencies yet. open-slide will run{' '}
+          the packages its slides depend on yet. open-slide will run{' '}
           <code className="font-mono text-[12px]">{server.packageManager} install</code> in the
           workspace.
         </p>

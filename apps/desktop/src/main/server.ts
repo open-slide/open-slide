@@ -4,13 +4,16 @@ import { existsSync } from 'node:fs';
 import net from 'node:net';
 import type { PackageManager, ServerStatus } from '../shared/types';
 import { stripAnsi } from './process';
-import { coreBin } from './workspace';
+import { bundledCore, needsInstall } from './workspace';
 
 // Mirrors core's dev supervisor protocol (packages/core/src/cli/dev.ts and
 // vite/routes/restart.ts): a supervised server reports its port over IPC and
 // exits with RESTART_EXIT_CODE when an in-app update wants a fresh process.
 const DEV_SUPERVISED_ENV = 'OPEN_SLIDE_DEV_SUPERVISED';
 const RESTART_EXIT_CODE = 52;
+// packages/core/src/vite/config.ts and vite/routes/update.ts
+const CACHE_DIR_ENV = 'OPEN_SLIDE_CACHE_DIR';
+const MANAGED_CORE_ENV = 'OPEN_SLIDE_MANAGED_CORE';
 const LISTEN_TIMEOUT_MS = 60_000;
 const LOG_LIMIT = 200 * 1024;
 
@@ -49,6 +52,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
       get: (root: string) => number | null;
       set: (root: string, port: number) => void;
     },
+    private readonly cacheDirFor: (root: string) => string,
   ) {
     super();
   }
@@ -108,8 +112,12 @@ export class DevServer extends EventEmitter<ServerEvents> {
   private async spawn(): Promise<void> {
     const root = this.root;
     if (!root) return;
-    const bin = coreBin(root);
+    const { bin } = bundledCore();
     if (!existsSync(bin)) {
+      this.setStatus({ state: 'error', message: 'The bundled @open-slide/core is missing.' });
+      return;
+    }
+    if (needsInstall(root)) {
       this.setStatus({ state: 'not-installed', packageManager: this.packageManagerFor(root) });
       return;
     }
@@ -133,6 +141,8 @@ export class DevServer extends EventEmitter<ServerEvents> {
         ...env,
         ELECTRON_RUN_AS_NODE: '1',
         [DEV_SUPERVISED_ENV]: '1',
+        [MANAGED_CORE_ENV]: '1',
+        [CACHE_DIR_ENV]: this.cacheDirFor(root),
         OPEN_SLIDE_SKIP_SKILLS_CHECK: '1',
         FORCE_COLOR: '0',
       },

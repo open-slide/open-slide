@@ -57,6 +57,9 @@ importers:
       '@open-slide/cli':
         specifier: workspace:*
         version: link:../../packages/cli
+      '@open-slide/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@openai/codex-sdk':
         specifier: ^0.163.0
         version: 0.163.0

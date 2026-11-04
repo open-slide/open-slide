@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
   app,
@@ -30,11 +32,13 @@ import { shellEnv } from './shell-env';
 import { TabManager } from './tabs';
 import {
   availablePackageManagers,
+  bundledCore,
   createWorkspace,
   detectPackageManager,
   inspectWorkspace,
   installDependencies,
   modulesDir,
+  syncSkills,
 } from './workspace';
 
 const isMac = process.platform === 'darwin';
@@ -55,10 +59,16 @@ function fallbackPackageManager(): PackageManager {
   return settings.packageManager() ?? 'npm';
 }
 
+function cacheDirFor(root: string): string {
+  const key = createHash('sha256').update(root).digest('hex').slice(0, 16);
+  return path.join(app.getPath('userData'), 'vite-cache', key);
+}
+
 const server = new DevServer(
   childEnv,
   (root) => detectPackageManager(root, fallbackPackageManager()),
   { get: (root) => settings.port(root), set: (root, port) => settings.setPort(root, port) },
+  cacheDirFor,
 );
 
 function translucencySupported(): boolean {
@@ -111,6 +121,15 @@ server.on('status', (status) => {
 });
 server.on('log', (chunk) => sendLog('server', chunk));
 
+// Skills describe the core that runs the workspace, so they follow the bundled
+// core: synced once per app update, like an in-app core update used to.
+async function syncSkillsOnce(root: string) {
+  const { version } = bundledCore();
+  if (settings.skillsVersion(root) === version) return;
+  const result = await syncSkills(root, await childEnv(), (chunk) => sendLog('server', chunk));
+  if (result.ok) settings.setSkillsVersion(root, version);
+}
+
 async function openWorkspace(root: string): Promise<TaskResult> {
   const inspection = inspectWorkspace(root);
   if (inspection.kind !== 'project') {
@@ -121,6 +140,7 @@ async function openWorkspace(root: string): Promise<TaskResult> {
   settings.setWorkspace(inspection.path);
   tabs?.reset(settings.session(inspection.path));
   broadcast();
+  await syncSkillsOnce(inspection.path);
   await server.start(inspection.path);
   return { ok: true };
 }
@@ -303,6 +323,7 @@ function registerIpc() {
   });
   listen('workspace:forget', (root: string) => {
     settings.forget(String(root));
+    void rm(cacheDirFor(String(root)), { recursive: true, force: true });
     broadcast();
   });
 

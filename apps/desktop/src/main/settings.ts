@@ -12,6 +12,7 @@ type Stored = DesktopSettings & {
   recent: string[];
   sessions: Record<string, DeckSession>;
   ports: Record<string, number>;
+  skillsVersions: Record<string, string>;
   bounds: Bounds | null;
 };
 
@@ -24,6 +25,7 @@ const defaults: Stored = {
   recent: [],
   sessions: {},
   ports: {},
+  skillsVersions: {},
   bounds: null,
 };
 
@@ -90,6 +92,7 @@ export const settings = {
     s.recent = s.recent.filter((r) => r !== root);
     delete s.sessions[root];
     delete s.ports[root];
+    delete s.skillsVersions[root];
     save();
   },
   session(root: string): DeckSession {
@@ -105,6 +108,13 @@ export const settings = {
   setPort(root: string, port: number) {
     if (current().ports[root] === port) return;
     current().ports[root] = port;
+    save();
+  },
+  skillsVersion(root: string): string | null {
+    return current().skillsVersions[root] ?? null;
+  },
+  setSkillsVersion(root: string, version: string) {
+    current().skillsVersions[root] = version;
     save();
   },
   packageManager(): PackageManager | null {

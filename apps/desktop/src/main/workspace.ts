@@ -21,8 +21,43 @@ export function modulesDir(): string {
   return path.join(app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked'), 'node_modules');
 }
 
-export function coreBin(root: string): string {
-  return path.join(root, 'node_modules', '@open-slide', 'core', 'bin.js');
+// Every workspace runs on the core this app ships, whatever version (if any)
+// the workspace installed. The workspace only supplies slides, themes, assets
+// and its config.
+export function bundledCore(): { bin: string; version: string } {
+  const dir = path.join(modulesDir(), '@open-slide', 'core');
+  const version = readPackageJson(dir)?.version;
+  return {
+    bin: path.join(dir, 'bin.js'),
+    version: typeof version === 'string' ? version : '0.0.0',
+  };
+}
+
+// What the bundled core already resolves for slides on its own.
+const PROVIDED_DEPENDENCIES = new Set(['@open-slide/core', 'react', 'react-dom']);
+
+function isInstalled(name: string, root: string): boolean {
+  let dir = root;
+  while (true) {
+    if (existsSync(path.join(dir, 'node_modules', name, 'package.json'))) return true;
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
+}
+
+// A workspace only needs an install when slides may import packages it added
+// itself; @types/* only matter to the editor.
+export function needsInstall(root: string): boolean {
+  const pkg = readPackageJson(root);
+  if (!pkg) return false;
+  return ['dependencies', 'devDependencies'].some((field) => {
+    const deps = pkg[field] as Record<string, unknown> | undefined;
+    return Object.keys(deps ?? {}).some(
+      (name) =>
+        !PROVIDED_DEPENDENCIES.has(name) && !name.startsWith('@types/') && !isInstalled(name, root),
+    );
+  });
 }
 
 function readPackageJson(dir: string): Record<string, unknown> | null {
@@ -99,8 +134,18 @@ export async function installDependencies(
   onChunk(`$ ${pm} install\n`);
   const { done } = run(pm, ['install'], { cwd: root, env, onChunk, timeoutMs: INSTALL_TIMEOUT_MS });
   const { code } = await done;
-  if (code === 0 && existsSync(coreBin(root))) return { ok: true };
+  if (code === 0) return { ok: true };
   return { ok: false, error: `${pm} install exited with code ${code}` };
+}
+
+export async function syncSkills(
+  root: string,
+  env: NodeJS.ProcessEnv,
+  onChunk: (chunk: string) => void,
+): Promise<TaskResult> {
+  const { done } = runNodeScript(bundledCore().bin, ['sync:skills'], { cwd: root, env, onChunk });
+  const { code } = await done;
+  return code === 0 ? { ok: true } : { ok: false, error: `sync:skills exited with code ${code}` };
 }
 
 function cliEntry(): string {

@@ -7,7 +7,7 @@
     "dev": "turbo run dev",
     "dev:web": "turbo run dev --filter=web",
     "dev:demo": "turbo run dev --filter=demo",
-    "dev:desktop": "turbo run build --filter=@open-slide/cli && pnpm --filter desktop start",
+    "dev:desktop": "turbo run build --filter=@open-slide/cli --filter=@open-slide/core && pnpm --filter desktop start",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "format": "biome format --write .",
