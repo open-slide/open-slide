@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { rm } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   app,
@@ -505,6 +505,29 @@ function isHttpUrl(value: unknown): value is string {
   }
 }
 
+let pdfDir: string | null = null;
+
+async function printToPdf(sender: WebContents, filename: unknown): Promise<boolean> {
+  const win = tabs?.owns(sender) ? window : BrowserWindow.fromWebContents(sender);
+  if (!win) throw new Error('Rejected host:print-to-pdf from an unknown sender');
+  const name = typeof filename === 'string' ? filename.replace(/[/\\:*?"<>|]/g, '-').trim() : '';
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: path.join(pdfDir ?? app.getPath('downloads'), name || 'slides.pdf'),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  });
+  if (canceled || !filePath) return false;
+  pdfDir = path.dirname(filePath);
+  // Same Chromium print pipeline as window.print(), so the deck's @page size and
+  // print-only styles apply unchanged.
+  const pdf = await sender.printToPDF({
+    printBackground: true,
+    preferCSSPageSize: true,
+    margins: { top: 0, right: 0, bottom: 0, left: 0 },
+  });
+  await writeFile(filePath, pdf);
+  return true;
+}
+
 function registerIpc() {
   handle('state:get', () => state());
   listen('overlay:set', (open: boolean) => tabs?.setOverlay(Boolean(open)));
@@ -626,6 +649,7 @@ function registerIpc() {
     window?.focus();
   });
   ipcMain.on('host:haptic', (_e, pattern: unknown) => performHaptic(pattern));
+  ipcMain.handle('host:print-to-pdf', (e, filename: unknown) => printToPdf(e.sender, filename));
   ipcMain.on('host:set-theme', (_e, theme: unknown) => {
     if (typeof theme !== 'string' || !THEMES.has(theme)) return;
     nativeTheme.themeSource = theme as 'light' | 'dark' | 'system';

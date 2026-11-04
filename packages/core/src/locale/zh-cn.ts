@@ -456,6 +456,7 @@ export const zhCN: Locale = {
     title: '导出 PDF',
     processing: '正在处理第 {current} / {total} 页',
     printing: '正在打开打印对话框…',
+    saving: '正在保存 PDF…',
     done: '完成',
   },
 

@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { designToCssVars } from './design';
+import { desktopHost } from './desktop';
 import { nextPaint, sleep } from './dom';
 import { SlidePageProvider } from './page-context';
 import { isFrameAnimationSettled, waitForDataWaitfor, waitForFonts } from './print-ready';
@@ -88,11 +89,11 @@ export function isSafari(): boolean {
 }
 
 export type PdfExportProgress = {
-  phase: 'processing' | 'printing' | 'done';
+  phase: 'processing' | 'printing' | 'saving' | 'done';
   /** Number of pages whose intro animations have finished (0..total). */
   current: number;
   total: number;
-  /** 0–99 while processing, 99 during printing, 100 when done. */
+  /** 0–99 while processing, 99 during printing or saving, 100 when done. */
   percent: number;
 };
 
@@ -178,10 +179,15 @@ export async function exportSlideAsPdf(
     neutralizeGradientBackgrounds(root);
     await sleep(100); // flush layout
 
-    onProgress?.({ phase: 'printing', current: total, total, percent: 99 });
-    const printDone = waitForAfterPrint();
-    window.print();
-    await printDone;
+    if (desktopHost?.printToPdf) {
+      onProgress?.({ phase: 'saving', current: total, total, percent: 99 });
+      await desktopHost.printToPdf(`${document.title}.pdf`);
+    } else {
+      onProgress?.({ phase: 'printing', current: total, total, percent: 99 });
+      const printDone = waitForAfterPrint();
+      window.print();
+      await printDone;
+    }
   } finally {
     onProgress?.({ phase: 'done', current: total, total, percent: 100 });
     document.title = previousTitle;

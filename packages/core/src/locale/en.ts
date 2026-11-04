@@ -459,6 +459,7 @@ export const en: Locale = {
     title: 'Exporting PDF',
     processing: 'Processing page {current} of {total}',
     printing: 'Opening print dialog…',
+    saving: 'Saving PDF…',
     done: 'Done',
   },
 

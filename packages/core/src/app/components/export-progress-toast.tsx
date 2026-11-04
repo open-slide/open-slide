@@ -48,7 +48,9 @@ export function PdfProgressToast({ progress }: { progress: PdfExportProgress }) 
       ? format(t.pdfToast.processing, pageCounts(progress))
       : progress.phase === 'printing'
         ? t.pdfToast.printing
-        : t.pdfToast.done;
+        : progress.phase === 'saving'
+          ? t.pdfToast.saving
+          : t.pdfToast.done;
 
   return (
     <ExportProgressToast

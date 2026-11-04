@@ -465,6 +465,7 @@ export const ja: Locale = {
     title: 'PDF を書き出し中',
     processing: 'ページ {current} / {total} を処理中',
     printing: '印刷ダイアログを開いています…',
+    saving: 'PDF を保存しています…',
     done: '完了',
   },
 

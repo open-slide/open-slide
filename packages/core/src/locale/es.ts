@@ -465,6 +465,7 @@ export const es: Locale = {
     title: 'Exportando PDF',
     processing: 'Procesando página {current} de {total}',
     printing: 'Abriendo diálogo de impresión…',
+    saving: 'Guardando PDF…',
     done: 'Hecho',
   },
 

@@ -52,6 +52,8 @@ contextBridge.exposeInMainWorld('openSlideDesktop', {
   openHome: (path?: string) => ipcRenderer.send('host:open-home', path),
   setTheme: (theme: string) => ipcRenderer.send('host:set-theme', theme),
   haptic: (pattern: string) => ipcRenderer.send('host:haptic', pattern),
+  printToPdf: (filename: string): Promise<boolean> =>
+    ipcRenderer.invoke('host:print-to-pdf', filename),
   onNavigate: (listener: (path: string) => void) => {
     listeners.add(listener);
     if (pending !== null) {

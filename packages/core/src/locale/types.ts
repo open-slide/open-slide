@@ -488,6 +488,7 @@ export type Locale = {
     /** template: "Processing page {current} of {total}" */
     processing: string;
     printing: string;
+    saving: string;
     done: string;
   };
 

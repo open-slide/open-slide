@@ -14,6 +14,9 @@ export type DesktopHost = {
   setTheme: (theme: string) => void;
   // Absent in desktop builds that predate trackpad haptics.
   haptic?: (pattern: HapticPattern) => void;
+  // Saves the current page as a PDF via a native save dialog; resolves false
+  // when the user cancels. Absent in desktop builds that predate it.
+  printToPdf?: (filename: string) => Promise<boolean>;
   onNavigate: (listener: (path: string) => void) => () => void;
 };
 
