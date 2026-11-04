@@ -1,4 +1,4 @@
-import { statSync } from 'node:fs';
+import { accessSync, constants, statSync } from 'node:fs';
 import path from 'node:path';
 import type { PackageManager } from './package-manager.ts';
 
@@ -63,7 +63,10 @@ export function findOnPath(command: string, env: NodeJS.ProcessEnv = process.env
     for (const ext of exts) {
       const candidate = path.join(dir, command + ext.toLowerCase());
       try {
-        if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate;
+        if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) {
+          if (!isWindows) accessSync(candidate, constants.X_OK);
+          return candidate;
+        }
       } catch {}
     }
   }

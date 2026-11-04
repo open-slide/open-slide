@@ -36,6 +36,13 @@ describe('findOnPath', () => {
     expect(findOnPath('fake-agent', { PATH: bin, PATHEXT: '.EXE' })).toBe(file);
     expect(findOnPath('other-agent', { PATH: bin })).toBeNull();
   });
+
+  it.skipIf(process.platform === 'win32')('ignores files without execute permission', () => {
+    const bin = mkdtempSync(path.join(tmpdir(), 'open-slide-cli-'));
+    writeFileSync(path.join(bin, 'plain-agent'), '');
+    chmodSync(path.join(bin, 'plain-agent'), 0o644);
+    expect(findOnPath('plain-agent', { PATH: bin })).toBeNull();
+  });
 });
 
 describe('addDevDependencyArgs', () => {
