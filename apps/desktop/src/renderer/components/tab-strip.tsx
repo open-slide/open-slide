@@ -48,7 +48,10 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
               }}
               onDragOver={(after) => {
                 if (!dragging) return;
-                setDropIndex(Math.max(1, after ? index + 1 : index));
+                const next = Math.max(1, after ? index + 1 : index);
+                if (next === dropIndex) return;
+                if (dropIndex !== null) desktop.haptic('levelChange');
+                setDropIndex(next);
               }}
             />
           ))}

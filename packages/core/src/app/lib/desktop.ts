@@ -2,6 +2,8 @@ import { useTheme } from 'next-themes';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+export type HapticPattern = 'alignment' | 'levelChange' | 'generic';
+
 // Injected by the open-slide desktop app's preload into every tab. Home and
 // each deck live in their own tab there, so moving between them asks the host
 // to switch tabs instead of navigating this page.
@@ -10,6 +12,8 @@ export type DesktopHost = {
   openDeck: (slideId: string) => void;
   openHome: (path?: string) => void;
   setTheme: (theme: string) => void;
+  // Absent in desktop builds that predate trackpad haptics.
+  haptic?: (pattern: HapticPattern) => void;
   onNavigate: (listener: (path: string) => void) => () => void;
 };
 
@@ -43,6 +47,10 @@ export function openDeckInHost(slideId: string): boolean {
   if (!desktopHost) return false;
   desktopHost.openDeck(slideId);
   return true;
+}
+
+export function haptic(pattern: HapticPattern) {
+  desktopHost?.haptic?.(pattern);
 }
 
 export function openHomeInHost(path?: string): boolean {

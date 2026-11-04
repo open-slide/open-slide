@@ -30,6 +30,7 @@ import {
   type WorkspaceInfo,
 } from '../shared/types';
 import { cancelAllLogins, cancelLogin, listAgents, login, logout, sendLoginInput } from './agents';
+import { performHaptic } from './haptics';
 import { installMenu, type MenuActions } from './menu';
 import { DevServer } from './server';
 import { settings } from './settings';
@@ -509,6 +510,7 @@ function registerIpc() {
     tabs?.openHome(typeof path === 'string' && path.startsWith('/') ? path : undefined);
     window?.focus();
   });
+  ipcMain.on('host:haptic', (_e, pattern: unknown) => performHaptic(pattern));
   ipcMain.on('host:set-theme', (_e, theme: unknown) => {
     if (typeof theme !== 'string' || !THEMES.has(theme)) return;
     nativeTheme.themeSource = theme as 'light' | 'dark' | 'system';

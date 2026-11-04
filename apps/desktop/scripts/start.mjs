@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { buildNative } from './build-native.mjs';
 
 const APP_NAME = 'open-slide Dev';
 const BUNDLE_ID = 'dev.open-slide.desktop.dev';
@@ -46,6 +47,8 @@ function prepareMacBundle() {
   fs.writeFileSync(path.join(cache, 'ready'), '');
   return executable;
 }
+
+buildNative();
 
 const env = { ...process.env };
 if (process.platform === 'darwin') env.ELECTRON_EXEC_PATH = prepareMacBundle();

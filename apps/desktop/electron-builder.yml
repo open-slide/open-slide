@@ -8,9 +8,10 @@ files:
   - package.json
 # Every dependency here is loaded by another process as plain files: the dev
 # server imports the agent SDKs, the SDKs spawn their native CLIs, and init
-# runs the CLI. None of them can read inside app.asar.
+# runs the CLI. None of them can read inside app.asar, and neither can dlopen.
 asarUnpack:
   - node_modules/**
+  - dist/native/**
 mac:
   category: public.app-category.productivity
   icon: build/icon.icns

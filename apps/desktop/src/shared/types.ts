@@ -82,6 +82,8 @@ export type LogEvent = { task: LogTask; chunk: string };
 
 export type ShellCommand = 'open-workspace' | 'new-workspace';
 
+export type HapticPattern = 'alignment' | 'levelChange' | 'generic';
+
 export type ShellApi = {
   getState(): Promise<AppState>;
   onState(listener: (state: AppState) => void): () => void;
@@ -90,6 +92,7 @@ export type ShellApi = {
   setOverlay(open: boolean): void;
   openExternal(url: string): void;
   sendCommand(command: ShellCommand): void;
+  haptic(pattern: HapticPattern): void;
   window: {
     isFocused(): Promise<boolean>;
     onFocus(listener: (focused: boolean) => void): () => void;

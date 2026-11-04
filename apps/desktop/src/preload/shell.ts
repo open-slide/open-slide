@@ -15,6 +15,7 @@ const api: ShellApi = {
   setOverlay: (open) => ipcRenderer.send('overlay:set', open),
   openExternal: (url) => ipcRenderer.send('external:open', url),
   sendCommand: (command) => ipcRenderer.send('shell:command', command),
+  haptic: (pattern) => ipcRenderer.send('host:haptic', pattern),
   window: {
     isFocused: () => ipcRenderer.invoke('window:is-focused'),
     onFocus: (listener) => subscribe('window:focus', listener),

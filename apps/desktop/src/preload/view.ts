@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('openSlideDesktop', {
   openDeck: (slideId: string) => ipcRenderer.send('host:open-deck', slideId),
   openHome: (path?: string) => ipcRenderer.send('host:open-home', path),
   setTheme: (theme: string) => ipcRenderer.send('host:set-theme', theme),
+  haptic: (pattern: string) => ipcRenderer.send('host:haptic', pattern),
   onNavigate: (listener: (path: string) => void) => {
     listeners.add(listener);
     if (pending !== null) {

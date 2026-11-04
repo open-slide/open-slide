@@ -2,9 +2,11 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
+  type UniqueIdentifier,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -37,6 +39,7 @@ import {
 } from '@/components/ui/context-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { haptic } from '@/lib/desktop';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
 import type { DesignSystem } from '../lib/design';
@@ -966,9 +969,18 @@ function SortableRail({
 
   const items = pages.map((_, i) => i + 1);
 
+  const overId = useRef<UniqueIdentifier | null>(null);
+
   const handleDragStart = (event: DragStartEvent) => {
+    overId.current = event.active.id;
     const i = (event.active.id as number) - 1;
     if (i >= 0) onSelect(i);
+  };
+
+  const handleDragOver = ({ over }: DragOverEvent) => {
+    if (!over || over.id === overId.current) return;
+    overId.current = over.id;
+    haptic('levelChange');
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -985,6 +997,7 @@ function SortableRail({
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={items} strategy={verticalListSortingStrategy}>

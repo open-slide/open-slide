@@ -8,10 +8,10 @@
   "main": "./dist/main/index.js",
   "scripts": {
     "start": "node scripts/start.mjs",
-    "build": "electron-vite build",
+    "build": "electron-vite build && node scripts/build-native.mjs",
     "preview": "electron-vite preview",
-    "package": "electron-vite build && electron-builder --dir",
-    "dist": "electron-vite build && electron-builder",
+    "package": "pnpm build && electron-builder --dir",
+    "dist": "pnpm build && electron-builder",
     "typecheck": "tsc --noEmit --composite false -p tsconfig.node.json && tsc --noEmit --composite false -p tsconfig.web.json"
   },
   "dependencies": {
