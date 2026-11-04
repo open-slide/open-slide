@@ -241,6 +241,8 @@ export const ja: Locale = {
     sendToBack: '最背面へ移動',
     smartGuides: 'スマートガイド',
     selectParent: '親要素を選択',
+    removeElement: '削除',
+    removeBlocked: 'この要素は削除できません。ページ内の固有の JSX 子要素を選択してください。',
     visualEditorHint:
       'Shift クリックで複数選択、⌘A で全選択。矢印キーで 1 px、Shift を押すと 10 px 移動。Alt でスナップを無効化。Shift で移動方向や縦横比を固定。',
     sharedLayoutHint:

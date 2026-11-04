@@ -1,12 +1,13 @@
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { sourceRevision } from '../editing/remove-element.ts';
 import { injectLocTags, locTagsPlugin } from './loc-tags-plugin.ts';
 
 const pluginTransformSource = 'export default [() => <div />];';
 
 type LocTagsTransformResult = null | { code: string; map: null };
 
-function transformWithLocTags(id: string) {
+function transformWithLocTags(id: string, source = pluginTransformSource) {
   // Force `path.resolve` to return a POSIX slidesRoot so this suite
   // exercises the same code path regardless of host OS.
   const resolveSpy = vi.spyOn(path, 'resolve').mockReturnValue('/repo/slides');
@@ -14,7 +15,7 @@ function transformWithLocTags(id: string) {
     const plugin = locTagsPlugin({ userCwd: '/repo' });
     const transform = plugin.transform;
     if (typeof transform !== 'function') throw new Error('expected transform function');
-    return transform.call({} as never, pluginTransformSource, id) as LocTagsTransformResult;
+    return transform.call({} as never, source, id) as LocTagsTransformResult;
   } finally {
     resolveSpy.mockRestore();
   }
@@ -133,6 +134,20 @@ describe('injectLocTags', () => {
 });
 
 describe('locTagsPlugin', () => {
+  it('marks only removable children in the entry file, never identically located secondary JSX', () => {
+    const source = 'export default [() => <div><p>Remove me</p></div>];';
+    const entry = transformWithLocTags('/repo/slides/cover/index.tsx', source);
+    const secondary = transformWithLocTags('/repo/slides/cover/shared.tsx', source);
+    const nested = transformWithLocTags('/repo/slides/cover/components/index.tsx', source);
+    expect(entry?.code).toContain(
+      `<p data-slide-loc="1:27" data-slide-delete="${sourceRevision(source)}"`,
+    );
+    expect(entry?.code).not.toMatch(/<div[^>]+data-slide-delete/);
+    expect(secondary?.code).toContain('data-slide-loc');
+    expect(secondary?.code).not.toContain('data-slide-delete');
+    expect(nested?.code).not.toContain('data-slide-delete');
+  });
+
   it('tags slide index files', () => {
     expectTaggedTransform('/repo/slides/cover/index.tsx');
   });

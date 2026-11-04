@@ -239,6 +239,8 @@ export const zhCN: Locale = {
     sendToBack: '置于底层',
     smartGuides: '智能参考线',
     selectParent: '选择父级',
+    removeElement: '删除',
+    removeBlocked: '无法删除此元素。请选择页面中唯一的 JSX 子元素。',
     visualEditorHint:
       '按住 Shift 点击可多选，⌘A 全选。方向键移动 1 px，按住 Shift 移动 10 px。Alt 暂停吸附。Shift 限制拖动方向或等比例缩放。',
     sharedLayoutHint: '此元素与其他实例共用 JSX 定义。请选择独立的父级容器，以单独调整排列。',
