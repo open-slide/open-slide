@@ -7,7 +7,10 @@ const SWIFT = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const SOFT_OUT = 'cubic-bezier(0.16, 1, 0.3, 1)';
 const IN_OUT = 'cubic-bezier(0.65, 0, 0.35, 1)';
 const ACCELERATE = 'cubic-bezier(0.6, 0, 0.85, 0.35)';
-const NIGHT = '#0b0908';
+// The veil stays translucent so the desktop shows through, dimming a touch
+// further once the mark forms to pull focus to it.
+const VEIL = 'rgb(11 9 8 / 0.58)';
+const VEIL_DEEP = 'rgb(11 9 8 / 0.72)';
 const WORDMARK = 'open-slide';
 const TAGLINE = 'Slides as React code, edited alongside your agent.';
 const CARD_COUNT = 18;
@@ -195,7 +198,7 @@ export function Intro() {
         const fold = animate(
           scene,
           [
-            { clipPath: 'inset(0px 0px 0px 0px round 0px)', backgroundColor: NIGHT },
+            { clipPath: 'inset(0px 0px 0px 0px round 0px)' },
             {
               clipPath: `inset(${y}px ${w - x - width}px ${h - y - height}px ${x}px round ${radius}px)`,
               backgroundColor: dark ? '#0d0d0d' : '#f4f3f2',
@@ -214,6 +217,11 @@ export function Intro() {
       const lift = iconBox ? h / 2 - (iconBox.top + iconBox.height / 2) : 0;
 
       animate(scene, [{ opacity: 0 }, { opacity: 1 }], { duration: 900, easing: 'ease-out' });
+      animate(scene, [{ backgroundColor: VEIL }, { backgroundColor: VEIL_DEEP }], {
+        delay: at.ignite - 300,
+        duration: 1400,
+        easing: IN_OUT,
+      });
       animate(
         glowRef.current,
         [
@@ -402,7 +410,7 @@ export function Intro() {
     <div
       ref={sceneRef}
       className="fixed inset-0 overflow-hidden text-white opacity-0"
-      style={{ backgroundColor: NIGHT }}
+      style={{ backgroundColor: VEIL }}
     >
       <div ref={contentRef} className="absolute inset-0">
         <div
@@ -566,7 +574,7 @@ export function Intro() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              'radial-gradient(ellipse at center, transparent 45%, rgb(0 0 0 / 0.55) 100%)',
+              'radial-gradient(ellipse at center, transparent 50%, rgb(0 0 0 / 0.4) 100%)',
           }}
         />
         <div

@@ -232,7 +232,7 @@ export function Onboarding({
 
 function Progress({ step, onSelect }: { step: number; onSelect: (step: number) => void }) {
   return (
-    <div className="flex items-center gap-1.5" role="tablist" aria-label="Welcome tour">
+    <div className="flex items-center" role="tablist" aria-label="Welcome tour">
       {STEPS.map((s, i) => (
         <button
           key={s.eyebrow}
@@ -241,16 +241,14 @@ function Progress({ step, onSelect }: { step: number; onSelect: (step: number) =
           aria-selected={i === step}
           aria-label={s.eyebrow}
           onClick={() => onSelect(i)}
-          className="group flex h-6 items-center outline-none"
+          className="group flex h-6 items-center rounded-full px-[3px] outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           <span
             className={cn(
-              'block h-[11px] rounded-[3px] transition-[width,background-color,box-shadow] duration-500 ease-[var(--ease-swift)] group-focus-visible:ring-2 group-focus-visible:ring-ring/50',
+              'block h-1.5 rounded-full transition-[width,background-color] duration-500 ease-[var(--ease-swift)]',
               i === step
-                ? 'w-[30px] bg-foreground'
-                : i < step
-                  ? 'w-[19px] bg-foreground/30 group-hover:bg-foreground/45'
-                  : 'w-[19px] bg-transparent shadow-[inset_0_0_0_1px_var(--hairline)] group-hover:bg-foreground/[0.06]',
+                ? 'w-5 bg-foreground'
+                : 'w-1.5 bg-foreground/20 group-hover:bg-foreground/40',
             )}
           />
         </button>
