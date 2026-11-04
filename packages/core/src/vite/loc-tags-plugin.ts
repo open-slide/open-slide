@@ -11,15 +11,25 @@ import { tryParse, walkJsx } from '../editing/babel-walk.ts';
 // host root, so the inspector can target them like a host element.
 const FORWARDING_COMPONENTS = new Set(['ImagePlaceholder']);
 
+// Other component invocations get `data-slide-call` instead. Components
+// don't render it, but it stays on the fiber's props, so the inspector
+// can tell which call site rendered a reused component's host elements.
+// Fragment rejects unknown props.
+const UNTAGGED_COMPONENTS = new Set(['Fragment']);
+
 function isTaggableJsxName(name: t.JSXOpeningElement['name']): name is t.JSXIdentifier {
   if (!t.isJSXIdentifier(name)) return false;
   return /^[a-z]/.test(name.name) || FORWARDING_COMPONENTS.has(name.name);
 }
 
-function alreadyTagged(opening: t.JSXOpeningElement): boolean {
+function isCallTaggableJsxName(name: t.JSXOpeningElement['name']): name is t.JSXIdentifier {
+  return t.isJSXIdentifier(name) && /^[A-Z]/.test(name.name) && !UNTAGGED_COMPONENTS.has(name.name);
+}
+
+function hasAttribute(opening: t.JSXOpeningElement, attribute: string): boolean {
   return opening.attributes.some(
     (attr) =>
-      t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name) && attr.name.name === 'data-slide-loc',
+      t.isJSXAttribute(attr) && t.isJSXIdentifier(attr.name) && attr.name.name === attribute,
   );
 }
 
@@ -32,10 +42,15 @@ export function injectLocTags(code: string): string | null {
     if (!t.isJSXElement(node) || !node.loc) return;
     const opening = node.openingElement;
     const name = opening.name;
-    if (!isTaggableJsxName(name) || alreadyTagged(opening)) return;
+    const attribute = isTaggableJsxName(name)
+      ? 'data-slide-loc'
+      : isCallTaggableJsxName(name)
+        ? 'data-slide-call'
+        : null;
+    if (!attribute || hasAttribute(opening, attribute)) return;
     insertions.push({
       offset: name.end ?? 0,
-      text: ` data-slide-loc="${node.loc.start.line}:${node.loc.start.column}"`,
+      text: ` ${attribute}="${node.loc.start.line}:${node.loc.start.column}"`,
     });
   });
 
