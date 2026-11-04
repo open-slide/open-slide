@@ -2,30 +2,12 @@ import { cn } from '@/lib/utils';
 
 export type SketchVariant = 'title' | 'chart' | 'image' | 'quote' | 'cover' | 'grid';
 
-export const SKETCH_VARIANTS: SketchVariant[] = [
-  'title',
-  'chart',
-  'image',
-  'quote',
-  'cover',
-  'grid',
-];
-
-const TONES = {
-  paper: {
-    '--sk-bg': '#fdfcfa',
-    '--sk-ink': 'rgb(24 22 20 / 0.82)',
-    '--sk-faint': 'rgb(24 22 20 / 0.12)',
-    '--sk-accent': '#fe5226',
-    '--sk-photo': 'linear-gradient(150deg, #ffb48f 0%, #fe5226 55%, #8a2306 100%)',
-  },
-  glass: {
-    '--sk-bg': 'linear-gradient(160deg, rgb(255 255 255 / 0.17) 0%, rgb(255 255 255 / 0.05) 100%)',
-    '--sk-ink': 'rgb(255 255 255 / 0.82)',
-    '--sk-faint': 'rgb(255 255 255 / 0.2)',
-    '--sk-accent': '#fe5226',
-    '--sk-photo': 'linear-gradient(150deg, rgb(255 180 143 / 0.9) 0%, rgb(254 82 38 / 0.85) 60%)',
-  },
+const PAPER = {
+  '--sk-bg': '#fdfcfa',
+  '--sk-ink': 'rgb(24 22 20 / 0.82)',
+  '--sk-faint': 'rgb(24 22 20 / 0.12)',
+  '--sk-accent': '#fe5226',
+  '--sk-photo': 'linear-gradient(150deg, #ffb48f 0%, #fe5226 55%, #8a2306 100%)',
 } as const;
 
 function Bar({ className, accent = false }: { className: string; accent?: boolean }) {
@@ -49,12 +31,10 @@ function Ink({ className }: { className: string }) {
 // A wordless drawing of a slide layout, so decks read as decks at any size.
 export function SlideSketch({
   variant,
-  tone = 'paper',
   className,
   style,
 }: {
   variant: SketchVariant;
-  tone?: keyof typeof TONES;
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -64,7 +44,7 @@ export function SlideSketch({
       aria-hidden
       className={cn('relative aspect-video overflow-hidden', className)}
       style={{
-        ...TONES[tone],
+        ...PAPER,
         background: cover
           ? 'linear-gradient(170deg, #ff8a5e 0%, #fe5226 50%, #ee4316 100%)'
           : 'var(--sk-bg)',
