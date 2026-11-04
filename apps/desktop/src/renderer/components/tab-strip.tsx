@@ -38,7 +38,6 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
             <TabButton
               key={tab.id}
               tab={tab}
-              closeOnLeft={isMac}
               active={tab.id === state.activeTabId}
               dropBefore={dragging !== null && dropIndex === index && dragging !== tab.id}
               onDragStart={() => setDragging(tab.id)}
@@ -88,7 +87,6 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
 
 function TabButton({
   tab,
-  closeOnLeft,
   active,
   dropBefore,
   onDragStart,
@@ -96,7 +94,6 @@ function TabButton({
   onDragOver,
 }: {
   tab: TabInfo;
-  closeOnLeft: boolean;
   active: boolean;
   dropBefore: boolean;
   onDragStart: () => void;
@@ -184,32 +181,17 @@ function TabButton({
         onDragOver(e.clientX > rect.left + rect.width / 2);
       }}
       className={cn(
-        'no-drag group relative flex h-7 min-w-[92px] max-w-[220px] flex-1 basis-[180px] items-center gap-1.5 rounded-[7px] px-1 text-[12.5px] font-medium outline-none transition-[background-color,color,box-shadow] duration-100 focus-visible:ring-2 focus-visible:ring-ring/50',
+        'no-drag group relative flex h-7 min-w-[72px] max-w-[160px] flex-1 basis-[140px] items-center gap-1.5 rounded-[7px] pr-1 pl-2 text-[12.5px] font-medium outline-none transition-[background-color,color,box-shadow] duration-100 focus-visible:ring-2 focus-visible:ring-ring/50',
         surface,
       )}
     >
       {dropBefore && (
         <span aria-hidden className="absolute inset-y-1 -left-[3px] w-0.5 rounded-full bg-ring" />
       )}
-      {closeOnLeft ? (
-        // macOS tabs center the icon and title together and reveal the close
-        // button at the leading edge on hover, like Safari and Finder.
-        <>
-          {close('opacity-0 group-hover:opacity-100 focus-visible:opacity-100')}
-          <span className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
-            {icon}
-            <span className="truncate">{tab.title}</span>
-          </span>
-          <span aria-hidden className="size-5 shrink-0" />
-        </>
-      ) : (
-        <>
-          <span className="flex size-5 shrink-0 items-center justify-center">{icon}</span>
-          <span className="min-w-0 flex-1 truncate">{tab.title}</span>
-          {close(
-            active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
-          )}
-        </>
+      {icon}
+      <span className="min-w-0 flex-1 truncate">{tab.title}</span>
+      {close(
+        active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
       )}
     </div>
   );
