@@ -12,7 +12,7 @@ const ACCELERATE = 'cubic-bezier(0.6, 0, 0.85, 0.35)';
 const VEIL = 'rgb(11 9 8 / 0.58)';
 const VEIL_DEEP = 'rgb(11 9 8 / 0.72)';
 const WORDMARK = 'open-slide';
-const TAGLINE = 'Slides as React code, edited alongside your agent.';
+const TAGLINE = 'Beautiful decks, drafted with your agent.';
 const CARD_COUNT = 18;
 const PLAIN = SKETCH_VARIANTS.filter((variant) => variant !== 'cover');
 const PARTICLE_COUNT = 30;

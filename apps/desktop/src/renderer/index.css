@@ -118,6 +118,23 @@ html[data-route="intro"] body {
   }
 }
 
+@keyframes ob-ripple {
+  from {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes ob-dash {
+  to {
+    stroke-dashoffset: -4.8;
+  }
+}
+
 @keyframes ob-shimmer {
   to {
     background-position: -200% 0;
@@ -160,6 +177,14 @@ html[data-route="intro"] body {
   animation: ob-aurora 22s ease-in-out infinite alternate;
 }
 
+.ob-ripple {
+  animation: ob-ripple 600ms var(--ease-swift) both;
+}
+
+.ob-dash {
+  animation: ob-dash 1.4s linear infinite;
+}
+
 .ob-shimmer {
   color: transparent;
   background:
@@ -191,7 +216,9 @@ html[data-route="intro"] body {
   .ob-grow,
   .ob-caret,
   .ob-aurora,
-  .ob-shimmer {
+  .ob-shimmer,
+  .ob-ripple,
+  .ob-dash {
     animation: none;
   }
 

@@ -1,4 +1,22 @@
-import { ArrowLeft, ArrowRight, FolderOpen, Plus } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  FileDown,
+  FolderOpen,
+  ImagePlus,
+  ListChecks,
+  MessageSquareText,
+  Move,
+  Palette,
+  PenLine,
+  Plus,
+  Presentation,
+  Sparkles,
+  SwatchBook,
+  Timer,
+  Type,
+  WandSparkles,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ProviderLogo } from '@/components/agent/provider-logo';
 import { Button } from '@/components/ui/button';
@@ -7,32 +25,110 @@ import type { AgentInfo, AppState } from '../../shared/types';
 import { desktop } from '../lib/desktop';
 import { splitPath } from '../lib/paths';
 import { IDLE_LOGIN, type Login, LoginCodeForm, useAgents } from './agents-section';
-import { AgentScene, CodeScene, WorkspaceScene } from './onboarding-scenes';
+import {
+  AgentsScene,
+  CommentScene,
+  CreateScene,
+  DesignScene,
+  EditScene,
+  PresentScene,
+  WorkspaceScene,
+} from './onboarding-scenes';
 import { LineLoader, StatusDot } from './primitives';
 
-const STEPS = [
+type Step = {
+  kind: 'feature' | 'agents' | 'workspace';
+  eyebrow: string;
+  title: string;
+  body: string;
+  file: string;
+  Scene: () => React.ReactNode;
+  points?: { icon: typeof Sparkles; label: string }[];
+};
+
+const STEPS: Step[] = [
   {
-    eyebrow: 'Slides as code',
-    title: 'Every slide is a React component.',
-    body: 'Decks are folders of plain TSX. Write them by hand or let an agent draft them — every save lands on the slide live.',
-    file: 'slides/launch/index.tsx',
-    Scene: CodeScene,
+    kind: 'feature',
+    eyebrow: 'Describe it',
+    title: 'Say what you need. Get a whole deck.',
+    body: 'Describe your talk in plain words and your agent drafts every slide — layout, copy, and charts — while you watch.',
+    file: 'Q4 launch',
+    Scene: CreateScene,
+    points: [
+      { icon: Sparkles, label: 'A full deck from one sentence' },
+      { icon: WandSparkles, label: 'Revise by just asking' },
+      { icon: PenLine, label: 'No code, no templates' },
+    ],
   },
   {
+    kind: 'feature',
+    eyebrow: 'Edit directly',
+    title: 'Click anything to change it.',
+    body: 'Select text, images, or shapes right on the slide. Drag to move, pull to resize, and pick fonts and colours from the panel.',
+    file: 'Q4 launch',
+    Scene: EditScene,
+    points: [
+      { icon: Move, label: 'Move and resize' },
+      { icon: Type, label: 'Fonts and colours' },
+      { icon: PenLine, label: 'Edit text in place' },
+    ],
+  },
+  {
+    kind: 'feature',
+    eyebrow: 'Comment',
+    title: 'Leave notes. Your agent applies them.',
+    body: 'Pin feedback to any part of a slide, the way you would review a doc. Send them off together and every note gets worked in.',
+    file: 'Q4 launch',
+    Scene: CommentScene,
+    points: [
+      { icon: MessageSquareText, label: 'Pin to any element' },
+      { icon: ListChecks, label: 'Batch your feedback' },
+      { icon: Sparkles, label: 'Applied for you' },
+    ],
+  },
+  {
+    kind: 'feature',
+    eyebrow: 'Design',
+    title: 'A new look in one click.',
+    body: 'Restyle the whole deck at once — colours, fonts, and corners. Shuffle for ideas, save looks you love as themes, and bring in your own images and logos.',
+    file: 'Q4 launch',
+    Scene: DesignScene,
+    points: [
+      { icon: Palette, label: 'Restyle every slide' },
+      { icon: SwatchBook, label: 'Reusable themes' },
+      { icon: ImagePlus, label: 'Images, video, and logos' },
+    ],
+  },
+  {
+    kind: 'feature',
+    eyebrow: 'Present',
+    title: 'Present it. Then share it.',
+    body: 'Go full screen with speaker notes, a timer, and the next slide in view. When you are done, export a PDF anyone can open.',
+    file: 'Q4 launch — Presenter',
+    Scene: PresentScene,
+    points: [
+      { icon: Presentation, label: 'Presenter view' },
+      { icon: Timer, label: 'Notes and timer' },
+      { icon: FileDown, label: 'Export to PDF' },
+    ],
+  },
+  {
+    kind: 'agents',
     eyebrow: 'Your agent',
-    title: 'You direct. Your agent drafts.',
-    body: 'Claude Code and Codex ship inside the app. Sign in once and the agent panel in every deck is ready to take notes.',
-    file: 'launch — Agent',
-    Scene: AgentScene,
+    title: 'Your agent is already here.',
+    body: 'Claude Code and Codex come built in — nothing else to install. Sign in with the account you already use.',
+    file: 'Agents',
+    Scene: AgentsScene,
   },
   {
+    kind: 'workspace',
     eyebrow: 'Workspace',
     title: 'Give your decks a home.',
     body: 'A workspace is a folder that holds your decks, themes, and assets. Start a fresh one, or open one you already have.',
     file: '~/Documents/my-slides',
     Scene: WorkspaceScene,
   },
-] as const;
+];
 
 const LAST = STEPS.length - 1;
 
@@ -108,7 +204,8 @@ export function Onboarding({
 
   if (!armed) return null;
 
-  const { eyebrow, title, body, file, Scene } = STEPS[step] ?? STEPS[0];
+  const { kind, eyebrow, title, body, file, Scene, points } = STEPS[step] ?? STEPS[0];
+  const feature = kind === 'feature';
   const motion = { '--dir': direction } as React.CSSProperties;
 
   return (
@@ -125,29 +222,34 @@ export function Onboarding({
 
       <div className="relative flex h-full flex-col">
         <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-8 pt-4 pb-2">
-          <div className="my-auto flex w-full max-w-[720px] flex-col items-center">
+          <div className="my-auto flex w-full max-w-[960px] flex-col items-center">
             <div
-              ref={tiltRef}
-              className="ob-tilt w-full"
-              style={{ maxWidth: 'min(680px, max(240px, calc((100vh - 500px) * 1.62)))' }}
+              className="w-full transition-[max-width] duration-700 ease-[var(--ease-swift)]"
+              style={{
+                maxWidth: feature
+                  ? 'min(920px, max(320px, calc((100vh - 410px) * 1.74)))'
+                  : 'min(680px, max(240px, calc((100vh - 500px) * 1.62)))',
+              }}
             >
-              <div className="ob-stage-in @container overflow-hidden rounded-[14px] border border-border bg-card shadow-overlay">
-                <div className="flex h-[26px] items-center border-b border-hairline px-3">
-                  <span className="flex gap-[5px]">
-                    {[0, 1, 2].map((i) => (
-                      <span key={i} className="size-[7px] rounded-full bg-foreground/[0.13]" />
-                    ))}
-                  </span>
-                  <span
-                    key={file}
-                    className="ob-fade flex-1 pr-[34px] text-center font-mono text-[10.5px] text-muted-foreground"
-                  >
-                    {file}
-                  </span>
-                </div>
-                <div className="relative aspect-video">
-                  <div key={step} className="ob-scene-in absolute inset-0" style={motion}>
-                    <Scene />
+              <div ref={tiltRef} className="ob-tilt w-full">
+                <div className="ob-stage-in @container overflow-hidden rounded-[14px] border border-border bg-card shadow-overlay">
+                  <div className="flex h-[26px] items-center border-b border-hairline px-3">
+                    <span className="flex gap-[5px]">
+                      {[0, 1, 2].map((i) => (
+                        <span key={i} className="size-[7px] rounded-full bg-foreground/[0.13]" />
+                      ))}
+                    </span>
+                    <span
+                      key={file}
+                      className="ob-fade flex-1 pr-[34px] text-center font-mono text-[10.5px] text-muted-foreground"
+                    >
+                      {file}
+                    </span>
+                  </div>
+                  <div className="relative aspect-video">
+                    <div key={step} className="ob-scene-in absolute inset-0" style={motion}>
+                      <Scene />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -170,14 +272,30 @@ export function Onboarding({
                 {title}
               </h1>
               <p
-                className="ob-in mt-3 max-w-[470px] text-[14px] leading-relaxed text-pretty text-muted-foreground"
+                className="ob-in mt-3 max-w-[500px] text-[14px] leading-relaxed text-pretty text-muted-foreground"
                 style={{ '--i': 2 } as React.CSSProperties}
               >
                 {body}
               </p>
-              {step > 0 && (
+              {points && (
+                <ul
+                  className="ob-in mt-5 flex flex-wrap justify-center gap-2"
+                  style={{ '--i': 3 } as React.CSSProperties}
+                >
+                  {points.map(({ icon: Icon, label }) => (
+                    <li
+                      key={label}
+                      className="flex items-center gap-1.5 rounded-full border border-border bg-card py-1 pr-3 pl-2 text-[12px] font-medium shadow-edge"
+                    >
+                      <Icon className="size-3.5 text-brand" aria-hidden />
+                      {label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!feature && (
                 <div className="ob-in mt-6 w-full" style={{ '--i': 3 } as React.CSSProperties}>
-                  {step === 1 ? (
+                  {kind === 'agents' ? (
                     <AgentList />
                   ) : (
                     <WorkspaceChoices
