@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { openDeckInHost } from '@/lib/desktop';
 import { useLocale } from '@/lib/use-locale';
 import {
+  AGENT_EVENT,
   type AgentEffort,
   type AgentItem,
   type AgentModelOption,
@@ -123,28 +124,27 @@ export function useAgentState(): State {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-let stream: EventSource | null = null;
-let streamOpened = false;
+let streaming = false;
+
+// Anything streamed while the socket was down is gone, so reload what is on
+// screen once it reconnects.
+function resync() {
+  void refreshStatus();
+  if (state.sessionsLoaded) void loadSessions();
+  for (const id of Object.keys(state.full)) void loadSession(id);
+}
 
 function syncStream(enabled: boolean) {
-  if (!enabled) {
-    stream?.close();
-    stream = null;
-    return;
+  const hot = import.meta.hot;
+  if (!hot || enabled === streaming) return;
+  streaming = enabled;
+  if (enabled) {
+    hot.on(AGENT_EVENT, applyEvent);
+    hot.on('vite:ws:connect', resync);
+  } else {
+    hot.off(AGENT_EVENT, applyEvent);
+    hot.off('vite:ws:connect', resync);
   }
-  if (stream) return;
-  stream = new EventSource('/__agent/events');
-  stream.onmessage = (message) => applyEvent(JSON.parse(message.data) as AgentStreamEvent);
-  stream.onopen = () => {
-    // Anything streamed while disconnected is gone, so reload what is on screen.
-    if (!streamOpened) {
-      streamOpened = true;
-      return;
-    }
-    void refreshStatus();
-    if (state.sessionsLoaded) void loadSessions();
-    for (const id of Object.keys(state.full)) void loadSession(id);
-  };
 }
 
 function upsertSummary(list: AgentSessionSummary[], summary: AgentSessionSummary) {
