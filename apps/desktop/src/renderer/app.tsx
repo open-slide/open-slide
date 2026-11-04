@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { type CreateTarget, CreateWorkspaceDialog } from './components/create-workspace-dialog';
+import { Intro } from './components/intro';
+import { Onboarding } from './components/onboarding';
 import { ServerScreen } from './components/server-screen';
 import { SettingsWindow } from './components/settings';
 import { TabStrip } from './components/tab-strip';
@@ -8,11 +10,16 @@ import { Welcome } from './components/welcome';
 import { desktop, useAppState, useWindowAppearance } from './lib/desktop';
 import { useWorkspaceActions } from './lib/workspace-actions';
 
-const isSettingsWindow = window.location.hash === '#settings';
+const route = window.location.hash.slice(1);
+document.documentElement.dataset.route = route || 'main';
 
 export function App() {
+  return route === 'intro' ? <Intro /> : <Shell />;
+}
+
+function Shell() {
   useWindowAppearance();
-  return isSettingsWindow ? <SettingsWindow /> : <MainWindow />;
+  return route === 'settings' ? <SettingsWindow /> : <MainWindow />;
 }
 
 function MainWindow() {
@@ -33,11 +40,13 @@ function MainWindow() {
 
   const screen = !state
     ? 'loading'
-    : !state.workspace
-      ? 'welcome'
-      : state.server.state !== 'ready'
-        ? 'server'
-        : 'tabs';
+    : state.onboarding
+      ? 'onboarding'
+      : !state.workspace
+        ? 'welcome'
+        : state.server.state !== 'ready'
+          ? 'server'
+          : 'tabs';
 
   // Tab contents are native views stacked above this page, so anything the
   // shell draws in the content area (screens, dialogs) needs them hidden.
@@ -51,6 +60,15 @@ function MainWindow() {
       <div className="flex h-full flex-col text-foreground">
         <TabStrip state={state} showTabs={screen === 'tabs'} />
         <main className="relative min-h-0 flex-1">
+          {screen === 'onboarding' && (
+            <Onboarding
+              state={state}
+              error={actions.error}
+              onChoose={chooseWorkspace}
+              onCreate={actions.createNew}
+              onOpenRecent={(path) => void actions.open(path)}
+            />
+          )}
           {screen === 'welcome' && (
             <Welcome
               state={state}

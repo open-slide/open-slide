@@ -32,6 +32,10 @@ export type AppState = {
   // The system accent as #rrggbbaa, or null where the platform has none.
   accent: string | null;
   fullscreen: boolean;
+  // First-run tour: shown until a workspace opens or the user dismisses it.
+  onboarding: boolean;
+  // The full-screen intro is still covering the main window.
+  intro: boolean;
   workspace: WorkspaceInfo | null;
   recent: string[];
   server: ServerStatus;
@@ -82,6 +86,17 @@ export type LogEvent = { task: LogTask; chunk: string };
 
 export type ShellCommand = 'open-workspace' | 'new-workspace';
 
+// The main window's frame in the intro window's coordinates, so the intro can
+// land exactly where the window appears.
+export type IntroTarget = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+  dark: boolean;
+};
+
 export type HapticPattern = 'alignment' | 'levelChange' | 'generic';
 
 export type ShellApi = {
@@ -98,6 +113,14 @@ export type ShellApi = {
     onFocus(listener: (focused: boolean) => void): () => void;
     fitContent(height: number): void;
     openSettings(): void;
+  };
+  onboarding: {
+    finish(): void;
+  };
+  intro: {
+    target(): Promise<IntroTarget | null>;
+    reveal(): void;
+    done(): void;
   };
   settings: {
     get(): Promise<DesktopSettings>;

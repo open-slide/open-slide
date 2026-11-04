@@ -9,11 +9,16 @@ import { desktop } from '../lib/desktop';
 import { tildify } from '../lib/paths';
 import { LineLoader, LogView, SectionCard, StatusDot } from './primitives';
 
-type Login = { output: string; url: string | null; running: boolean; error: string | null };
+export type Login = {
+  output: string;
+  url: string | null;
+  running: boolean;
+  error: string | null;
+};
 
-const IDLE_LOGIN: Login = { output: '', url: null, running: false, error: null };
+export const IDLE_LOGIN: Login = { output: '', url: null, running: false, error: null };
 
-export function AgentsSection() {
+export function useAgents() {
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [logins, setLogins] = useState<Partial<Record<AgentId, Login>>>({});
@@ -63,6 +68,14 @@ export function AgentsSection() {
     await refresh();
   };
 
+  const dismiss = (id: AgentId) => setLogins((prev) => ({ ...prev, [id]: IDLE_LOGIN }));
+
+  return { agents, refreshing, logins, refresh, signIn, signOut, dismiss };
+}
+
+export function AgentsSection() {
+  const { agents, refreshing, logins, refresh, signIn, signOut, dismiss } = useAgents();
+
   return (
     <>
       <p className="text-[13px] leading-relaxed text-muted-foreground">
@@ -84,7 +97,7 @@ export function AgentsSection() {
             login={logins[agent.id] ?? IDLE_LOGIN}
             onSignIn={() => signIn(agent.id)}
             onSignOut={() => signOut(agent.id)}
-            onDismiss={() => setLogins((prev) => ({ ...prev, [agent.id]: IDLE_LOGIN }))}
+            onDismiss={() => dismiss(agent.id)}
           />
         ))
       )}
@@ -118,7 +131,6 @@ function AgentCard({
   onSignOut: () => void;
   onDismiss: () => void;
 }) {
-  const [code, setCode] = useState('');
   const available = agent.cliPath !== null;
   const status = !available
     ? { tone: 'warn' as const, label: 'Unavailable' }
@@ -205,26 +217,7 @@ function AgentCard({
           {login.error && <p className="text-[12.5px] text-destructive">{login.error}</p>}
           <LogView text={login.output} className="max-h-40" />
           {login.running ? (
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!code.trim()) return;
-                desktop.agents.sendLoginInput(agent.id, code.trim());
-                setCode('');
-              }}
-            >
-              <Input
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="Paste a code here if the browser shows one"
-                spellCheck={false}
-                className="font-mono text-[12px]"
-              />
-              <Button type="submit" size="sm" variant="outline" disabled={!code.trim()}>
-                Submit
-              </Button>
-            </form>
+            <LoginCodeForm id={agent.id} />
           ) : (
             <Button size="xs" variant="ghost" className="self-start" onClick={onDismiss}>
               Dismiss
@@ -233,5 +226,31 @@ function AgentCard({
         </div>
       )}
     </SectionCard>
+  );
+}
+
+export function LoginCodeForm({ id }: { id: AgentId }) {
+  const [code, setCode] = useState('');
+  return (
+    <form
+      className="flex gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!code.trim()) return;
+        desktop.agents.sendLoginInput(id, code.trim());
+        setCode('');
+      }}
+    >
+      <Input
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        placeholder="Paste a code here if the browser shows one"
+        spellCheck={false}
+        className="font-mono text-[12px]"
+      />
+      <Button type="submit" size="sm" variant="outline" disabled={!code.trim()}>
+        Submit
+      </Button>
+    </form>
   );
 }

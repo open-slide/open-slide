@@ -21,6 +21,7 @@ import {
   type AppState,
   type CreateWorkspaceRequest,
   type DesktopSettings,
+  type IntroTarget,
   type LogTask,
   PACKAGE_MANAGERS,
   type PackageManager,
@@ -53,9 +54,15 @@ const SHELL_PRELOAD = path.join(import.meta.dirname, '../preload/shell.cjs');
 const VIEW_PRELOAD = path.join(import.meta.dirname, '../preload/view.cjs');
 const THEMES = new Set(['light', 'dark', 'system']);
 const SETTINGS_WIDTH = 640;
+// Matches the corner the system draws on the main window, so the intro lands on it.
+const WINDOW_RADIUS = isMac ? 12 : isWindows ? 8 : 0;
+// The intro runs about nine seconds; past this it has stalled.
+const INTRO_TIMEOUT = 20_000;
 
 let window: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
+let introWindow: BrowserWindow | null = null;
+let introCovering = false;
 let tabs: TabManager | null = null;
 let workspace: WorkspaceInfo | null = null;
 
@@ -100,6 +107,8 @@ function state(): AppState {
     translucent: translucent(),
     accent: accent(),
     fullscreen: window?.isFullScreen() ?? false,
+    onboarding: !settings.onboarded(),
+    intro: introCovering,
     workspace,
     recent: settings.recent(),
     server: server.status,
@@ -109,7 +118,9 @@ function state(): AppState {
 }
 
 function shellWindows(): BrowserWindow[] {
-  return [window, settingsWindow].filter((w): w is BrowserWindow => !!w && !w.isDestroyed());
+  return [window, settingsWindow, introWindow].filter(
+    (w): w is BrowserWindow => !!w && !w.isDestroyed(),
+  );
 }
 
 function sendAll(channel: string, payload: unknown) {
@@ -173,6 +184,7 @@ async function openWorkspace(root: string): Promise<TaskResult> {
   persistSession();
   workspace = { root: inspection.path, name: inspection.name };
   settings.setWorkspace(inspection.path);
+  settings.setOnboarded(true);
   tabs?.reset(settings.session(inspection.path));
   broadcast();
   await syncSkillsOnce(inspection.path);
@@ -354,7 +366,10 @@ function createWindow(): BrowserWindow {
 
   win.on('enter-full-screen', broadcast);
   win.on('leave-full-screen', broadcast);
-  win.once('ready-to-show', () => win.show());
+  // While the intro plays it reveals this window itself, right where it lands.
+  win.once('ready-to-show', () => {
+    if (!introWindow) win.show();
+  });
   win.on('close', () => {
     persistSession();
     if (!win.isFullScreen()) settings.setBounds(win.getNormalBounds());
@@ -367,6 +382,97 @@ function createWindow(): BrowserWindow {
   wireShell(win);
   loadShell(win);
   return win;
+}
+
+function revealMain() {
+  if (introCovering) {
+    introCovering = false;
+    broadcast();
+  }
+  if (window && !window.isVisible()) window.showInactive();
+}
+
+function introTarget(): IntroTarget | null {
+  if (!window || !introWindow) return null;
+  const frame = window.getBounds();
+  const origin = introWindow.getBounds();
+  return {
+    x: frame.x - origin.x,
+    y: frame.y - origin.y,
+    width: frame.width,
+    height: frame.height,
+    radius: window.isFullScreen() || window.isMaximized() ? 0 : WINDOW_RADIUS,
+    dark: nativeTheme.shouldUseDarkColors,
+  };
+}
+
+// A borderless, clear window over the whole display the main window sits on:
+// the intro plays over the desktop, then folds down into the main window.
+function playIntro() {
+  if (introWindow) return;
+  const main = window ?? createWindow();
+  if (main.isMinimized()) main.restore();
+  const { bounds } = screen.getDisplayMatching(main.getBounds());
+  const win = new BrowserWindow({
+    ...bounds,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    enableLargerThanScreen: true,
+    roundedCorners: false,
+    title: 'Welcome to open-slide',
+    webPreferences: {
+      preload: SHELL_PRELOAD,
+      sandbox: true,
+      contextIsolation: true,
+      backgroundThrottling: false,
+    },
+  });
+  introWindow = win;
+  introCovering = true;
+  win.setAlwaysOnTop(true, 'screen-saver');
+  wireShell(win);
+  const stalled = setTimeout(() => {
+    if (!win.isDestroyed()) win.close();
+  }, INTRO_TIMEOUT);
+  win.once('ready-to-show', () => {
+    win.setBounds(bounds);
+    win.show();
+    win.focus();
+  });
+  win.on('closed', () => {
+    clearTimeout(stalled);
+    if (introWindow === win) introWindow = null;
+    settings.setIntroSeen();
+    revealMain();
+    window?.focus();
+  });
+  broadcast();
+  loadShell(win, 'intro');
+}
+
+function replayIntro() {
+  settings.setOnboarded(false);
+  broadcast();
+  if (reducedMotion()) {
+    const main = window ?? createWindow();
+    main.show();
+    main.focus();
+  } else {
+    playIntro();
+  }
+}
+
+function reducedMotion(): boolean {
+  return systemPreferences.getAnimationSettings().prefersReducedMotion;
 }
 
 function fromShell(e: IpcMainEvent | IpcMainInvokeEvent): boolean {
@@ -416,6 +522,16 @@ function registerIpc() {
     if (win && win === settingsWindow && typeof height === 'number' && Number.isFinite(height)) {
       fitSettingsWindow(win, height);
     }
+  });
+
+  handle('intro:target', () => introTarget());
+  listen('intro:reveal', () => revealMain());
+  listen('intro:done', () => {
+    if (introWindow && !introWindow.isDestroyed()) introWindow.close();
+  });
+  listen('onboarding:finish', () => {
+    settings.setOnboarded(true);
+    broadcast();
   });
 
   handle('settings:get', () => settings.get());
@@ -544,6 +660,7 @@ const menuActions: MenuActions = {
     window?.focus();
     void openWorkspace(root);
   },
+  replayIntro: () => replayIntro(),
   clearRecent: () => {
     for (const root of settings.recent()) {
       if (root !== workspace?.root) settings.forget(root);
@@ -580,6 +697,10 @@ if (!app.requestSingleInstanceLock()) {
     }
     void shellEnv();
     createWindow();
+    if (!settings.introSeen()) {
+      if (reducedMotion()) settings.setIntroSeen();
+      else playIntro();
+    }
     const saved = settings.workspace();
     if (saved) void openWorkspace(saved);
 

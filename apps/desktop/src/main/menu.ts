@@ -14,6 +14,7 @@ export type MenuActions = {
   toggleTabDevTools: () => void;
   openRecent: (root: string) => void;
   clearRecent: () => void;
+  replayIntro: () => void;
 };
 
 export function installMenu(actions: MenuActions, recent: string[]) {
@@ -129,6 +130,8 @@ export function installMenu(actions: MenuActions, recent: string[]) {
       role: 'help',
       submenu: [
         ...(isMac ? [] : [{ role: 'about' as const }, { type: 'separator' as const }]),
+        { label: 'Welcome to open-slide', click: actions.replayIntro },
+        { type: 'separator' },
         {
           label: 'open-slide Docs',
           click: () => shell.openExternal('https://open-slide.dev/docs'),

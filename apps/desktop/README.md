@@ -11,5 +11,6 @@ pnpm --filter desktop dist      # installers
 - `src/main` — window, tabs (one `WebContentsView` each), dev server supervisor, workspace init/install, skills sync, agent sign-in.
 - `src/preload/view.ts` — the `window.openSlideDesktop` bridge core reads in `packages/core/src/app/lib/desktop.ts`.
 - `src/renderer` — tab strip, welcome, and settings, built from core's own UI primitives and tokens.
+- First launch plays a full-screen intro in its own clear window over the display, which folds into the main window, then a three-step tour. **Help → Welcome to open-slide** replays both.
 
 The bundled core keeps its Vite cache under the app's user data, syncs its built-in skills into a workspace once per app version, and hides the in-app core update — updating the app updates core.

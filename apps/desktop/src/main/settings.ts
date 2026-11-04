@@ -14,6 +14,8 @@ type Stored = DesktopSettings & {
   ports: Record<string, number>;
   skillsVersions: Record<string, string>;
   bounds: Bounds | null;
+  introSeen: boolean;
+  onboarded: boolean;
 };
 
 const RECENT_LIMIT = 8;
@@ -27,6 +29,8 @@ const defaults: Stored = {
   ports: {},
   skillsVersions: {},
   bounds: null,
+  introSeen: false,
+  onboarded: false,
 };
 
 function file(): string {
@@ -35,7 +39,10 @@ function file(): string {
 
 function load(): Stored {
   try {
-    return { ...defaults, ...(JSON.parse(readFileSync(file(), 'utf8')) as Partial<Stored>) };
+    const saved = JSON.parse(readFileSync(file(), 'utf8')) as Partial<Stored>;
+    // Settings written before the first-run tour existed belong to people who
+    // already set the app up, so they skip it.
+    return { ...defaults, introSeen: true, onboarded: true, ...saved };
   } catch {
     return { ...defaults };
   }
@@ -125,6 +132,22 @@ export const settings = {
   },
   setBounds(bounds: Bounds) {
     current().bounds = bounds;
+    save();
+  },
+  introSeen(): boolean {
+    return current().introSeen;
+  },
+  setIntroSeen() {
+    if (current().introSeen) return;
+    current().introSeen = true;
+    save();
+  },
+  onboarded(): boolean {
+    return current().onboarded;
+  },
+  setOnboarded(onboarded: boolean) {
+    if (current().onboarded === onboarded) return;
+    current().onboarded = onboarded;
     save();
   },
 };

@@ -22,6 +22,14 @@ const api: ShellApi = {
     fitContent: (height) => ipcRenderer.send('window:fit-content', height),
     openSettings: () => ipcRenderer.send('settings:open-window'),
   },
+  onboarding: {
+    finish: () => ipcRenderer.send('onboarding:finish'),
+  },
+  intro: {
+    target: () => ipcRenderer.invoke('intro:target'),
+    reveal: () => ipcRenderer.send('intro:reveal'),
+    done: () => ipcRenderer.send('intro:done'),
+  },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     update: (patch) => ipcRenderer.invoke('settings:update', patch),
