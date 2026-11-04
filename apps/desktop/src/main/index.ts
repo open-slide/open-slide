@@ -500,6 +500,7 @@ function registerIpc() {
   ipcMain.on('host:config', (e) => {
     e.returnValue = { translucent: translucent() && (tabs?.owns(e.sender) ?? false) };
   });
+  ipcMain.on('host:adopted', (e) => tabs?.adopted(e.sender));
   ipcMain.on('host:open-deck', (_e, slideId: unknown) => {
     if (typeof slideId === 'string' && slideId) tabs?.openDeck(slideId);
     window?.focus();

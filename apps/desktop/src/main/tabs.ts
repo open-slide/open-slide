@@ -8,7 +8,7 @@ import {
   type WebContents,
   WebContentsView,
 } from 'electron';
-import { TAB_STRIP_HEIGHT, type TabInfo } from '../shared/types';
+import { SPARE_PATH, TAB_STRIP_HEIGHT, type TabInfo } from '../shared/types';
 import type { DeckSession } from './settings';
 
 type Tab = {
@@ -31,6 +31,24 @@ type TabManagerOptions = {
 const DECK_ROOT_RE = /^\/s\/([^/]+)\/?$/;
 const PRESENTER_RE = /^\/s\/[^/]+\/presenter\/?$/;
 const DEFAULT_TITLE = 'open-slide';
+// Each warm tab is a renderer process; past this, restored tabs load on click.
+const MAX_WARM_TABS = 6;
+const WARM_DELAY_MS = 800;
+const ADOPT_TIMEOUT_MS = 1500;
+
+// Controls act like native ones: no pointer cursor, no text selection, and
+// links or images don't tear off as drag ghosts.
+const NATIVE_CSS = `
+html, body { overscroll-behavior: none; }
+:is(button, summary, label, [role="button"], [role="tab"], [role="menuitem"],
+  [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], [role="switch"],
+  [role="checkbox"], [role="radio"]) {
+  cursor: default !important;
+  -webkit-user-select: none;
+  user-select: none;
+}
+:is(a, img):not([draggable="true"]) { -webkit-user-drag: none; }
+`;
 
 function deckIdFromPath(pathname: string): string | null {
   const m = DECK_ROOT_RE.exec(pathname);
@@ -48,15 +66,24 @@ export class TabManager {
   private overlay = true;
   private fullscreenTab: Tab | null = null;
   private ownsFullscreen = false;
+  private spare: WebContentsView | null = null;
+  private warmTimer: NodeJS.Timeout | null = null;
+  // A view stays hidden until its first load finishes, so a tab never shows
+  // a half-booted page; an adopted spare also waits for its new route.
+  private readonly loaded = new WeakSet<WebContents>();
+  private readonly adopting = new WeakSet<WebContents>();
+  private readonly revealed = new WeakSet<WebContents>();
 
   constructor(private readonly opts: TabManagerOptions) {
     const home = this.makeTab('home', null);
     this.tabs = [home];
     this.activeId = home.id;
-    const relayout = () => this.layout();
-    opts.window.on('resize', relayout);
-    opts.window.on('enter-full-screen', relayout);
-    opts.window.on('leave-full-screen', relayout);
+    // Hidden views are only resized once the drag settles, so a live resize
+    // relayouts one renderer instead of every warm one.
+    opts.window.on('resize', () => this.layout(false));
+    opts.window.on('resized', () => this.layout());
+    opts.window.on('enter-full-screen', () => this.layout());
+    opts.window.on('leave-full-screen', () => this.layout());
   }
 
   get info(): { tabs: TabInfo[]; activeTabId: string } {
@@ -83,7 +110,15 @@ export class TabManager {
   }
 
   owns(contents: WebContents): boolean {
-    return this.tabs.some((t) => t.view?.webContents === contents);
+    return (
+      this.spare?.webContents === contents ||
+      this.tabs.some((t) => t.view?.webContents === contents)
+    );
+  }
+
+  adopted(contents: WebContents) {
+    if (!this.adopting.delete(contents)) return;
+    this.layout();
   }
 
   isHtmlFullscreen(): boolean {
@@ -92,6 +127,8 @@ export class TabManager {
 
   reset(session: DeckSession) {
     for (const tab of this.tabs) this.destroyView(tab);
+    this.destroySpare();
+    this.cancelWarm();
     const home = this.makeTab('home', null);
     const decks = session.decks.map((d) => ({
       ...this.makeTab('deck', d.slideId),
@@ -108,6 +145,7 @@ export class TabManager {
     if (url === this.baseUrl) return;
     const previous = this.baseUrl;
     this.baseUrl = url;
+    this.destroySpare();
     if (url && previous) {
       for (const tab of this.tabs) {
         if (!tab.view) continue;
@@ -116,6 +154,7 @@ export class TabManager {
       }
     }
     this.layout();
+    this.scheduleWarm();
   }
 
   setOverlay(open: boolean) {
@@ -226,7 +265,11 @@ export class TabManager {
   }
 
   reloadAll() {
+    // The spare read its host config at boot, so it can't be reloaded into a
+    // new one; a fresh spare picks up the change.
+    this.destroySpare();
     for (const tab of this.tabs) tab.view?.webContents.reload();
+    this.scheduleWarm();
   }
 
   activeContents(): WebContents | null {
@@ -235,6 +278,8 @@ export class TabManager {
 
   destroy() {
     for (const tab of this.tabs) this.destroyView(tab);
+    this.destroySpare();
+    this.cancelWarm();
   }
 
   private active(): Tab | undefined {
@@ -257,19 +302,18 @@ export class TabManager {
     };
   }
 
-  private urlFor(tab: Tab): string {
-    if (tab.kind === 'deck' && tab.slideId) {
-      return `${this.baseUrl}/s/${encodeURIComponent(tab.slideId)}`;
-    }
+  private pathFor(tab: Tab): string {
+    if (tab.kind === 'deck' && tab.slideId) return `/s/${encodeURIComponent(tab.slideId)}`;
     const path = tab.pendingPath ?? '/';
     tab.pendingPath = null;
-    return `${this.baseUrl}${path}`;
+    return path;
   }
 
-  layout() {
+  layout(includeHidden = true) {
     const win = this.opts.window;
     if (win.isDestroyed()) return;
     const { width, height } = win.getContentBounds();
+    const bounds = (top: number) => ({ x: 0, y: top, width, height: Math.max(0, height - top) });
     for (const tab of this.tabs) {
       const visible =
         this.baseUrl !== null &&
@@ -277,34 +321,135 @@ export class TabManager {
         (this.fullscreenTab ? tab === this.fullscreenTab : tab.id === this.activeId);
       if (visible) this.ensureView(tab);
       if (!tab.view) continue;
-      tab.view.setVisible(visible);
-      if (!visible) continue;
-      const top = this.fullscreenTab === tab ? 0 : TAB_STRIP_HEIGHT;
-      tab.view.setBounds({ x: 0, y: top, width, height: Math.max(0, height - top) });
+      const contents = tab.view.webContents;
+      const shown = visible && this.isShowable(contents);
+      if (shown || includeHidden) {
+        tab.view.setBounds(bounds(this.fullscreenTab === tab ? 0 : TAB_STRIP_HEIGHT));
+      }
+      tab.view.setVisible(shown);
+      if (shown && !this.revealed.has(contents)) {
+        this.revealed.add(contents);
+        contents.setBackgroundThrottling(true);
+      }
     }
+    if (this.spare && includeHidden) this.spare.setBounds(bounds(TAB_STRIP_HEIGHT));
   }
 
-  private ensureView(tab: Tab) {
-    if (tab.view || !this.baseUrl) return;
+  private isShowable(contents: WebContents): boolean {
+    return this.loaded.has(contents) && !this.adopting.has(contents);
+  }
+
+  private createView(): WebContentsView {
     const view = new WebContentsView({
       webPreferences: {
         preload: this.opts.viewPreload,
         sandbox: true,
         contextIsolation: true,
         spellcheck: true,
+        // A hidden view gets no animation frames, and core's deck warm-up
+        // paces itself on them; throttling resumes once the view is shown.
+        backgroundThrottling: false,
       },
     });
     view.setBackgroundColor('#00000000');
+    view.setVisible(false);
+    const contents = view.webContents;
+    const markLoaded = () => {
+      if (this.loaded.has(contents)) return;
+      this.loaded.add(contents);
+      this.layout();
+      this.scheduleWarm();
+    };
+    contents.on('did-finish-load', markLoaded);
+    contents.on('did-fail-load', (_e, _code, _desc, _url, isMainFrame) => {
+      if (isMainFrame) markLoaded();
+    });
+    contents.on('dom-ready', () => void contents.insertCSS(NATIVE_CSS));
+    this.opts.window.contentView.addChildView(view);
+    return view;
+  }
+
+  private ensureView(tab: Tab) {
+    if (tab.view || !this.baseUrl) return;
+    const path = this.pathFor(tab);
+    const spare = tab.kind === 'deck' ? this.takeSpare() : null;
+    const view = spare ?? this.createView();
     tab.view = view;
     this.wire(tab, view.webContents);
-    this.opts.window.contentView.addChildView(view);
-    void view.webContents.loadURL(this.urlFor(tab));
+    if (spare) this.adopt(spare.webContents, path);
+    else void view.webContents.loadURL(`${this.baseUrl}${path}`);
+  }
+
+  private adopt(contents: WebContents, path: string) {
+    this.adopting.add(contents);
+    setTimeout(() => this.adopted(contents), ADOPT_TIMEOUT_MS);
+    // Back would otherwise land on the spare page and bounce the tab home.
+    contents.once('did-navigate-in-page', () => contents.navigationHistory.clear());
+    contents.send('host:navigate', path);
+    this.scheduleWarm();
+  }
+
+  private takeSpare(): WebContentsView | null {
+    const spare = this.spare;
+    this.spare = null;
+    return spare && !spare.webContents.isDestroyed() ? spare : null;
+  }
+
+  private createSpare() {
+    const view = this.createView();
+    this.spare = view;
+    const contents = view.webContents;
+    contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    contents.on('render-process-gone', () => {
+      if (this.spare === view) this.destroySpare();
+    });
+    this.layout();
+    void contents.loadURL(`${this.baseUrl}${SPARE_PATH}`);
+  }
+
+  private destroySpare() {
+    const spare = this.spare;
+    this.spare = null;
+    if (spare) this.disposeView(spare);
+  }
+
+  private cancelWarm() {
+    if (this.warmTimer) clearTimeout(this.warmTimer);
+    this.warmTimer = null;
+  }
+
+  private scheduleWarm() {
+    this.cancelWarm();
+    this.warmTimer = setTimeout(() => {
+      this.warmTimer = null;
+      this.warm();
+    }, WARM_DELAY_MS);
+  }
+
+  // One background load at a time, after whatever the user is waiting on:
+  // first the tabs restored from the last session, then a spare for the next
+  // deck to open.
+  private warm() {
+    if (!this.baseUrl || this.opts.window.isDestroyed()) return;
+    const views = [...this.tabs.map((t) => t.view), this.spare];
+    if (views.some((v) => v && !this.loaded.has(v.webContents))) return;
+    const cold = this.tabs.find((t) => !t.view);
+    if (cold && this.tabs.filter((t) => t.view).length < MAX_WARM_TABS) {
+      this.ensureView(cold);
+      this.layout();
+    } else if (!this.spare) {
+      this.createSpare();
+    }
   }
 
   private destroyView(tab: Tab) {
     const view = tab.view;
     if (!view) return;
     tab.view = null;
+    this.disposeView(view);
+  }
+
+  private disposeView(view: WebContentsView) {
     const win = this.opts.window;
     if (!win.isDestroyed()) win.contentView.removeChildView(view);
     if (!view.webContents.isDestroyed()) view.webContents.close();
@@ -429,7 +574,8 @@ export class TabManager {
   // Core asks the host before moving between home and a deck; this catches
   // any navigation that still slips through so a tab keeps its role.
   private followNavigation(tab: Tab, contents: WebContents, url: URL) {
-    if (!this.sameOrigin(url)) return;
+    // A spare adopted mid-boot still commits its own page after joining a tab.
+    if (!this.sameOrigin(url) || url.pathname === SPARE_PATH) return;
     const deck = deckIdFromPath(url.pathname);
     if (tab.kind === 'deck') {
       if (deck && deck !== tab.slideId) {

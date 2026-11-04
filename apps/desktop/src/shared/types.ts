@@ -1,5 +1,9 @@
 export const TAB_STRIP_HEIGHT = 40;
 
+// Matches no core route, so a spare view boots the whole app behind a cheap
+// not-found page and waits there until a tab adopts it.
+export const SPARE_PATH = '/__open-slide-spare__';
+
 export const PACKAGE_MANAGERS = ['pnpm', 'npm', 'yarn', 'bun'] as const;
 
 export type PackageManager = (typeof PACKAGE_MANAGERS)[number];
