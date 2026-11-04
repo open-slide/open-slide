@@ -14,6 +14,7 @@ type Stored = DesktopSettings & {
   ports: Record<string, number>;
   skillsVersions: Record<string, string>;
   bounds: Bounds | null;
+  loginPath: string | null;
   introSeen: boolean;
   onboarded: boolean;
 };
@@ -29,6 +30,7 @@ const defaults: Stored = {
   ports: {},
   skillsVersions: {},
   bounds: null,
+  loginPath: null,
   introSeen: false,
   onboarded: false,
 };
@@ -132,6 +134,14 @@ export const settings = {
   },
   setBounds(bounds: Bounds) {
     current().bounds = bounds;
+    save();
+  },
+  loginPath(): string | null {
+    return current().loginPath;
+  },
+  setLoginPath(loginPath: string) {
+    if (current().loginPath === loginPath) return;
+    current().loginPath = loginPath;
     save();
   },
   introSeen(): boolean {

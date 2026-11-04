@@ -187,8 +187,7 @@ async function openWorkspace(root: string): Promise<TaskResult> {
   settings.setOnboarded(true);
   tabs?.reset(settings.session(inspection.path));
   broadcast();
-  await syncSkillsOnce(inspection.path);
-  await server.start(inspection.path);
+  await Promise.all([syncSkillsOnce(inspection.path), server.start(inspection.path)]);
   return { ok: true };
 }
 

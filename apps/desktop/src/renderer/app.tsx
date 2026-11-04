@@ -55,10 +55,15 @@ function MainWindow() {
 
   if (!state) return null;
 
+  // The restored tabs are known before the server is up, so they show while
+  // it boots and can already be switched, closed, and reordered.
+  const booting =
+    screen === 'server' && (state.server.state === 'idle' || state.server.state === 'starting');
+
   return (
     <TooltipProvider delay={200}>
       <div className="flex h-full flex-col text-foreground">
-        <TabStrip state={state} showTabs={screen === 'tabs'} />
+        <TabStrip state={state} showTabs={screen === 'tabs' || booting} />
         <main className="relative min-h-0 flex-1">
           {screen === 'onboarding' && (
             <Onboarding
