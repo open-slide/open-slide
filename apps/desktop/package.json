@@ -7,7 +7,7 @@
   "type": "module",
   "main": "./dist/main/index.js",
   "scripts": {
-    "start": "electron-vite dev",
+    "start": "node scripts/start.mjs",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "electron-vite build && electron-builder --dir",

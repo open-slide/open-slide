@@ -13,9 +13,12 @@ asarUnpack:
   - node_modules/**
 mac:
   category: public.app-category.productivity
+  icon: build/icon.icns
   target: [dmg, zip]
 win:
   target: [nsis]
+  icon: build/icon.png
 linux:
   target: [AppImage]
+  icon: build/icon.png
   category: Office
