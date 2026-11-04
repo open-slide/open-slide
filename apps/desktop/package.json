@@ -1,0 +1,39 @@
+{
+  "name": "desktop",
+  "productName": "open-slide",
+  "version": "0.0.0",
+  "private": true,
+  "description": "open-slide as a native desktop app.",
+  "type": "module",
+  "main": "./dist/main/index.js",
+  "scripts": {
+    "start": "node scripts/start.mjs",
+    "build": "electron-vite build && node scripts/build-native.mjs",
+    "preview": "electron-vite preview",
+    "package": "pnpm build && electron-builder --dir",
+    "dist": "pnpm build && electron-builder",
+    "typecheck": "tsc --noEmit --composite false -p tsconfig.node.json && tsc --noEmit --composite false -p tsconfig.web.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.306",
+    "@open-slide/cli": "workspace:*",
+    "@open-slide/core": "workspace:*",
+    "@openai/codex-sdk": "^0.163.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "lucide-react": "^1.25.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3"
+  }
+}

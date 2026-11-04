@@ -1,0 +1,201 @@
+@import "../../../../packages/core/src/app/styles.css";
+
+@source "./";
+@source "../../../../packages/core/src/app/components/ui";
+@source "../../../../packages/core/src/app/components/agent/provider-logo.tsx";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--sidebar);
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+
+/* The raw material lets saturated wallpaper bleed across the whole frame, so
+   the shell lays one neutral wash over it. Deck views stay clear above this
+   page and pick up the same wash, keeping every chrome region one tone. */
+html[data-translucent] body {
+  background-color: oklch(0.975 0 0 / 0.6);
+}
+
+html[data-translucent].dark body {
+  background-color: oklch(0.1 0 0 / 0.6);
+}
+
+input,
+textarea,
+.selectable {
+  user-select: text;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Native chrome loses its ink when the window isn't key; backgrounds stay so
+   the selected tab or pane still reads as selected. */
+[data-inactive] .window-chrome :is(svg, img, span):not(:has(svg, img, span)) {
+  opacity: 0.55;
+}
+
+/* Sheets dim what they cover lightly and never blur it. */
+[data-slot="dialog-overlay"] {
+  backdrop-filter: none;
+  background-color: oklch(0 0 0 / 0.08);
+}
+
+.dark [data-slot="dialog-overlay"] {
+  background-color: oklch(0 0 0 / 0.3);
+}
+
+/* The intro window is clear so it can open over the desktop. */
+html[data-route="intro"] body {
+  background-color: transparent;
+}
+
+@keyframes ob-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes ob-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--dir, 1) * 14px));
+    filter: blur(6px);
+  }
+}
+
+@keyframes ob-stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.955);
+    filter: blur(12px);
+  }
+}
+
+@keyframes ob-scene-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--dir, 1) * 3%)) scale(0.985);
+    filter: blur(8px);
+  }
+}
+
+@keyframes ob-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+}
+
+@keyframes ob-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes ob-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes ob-aurora {
+  to {
+    transform: translate3d(6%, 4%, 0) scale(1.14) rotate(4deg);
+  }
+}
+
+@keyframes ob-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.ob-fade {
+  animation: ob-fade 1.4s ease-out both;
+}
+
+.ob-in {
+  animation: ob-in 620ms var(--ease-swift) both;
+  animation-delay: calc(120ms + var(--i, 0) * 70ms);
+}
+
+.ob-stage-in {
+  animation: ob-stage-in 1100ms var(--ease-swift) both;
+}
+
+.ob-scene-in {
+  animation: ob-scene-in 700ms var(--ease-swift) both;
+}
+
+.ob-pop {
+  animation: ob-pop 520ms var(--ease-swift) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+.ob-grow {
+  transform-origin: bottom;
+  animation: ob-grow 800ms var(--ease-swift) both;
+  animation-delay: calc(var(--i, 0) * 80ms);
+}
+
+.ob-caret {
+  animation: ob-caret 1.05s steps(1) infinite;
+}
+
+.ob-aurora {
+  animation: ob-aurora 22s ease-in-out infinite alternate;
+}
+
+.ob-shimmer {
+  color: transparent;
+  background:
+    linear-gradient(
+      90deg,
+      var(--muted-foreground) 0%,
+      var(--foreground) 50%,
+      var(--muted-foreground) 100%
+    )
+    0 0 / 200% 100%;
+  background-clip: text;
+  animation: ob-shimmer 1.6s linear infinite;
+}
+
+/* The stage leans toward the pointer, a few degrees at most. */
+.ob-tilt {
+  transform: perspective(1600px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  transition: transform 900ms var(--ease-swift);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-in,
+  .ob-stage-in,
+  .ob-scene-in,
+  .ob-pop {
+    animation: ob-fade 200ms ease-out both;
+  }
+
+  .ob-grow,
+  .ob-caret,
+  .ob-aurora,
+  .ob-shimmer {
+    animation: none;
+  }
+
+  .ob-tilt {
+    transform: none;
+  }
+}

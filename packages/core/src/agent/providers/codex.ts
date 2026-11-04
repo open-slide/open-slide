@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { findSpawnableCli, importWorkspacePackage } from '../detect.ts';
+import { findSpawnableCli, importAgentPackage } from '../detect.ts';
 import { extractQuestionBlock, TEXT_QUESTIONS_INSTRUCTION } from '../prompt.ts';
 import {
   type AgentProvider,
@@ -174,7 +174,7 @@ export function createCodexProvider(): AgentProvider {
     cliCommand: 'codex',
     models: readCodexModels,
     async run(opts: ProviderRunOptions): Promise<void> {
-      const sdk = await importWorkspacePackage<CodexSdkModule>(opts.cwd, CODEX_SDK_PACKAGE);
+      const sdk = await importAgentPackage<CodexSdkModule>(opts.cwd, CODEX_SDK_PACKAGE);
       if (!sdk || typeof sdk.Codex !== 'function') throw new ProviderUnavailableError(this);
 
       const localCli = findSpawnableCli('codex');

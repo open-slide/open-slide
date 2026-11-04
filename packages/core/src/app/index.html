@@ -13,6 +13,9 @@
       html.dark {
         background-color: oklch(0.145 0 0);
       }
+      html[data-translucent] {
+        background-color: transparent;
+      }
     </style>
     <script>
       // Apply the stored theme before first paint; next-themes only runs
@@ -26,6 +29,10 @@
         (stored !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
       document.documentElement.classList.toggle('dark', dark);
       document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+      if (window.openSlideDesktop) {
+        document.documentElement.dataset.shell = 'desktop';
+        if (window.openSlideDesktop.translucent) document.documentElement.dataset.translucent = '';
+      }
     </script>
   </head>
   <body>

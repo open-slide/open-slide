@@ -196,6 +196,18 @@
   }
 }
 
+/* Inside the desktop app the window paints a native material (macOS
+   vibrancy, Windows Mica) behind the page; clearing the chrome ground lets
+   it through while content cards stay opaque. Nothing should scroll beneath
+   a chrome surface, since a clear one can't hide what passes under it. */
+html[data-translucent] {
+  --sidebar: transparent;
+}
+
+html[data-translucent] body {
+  background-color: transparent;
+}
+
 /*
  * Grid entrance — a quiet rise used by card grids. Pair with a small
  * per-item animation-delay for a capped stagger.

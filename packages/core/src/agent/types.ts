@@ -131,6 +131,9 @@ export type RespondPayload =
   | { allow: boolean }
   | { cancel: true };
 
+// The HMR custom event that carries AgentStreamEvent payloads.
+export const AGENT_EVENT = 'open-slide:agent';
+
 export type AgentStreamEvent =
   | { type: 'session'; session: AgentSessionSummary }
   | { type: 'session-removed'; sessionId: string }

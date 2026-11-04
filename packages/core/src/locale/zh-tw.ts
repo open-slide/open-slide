@@ -456,6 +456,7 @@ export const zhTW: Locale = {
     title: '匯出 PDF',
     processing: '處理第 {current} / {total} 頁',
     printing: '正在開啟列印對話框…',
+    saving: '正在儲存 PDF…',
     done: '完成',
   },
 
