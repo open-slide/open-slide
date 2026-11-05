@@ -70,6 +70,10 @@ interface BuildFlags {
   outDir?: string;
 }
 
+interface McpFlags {
+  cwd?: string;
+}
+
 interface SyncFlags {
   dryRun?: boolean;
 }
@@ -125,6 +129,15 @@ export async function run(argv: string[]): Promise<void> {
       await assertViteResolvesToCore();
       const { preview } = await import('./preview.ts');
       await preview(flags);
+    });
+
+  program
+    .command('mcp')
+    .description('Run a local MCP server over stdio so MCP clients can create and edit decks')
+    .option('--cwd <dir>', 'project directory (defaults to the current directory)')
+    .action(async (flags: McpFlags) => {
+      const { mcp } = await import('./mcp.ts');
+      await mcp({ cwd: flags.cwd, builtinSkillsDir: resolveBuiltinSkillsDir() });
     });
 
   program

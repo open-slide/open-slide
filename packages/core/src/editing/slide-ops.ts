@@ -389,6 +389,10 @@ function findDefaultExportArray(
   return null;
 }
 
+export function countDefaultExportPages(source: string): number | null {
+  return findDefaultExportArray(source)?.elements.length ?? null;
+}
+
 /**
  * Rewrite `export default [...]` so its elements appear in the requested order.
  *

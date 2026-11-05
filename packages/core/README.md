@@ -25,6 +25,7 @@ Once installed, the `open-slide` bin is available in the workspace:
 | `open-slide dev` | Start the dev server. Flags: `-p, --port <port>`, `--host [host]`, `--open`. |
 | `open-slide build` | Build a static site. Flags: `--out-dir <dir>` (defaults to `dist`). |
 | `open-slide preview` | Preview the production build. Flags: `-p, --port <port>`, `--host [host]`, `--open`. |
+| `open-slide mcp` | Run a local MCP server over stdio so MCP clients can create and edit decks. Flags: `--cwd <dir>`. |
 
 ## Config
 

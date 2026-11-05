@@ -30,7 +30,7 @@ type ParsedTheme = {
 
 const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
-function parseFrontmatter(raw: string, themeId: string): { fm: Frontmatter; body: string } {
+export function parseFrontmatter(raw: string, themeId: string): { fm: Frontmatter; body: string } {
   const match = raw.match(FM_RE);
   const fmText = match ? match[1] : '';
   const body = match ? match[2] : raw;
