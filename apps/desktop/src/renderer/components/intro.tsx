@@ -98,9 +98,7 @@ const SCORE_CUES: ScoreCues = {
   sheen: FLATTEN_SHEEN,
   morph: at.morph,
   lands: MARK_LANDS,
-  settled: at.morph + MORPH_MS,
   exit: at.exit,
-  docks: Array.from({ length: CARD_COUNT }, (_, order) => landAt(order)),
 };
 
 type Rect = { x: number; y: number; width: number; height: number };

@@ -5,9 +5,7 @@ export type ScoreCues = {
   sheen: number;
   morph: number;
   lands: number;
-  settled: number;
   exit: number;
-  docks: number[];
 };
 
 export type IntroSound = {
@@ -36,9 +34,6 @@ const HARMONY = {
   suspend: ['D3', 'A3', 'D4', 'G4', 'A4', 'D5'],
   arrive: ['D2', 'A2', 'D3', 'A3', 'D4', 'F#4', 'A4', 'D5', 'F#5', 'A5'],
 };
-const DOCK_BELLS = ['Bb4', 'D5', 'F5', 'Bb5', 'D6', 'F6'];
-const SHEEN_BELLS = ['G5', 'C6', 'D6', 'E6', 'G6', 'C7'];
-const SETTLE_BELLS = ['A5', 'D6', 'F#6', 'A6', 'D7'];
 
 const hz = (name: string) => {
   const [, letter = 'A', accidental, octave = '4'] = /^([A-G])(b|#)?(\d)$/.exec(name) ?? [];
@@ -439,7 +434,6 @@ export function performScore(
   const sheen = t(cues.sheen);
   const morph = t(cues.morph);
   const lands = t(cues.lands);
-  const settled = t(cues.settled);
   const exit = t(cues.exit);
   const end = exit + TAIL;
 
@@ -527,18 +521,6 @@ export function performScore(
   playBell(ctx, rack, 'D4', lands, 0.24, 5);
   playBell(ctx, rack, 'A4', lands, 0.13, 4.5);
   playBell(ctx, rack, 'D5', lands, 0.14, 4);
-
-  const lastDock = Math.max(cues.docks.length - 1, 1);
-  cues.docks.forEach((dock, i) => {
-    const note = DOCK_BELLS[i % DOCK_BELLS.length] as string;
-    playBell(ctx, rack, note, t(dock), 0.018 + (0.035 * i) / lastDock, 1.6);
-  });
-  SHEEN_BELLS.forEach((note, i) => {
-    playBell(ctx, rack, note, sheen + i * 0.17, 0.035 + i * 0.005, 2.2);
-  });
-  SETTLE_BELLS.forEach((note, i) => {
-    playBell(ctx, rack, note, settled + i * 0.26, 0.08, 3.6);
-  });
 
   playRiser(ctx, rack, sheen, lands);
   playGlide(ctx, rack, morph, lands);
