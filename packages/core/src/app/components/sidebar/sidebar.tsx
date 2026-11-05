@@ -132,14 +132,8 @@ export function Sidebar({
 
   return (
     <aside className="group/side relative flex h-full w-[16.5rem] shrink-0 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
-        <img
-          src={logo}
-          alt=""
-          aria-hidden
-          draggable={false}
-          className="size-6 shrink-0 select-none"
-        />
+      <div className="flex select-none items-center gap-2.5 px-4 pt-4 pb-3">
+        <img src={logo} alt="" aria-hidden draggable={false} className="size-6 shrink-0" />
         <h1 className="font-heading text-[13.5px] font-semibold tracking-tight">
           {t.home.appTitle}
         </h1>
