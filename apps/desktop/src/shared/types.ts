@@ -121,6 +121,7 @@ export type ShellApi = {
     target(): Promise<IntroTarget | null>;
     reveal(): void;
     done(): void;
+    close(): void;
   };
   settings: {
     get(): Promise<DesktopSettings>;

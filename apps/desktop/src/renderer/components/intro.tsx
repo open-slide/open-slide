@@ -295,15 +295,20 @@ export function Intro() {
       options: KeyframeAnimationOptions,
     ) => el?.animate(keyframes, { fill: 'both', easing: SWIFT, ...options });
 
+    let faded: Promise<void> | null = null;
     const finish = () => {
-      if (!cancelled) desktop.intro.done();
+      if (cancelled) return;
+      desktop.intro.done();
+      void faded?.then(() => {
+        if (!cancelled) desktop.intro.close();
+      });
     };
 
     const exit = (fast: boolean) => {
       if (exiting || cancelled) return;
       exiting = true;
       for (const timer of timers) clearTimeout(timer);
-      sound.fadeOut(fast ? 0.9 : 2.4);
+      faded = sound.fadeOut(fast ? 3.5 : 9.5);
       const fadeOut = animate(
         content,
         [{ opacity: 0, filter: 'blur(12px)', transform: 'scale(0.985)' }],

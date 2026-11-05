@@ -58,11 +58,14 @@ const SETTINGS_WIDTH = 640;
 const WINDOW_RADIUS = isMac ? 12 : isWindows ? 8 : 0;
 // The intro runs about fifteen seconds; past this it has stalled.
 const INTRO_TIMEOUT = 20_000;
+// Once released, the intro only has its score's tail left to ring out.
+const INTRO_TAIL_TIMEOUT = 14_000;
 
 let window: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 let introWindow: BrowserWindow | null = null;
 let introCovering = false;
+let releaseIntro: (() => void) | null = null;
 let tabs: TabManager | null = null;
 let workspace: WorkspaceInfo | null = null;
 
@@ -439,9 +442,20 @@ function playIntro() {
   introCovering = true;
   win.setAlwaysOnTop(true, 'screen-saver');
   wireShell(win);
-  const stalled = setTimeout(() => {
+  const close = () => {
     if (!win.isDestroyed()) win.close();
-  }, INTRO_TIMEOUT);
+  };
+  let stalled = setTimeout(close, INTRO_TIMEOUT);
+  // Kept open but clear and click-through, not hidden, so nothing can suspend the
+  // score's audio while it rings out over the revealed main window.
+  releaseIntro = () => {
+    releaseIntro = null;
+    clearTimeout(stalled);
+    stalled = setTimeout(close, INTRO_TAIL_TIMEOUT);
+    if (win.isDestroyed()) return;
+    win.setIgnoreMouseEvents(true);
+    win.setFocusable(false);
+  };
   win.once('ready-to-show', () => {
     win.setBounds(bounds);
     win.show();
@@ -449,7 +463,10 @@ function playIntro() {
   });
   win.on('closed', () => {
     clearTimeout(stalled);
-    if (introWindow === win) introWindow = null;
+    if (introWindow === win) {
+      introWindow = null;
+      releaseIntro = null;
+    }
     settings.setIntroSeen();
     revealMain();
     window?.focus();
@@ -548,7 +565,13 @@ function registerIpc() {
 
   handle('intro:target', () => introTarget());
   listen('intro:reveal', () => revealMain());
+  // Released rather than closed, so the score can ring out; the intro closes itself once quiet.
   listen('intro:done', () => {
+    releaseIntro?.();
+    revealMain();
+    window?.focus();
+  });
+  listen('intro:close', () => {
     if (introWindow && !introWindow.isDestroyed()) introWindow.close();
   });
   listen('onboarding:finish', () => {

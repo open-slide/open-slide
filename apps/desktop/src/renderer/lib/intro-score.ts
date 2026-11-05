@@ -11,12 +11,12 @@ export type ScoreCues = {
 export type IntroSound = {
   ready: Promise<void>;
   start(): void;
-  fadeOut(seconds: number): void;
+  fadeOut(seconds: number): Promise<void>;
   dispose(): void;
 };
 
 const MASTER = 0.5;
-const TAIL = 3.4;
+const TAIL = 10;
 const SAW_DETUNE = [-14, -7, 0, 7, 14];
 const SAW_PAN = [-0.9, 0.45, 0, -0.45, 0.9];
 const BELL_PARTIALS = [
@@ -41,6 +41,17 @@ const hz = (name: string) => {
     'C D EF G A B'.indexOf(letter) + (accidental === '#' ? 1 : accidental === 'b' ? -1 : 0);
   return 440 * 2 ** ((pitchClass + (Number(octave) + 1) * 12 - 69) / 12);
 };
+
+// Holds near full for the first stretch, then thins into a long tail, the way a
+// struck chord dies in a room. A plain exponential drops most of its level at once.
+function makeFadeCurve(from: number) {
+  const curve = new Float32Array(512);
+  for (let i = 0; i < curve.length; i++) {
+    const progress = i / (curve.length - 1);
+    curve[i] = from * ((1 + Math.cos(Math.PI * progress)) / 2) ** 1.3;
+  }
+  return curve;
+}
 
 function makeGain(ctx: BaseAudioContext, value: number) {
   const node = ctx.createGain();
@@ -450,6 +461,7 @@ export function performScore(
     cutoff.setValueAtTime(14000, lands);
     cutoff.exponentialRampToValueAtTime(6200, lands + 1.4);
     cutoff.exponentialRampToValueAtTime(3400, exit + 1);
+    cutoff.exponentialRampToValueAtTime(1100, exit + 8.5);
   }
 
   // A held breath just before the hit: the contrast is what makes it feel huge.
@@ -543,7 +555,11 @@ export function createIntroSound(cues: ScoreCues): IntroSound {
       performScore(ctx, fader, cues, ctx.currentTime + 0.03);
     },
     fadeOut(seconds) {
-      fader.gain.setTargetAtTime(0, ctx.currentTime, seconds / 5);
+      const now = ctx.currentTime;
+      const from = fader.gain.value;
+      fader.gain.cancelScheduledValues(now);
+      fader.gain.setValueCurveAtTime(makeFadeCurve(from), now, seconds);
+      return new Promise((resolve) => setTimeout(resolve, seconds * 1000 + 100));
     },
     dispose() {
       void ctx.close();

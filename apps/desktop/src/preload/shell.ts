@@ -29,6 +29,7 @@ const api: ShellApi = {
     target: () => ipcRenderer.invoke('intro:target'),
     reveal: () => ipcRenderer.send('intro:reveal'),
     done: () => ipcRenderer.send('intro:done'),
+    close: () => ipcRenderer.send('intro:close'),
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
