@@ -528,8 +528,10 @@ export function performScore(
   playBell(ctx, rack, 'A4', lands, 0.13, 4.5);
   playBell(ctx, rack, 'D5', lands, 0.14, 4);
 
+  const lastDock = Math.max(cues.docks.length - 1, 1);
   cues.docks.forEach((dock, i) => {
-    playBell(ctx, rack, DOCK_BELLS[i % DOCK_BELLS.length] as string, t(dock), 0.04 + i * 0.005, 2);
+    const note = DOCK_BELLS[i % DOCK_BELLS.length] as string;
+    playBell(ctx, rack, note, t(dock), 0.018 + (0.035 * i) / lastDock, 1.6);
   });
   SHEEN_BELLS.forEach((note, i) => {
     playBell(ctx, rack, note, sheen + i * 0.17, 0.035 + i * 0.005, 2.2);

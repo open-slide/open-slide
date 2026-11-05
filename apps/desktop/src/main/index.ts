@@ -56,7 +56,7 @@ const THEMES = new Set(['light', 'dark', 'system']);
 const SETTINGS_WIDTH = 640;
 // Matches the corner the system draws on the main window, so the intro lands on it.
 const WINDOW_RADIUS = isMac ? 12 : isWindows ? 8 : 0;
-// The intro runs about nine seconds; past this it has stalled.
+// The intro runs about fifteen seconds; past this it has stalled.
 const INTRO_TIMEOUT = 20_000;
 
 let window: BrowserWindow | null = null;

@@ -20,6 +20,9 @@ const WORDMARK = 'open-slide';
 const WINDOW_RATIO = 1.7;
 const WINDOW_RADIUS = 14;
 const VISIBLE_SLOTS = 4;
+const CARD_COUNT = 18;
+const OUTER_RING = 11;
+const PLAIN_SKETCHES: SketchVariant[] = ['title', 'chart', 'image', 'quote', 'grid'];
 const TILT = { angle: 30, zoom: 1.6, topWidth: 0.515, topY: 0.535 };
 const RIG_REST_Z = -0.25;
 const RIG_START_Z = -0.45;
@@ -34,115 +37,59 @@ const at = {
   glow: 200,
   cards: 350,
   gather: 3100,
-  flatten: 5750,
-  morph: 8950,
-  word: 9750,
-  exit: 12100,
+  flatten: 7300,
+  morph: 9950,
+  word: 10750,
+  exit: 12900,
 };
 const ENTER_MS = 1500;
+const ENTER_STAGGER = 45;
 const RISE_MS = 2000;
 const FLIGHT_MS = 1700;
-const FLATTEN_MS = 2600;
+const ROLL_MS = 2800;
+const FLIGHT_SAMPLES = 24;
+const FLATTEN_MS = 2200;
 const MORPH_MS = 1350;
 const SHEEN_MS = 1100;
-const FLATTEN_SHEEN = at.flatten + 1700;
+const FLATTEN_SHEEN = at.flatten + 1450;
+const FIRST_DOCK = at.gather + FLIGHT_MS;
 // COLLAPSE covers most of its travel early, so the mark reads as landed before
 // the morph formally ends. The bloom and the score's hit both start here.
 const MARK_LANDS = at.morph + MORPH_MS - 350;
-// SETTLE has nearly arrived by this share of a flight; a dock sounds on arrival.
-const DOCK_SHARE = 0.65;
 
 const GRAIN = `url("data:image/svg+xml;utf8,${encodeURIComponent(
   "<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>",
 )}")`;
 
-// Six slides fill the rail one card per slot, ordered so that no two flight paths
-// cross; the lowest two park past the window's edge, off screen. Depth stays positive so no card can pass behind the window's plane on its way.
-const SCATTER: {
-  x: number;
-  y: number;
-  width: number;
-  rotate: number;
-  variant: SketchVariant;
-  slot: number;
-  enter: number;
-  land: number;
-  depth: number;
-  blur: number;
-}[] = [
-  {
-    x: 0.197,
-    y: 0.228,
-    width: 0.216,
-    rotate: -3,
-    variant: 'cover',
-    slot: 0,
-    enter: 0,
-    land: 700,
-    depth: 0.19,
-    blur: 0,
-  },
-  {
-    x: 0.337,
-    y: 0.535,
-    width: 0.195,
-    rotate: -12,
-    variant: 'chart',
-    slot: 3,
-    enter: 2,
-    land: 240,
-    depth: 0.33,
-    blur: 0,
-  },
-  {
-    x: 0.174,
-    y: 0.767,
-    width: 0.24,
-    rotate: 23,
-    variant: 'quote',
-    slot: 5,
-    enter: 4,
-    land: 0,
-    depth: 0.48,
-    blur: 2.5,
-  },
-  {
-    x: 0.775,
-    y: 0.275,
-    width: 0.21,
-    rotate: 20,
-    variant: 'title',
-    slot: 1,
-    enter: 1,
-    land: 560,
-    depth: 0.15,
-    blur: 0,
-  },
-  {
-    x: 0.68,
-    y: 0.507,
-    width: 0.118,
-    rotate: 13,
-    variant: 'image',
-    slot: 2,
-    enter: 3,
-    land: 360,
-    depth: 0.025,
-    blur: 1.6,
-  },
-  {
-    x: 0.828,
-    y: 0.72,
-    width: 0.19,
-    rotate: -12,
-    variant: 'grid',
-    slot: 4,
-    enter: 5,
-    land: 120,
-    depth: 0.28,
-    blur: 0,
-  },
-];
+const rollEase = (progress: number) => (1 - Math.cos(Math.PI * progress)) / 2;
+const rollProgress = (eased: number) => Math.acos(1 - 2 * eased) / Math.PI;
+const ROLL_EASING = `linear(${Array.from({ length: 49 }, (_, i) => rollEase(i / 48).toFixed(4)).join(', ')})`;
+
+// Landings follow the inverse of the roll, so each card meets the top slot exactly
+// as the rail has moved one pitch down to make room for it.
+const landAt = (order: number) => FIRST_DOCK + ROLL_MS * rollProgress(order / (CARD_COUNT - 1));
+
+// In units of the rail's pitch: how far the rail still has to roll down at `ms`.
+const rollRemaining = (ms: number) => {
+  const progress = Math.min(1, Math.max(0, (ms - FIRST_DOCK) / ROLL_MS));
+  return (CARD_COUNT - 1) * (1 - rollEase(progress));
+};
+
+// Flights chase a moving slot, so they are sampled in JS and cannot use a CSS easing.
+const settle = (progress: number) => {
+  const smooth = progress * progress * (3 - 2 * progress);
+  return smooth * (2 - smooth);
+};
+
+const lerp = (from: number, to: number, amount: number) => from + (to - from) * amount;
+
+function random(seed: number) {
+  let t = seed;
+  return () => {
+    t = (t * 1664525 + 1013904223) % 4294967296;
+    return t / 4294967296;
+  };
+}
 
 const SCORE_CUES: ScoreCues = {
   glow: at.glow,
@@ -153,13 +100,20 @@ const SCORE_CUES: ScoreCues = {
   lands: MARK_LANDS,
   settled: at.morph + MORPH_MS,
   exit: at.exit,
-  docks: SCATTER.map((card) => at.gather + card.land + FLIGHT_MS * DOCK_SHARE).sort(
-    (a, b) => a - b,
-  ),
+  docks: Array.from({ length: CARD_COUNT }, (_, order) => landAt(order)),
 };
 
 type Rect = { x: number; y: number; width: number; height: number };
 type Stop = [ms: number, keyframe: Keyframe];
+type Pose = {
+  x: number;
+  y: number;
+  z: number;
+  pitch: number;
+  yaw: number;
+  roll: number;
+  scale: number;
+};
 
 const rectStyle = ({ x, y, width, height }: Rect) => ({
   left: `${x}px`,
@@ -170,11 +124,21 @@ const rectStyle = ({ x, y, width, height }: Rect) => ({
 
 // Every pose shares this function list, so transforms interpolate term by term
 // rather than through matrix decomposition, which would bow the flight paths.
-const place = (x: number, y: number, z: number, rotate: number, scale: number) =>
-  `translate3d(${x}px, ${y}px, ${z}px) rotate(${rotate}deg) scale(${scale})`;
+const place = ({ x, y, z, pitch, yaw, roll, scale }: Pose) =>
+  `translate3d(${x}px, ${y}px, ${z}px) rotateX(${pitch}deg) rotateY(${yaw}deg) rotate(${roll}deg) scale(${scale})`;
 
-const aim = (y: number, z: number, pitch: number, yaw: number, zoom: number) =>
-  `translate3d(0px, ${y}px, ${z}px) rotateX(${pitch}deg) rotateY(${yaw}deg) scale(${zoom})`;
+const aim = (y: number, z: number, pitch: number, yaw: number, roll: number, zoom: number) =>
+  `translate3d(0px, ${y}px, ${z}px) rotateX(${pitch}deg) rotateY(${yaw}deg) rotate(${roll}deg) scale(${zoom})`;
+
+// A card and its rail thumbnail swap on landing, so both derive their frame from
+// their own width and match exactly once the card has scaled down to the slot.
+const sketchFrame = (width: number): React.CSSProperties => {
+  const unit = width / 220;
+  return {
+    borderRadius: width * 0.065,
+    boxShadow: `inset 0 0 0 ${unit}px rgb(24 22 20 / 0.07), 0 ${30 * unit}px ${60 * unit}px ${-24 * unit}px rgb(0 0 0 / 0.55)`,
+  };
+};
 
 const halo = (opacity: number, scale: number): Keyframe => ({
   opacity,
@@ -198,13 +162,8 @@ function layoutStage(w: number, h: number) {
   const pad = width * 0.046;
   const thumbWidth = width * 0.16;
   const thumbHeight = (thumbWidth * 9) / 16;
-  const pitch = (height - pad * 2 - thumbHeight) / (VISIBLE_SLOTS - 1);
-  const slots: Rect[] = SCATTER.map((_, i) => ({
-    x: win.x + pad,
-    y: win.y + pad + i * pitch,
-    width: thumbWidth,
-    height: thumbHeight,
-  }));
+  // The fifth thumbnail is cut in half by the window's edge, so the rail reads as scrollable.
+  const pitch = (height - pad - thumbHeight / 2) / VISIBLE_SLOTS;
   const canvasLeft = pad + thumbWidth + width * 0.035;
   const canvas: Rect = {
     x: win.x + canvasLeft,
@@ -212,6 +171,8 @@ function layoutStage(w: number, h: number) {
     width: width - canvasLeft - pad,
     height: height - pad * 2,
   };
+
+  const rail: Rect = { x: win.x, y: win.y, width: canvasLeft, height };
 
   const perspective = width * 0.84;
   const radians = (TILT.angle * Math.PI) / 180;
@@ -222,35 +183,81 @@ function layoutStage(w: number, h: number) {
     z: topZ + reach * Math.sin(radians),
   };
 
-  const cards = SCATTER.map((card) => {
+  const dock = {
+    x: win.x + pad + thumbWidth / 2 - w / 2,
+    y: win.y + pad + thumbHeight / 2 - h / 2,
+  };
+  const rand = random(7);
+  const baseWidth = Math.min(300, Math.max(150, w * 0.15));
+  const entryOrders = Array.from({ length: CARD_COUNT }, (_, i) => i).sort(() => rand() - 0.5);
+  const ring = Array.from({ length: CARD_COUNT }, (_, i) => {
+    const outer = i < OUTER_RING;
+    const ringIndex = outer ? i : i - OUTER_RING;
+    const ringSize = outer ? OUTER_RING : CARD_COUNT - OUTER_RING;
+    const angle = (ringIndex / ringSize) * Math.PI * 2 + (outer ? 0.2 : 0.62) + rand() * 0.18;
+    const x = Math.cos(angle) * (outer ? 0.41 : 0.18) * w;
+    const y = Math.sin(angle) * (outer ? 0.36 : 0.16) * h;
+    return {
+      angle,
+      outer,
+      x,
+      y,
+      // A card's turn dips its corners by up to 0.08 of the perspective. Staying above
+      // that keeps them from slicing through the window's plane as they fly over it.
+      depth: outer ? 0.2 + rand() * 0.28 : 0.1 + rand() * 0.08,
+      twist: (rand() - 0.5) * 16,
+      entryOrder: entryOrders[i] ?? i,
+      reach: Math.hypot(x - dock.x, y - dock.y),
+    };
+  });
+  // Cards leave nearest-first, a wave sweeping toward the rail's single entry point.
+  const byReach = ring.map((card) => card.reach).sort((a, b) => a - b);
+
+  const cards = ring.map((card) => {
     const z = card.depth * perspective;
     // Undo the projection at rest, so depth reads as parallax in motion without
     // pulling a card off its place in the composition.
     const fit = (perspective - z - RIG_REST_Z * perspective) / perspective;
-    const cardWidth = card.width * Math.min(w, h * 1.6) * fit;
-    const x = (card.x - 0.5) * w * fit;
-    const y = (card.y - 0.5) * h * fit;
-    const slot = slots[card.slot] as Rect;
+    const cardWidth = baseWidth * (card.outer ? 1 : 0.7) * fit;
+    const x = card.x * fit;
+    const y = card.y * fit;
     const side = x < 0 ? -1 : 1;
+    const pitchTurn = Math.sin(card.angle) * 14;
+    const yawTurn = Math.cos(card.angle) * -22;
+    const order = byReach.indexOf(card.reach);
+    const slot = CARD_COUNT - 1 - order;
+    const variant: SketchVariant =
+      slot % 9 === 0 ? 'cover' : (PLAIN_SKETCHES[slot % PLAIN_SKETCHES.length] ?? 'title');
+    const pose: Pose = { x, y, z, pitch: pitchTurn, yaw: yawTurn, roll: card.twist, scale: 1 };
     return {
-      ...card,
+      variant,
+      slot,
+      entryOrder: card.entryOrder,
+      land: landAt(order),
       cardWidth,
-      from: place(x * 0.88, y * 0.88, z - perspective * 0.7, card.rotate * 1.6, 0.94),
-      pose: place(x, y, z, card.rotate, 1),
-      drift: place(
-        x + side * w * 0.007,
-        y - h * 0.006,
-        z + perspective * 0.03,
-        card.rotate + side * 1.4,
-        1,
-      ),
-      slotX: slot.x + slot.width / 2 - w / 2,
-      slotY: slot.y + slot.height / 2 - h / 2,
-      slotScale: slot.width / cardWidth,
+      blur: card.outer ? (card.depth > 0.38 ? 2 : 0) : 1.4,
+      from: {
+        x: x * 0.12,
+        y: y * 0.12,
+        z: -1.87 * perspective,
+        pitch: pitchTurn * 3,
+        yaw: yawTurn * 3,
+        roll: card.twist * 4,
+        scale: 1,
+      } satisfies Pose,
+      pose,
+      drift: {
+        ...pose,
+        x: x + side * w * 0.007,
+        y: y - h * 0.006,
+        z: z + perspective * 0.03,
+        roll: card.twist + side * 1.4,
+      } satisfies Pose,
+      dockScale: thumbWidth / cardWidth,
     };
   });
 
-  return { win, canvas, cards, perspective, tilt };
+  return { win, rail, canvas, cards, perspective, tilt, pad, pitch, thumbWidth, dock };
 }
 
 export function Intro() {
@@ -263,6 +270,8 @@ export function Intro() {
   const heroRef = useRef<HTMLSpanElement>(null);
   const sheenRef = useRef<HTMLSpanElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
+  const railRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const iconRef = useRef<HTMLDivElement>(null);
   const wordRef = useRef<HTMLHeadingElement>(null);
   const hintRef = useRef<HTMLDivElement>(null);
@@ -354,7 +363,7 @@ export function Intro() {
 
     const run = () => {
       const { innerWidth: w, innerHeight: h } = window;
-      const { win, canvas, cards, perspective, tilt } = stage;
+      const { win, rail, canvas, cards, perspective, tilt, pitch, dock } = stage;
       const iconBox = iconRef.current?.getBoundingClientRect();
       const tileSize = iconBox?.width ?? win.height * 0.3;
       const tile: Rect = {
@@ -403,15 +412,18 @@ export function Intro() {
         [
           0,
           {
-            transform: aim(0, RIG_START_Z * perspective, 5, -7, 1),
+            transform: aim(0, RIG_START_Z * perspective, 6, -7, -5, 0.96),
             easing: DRIFT_IN,
           },
         ],
-        [at.gather, { transform: aim(0, RIG_REST_Z * perspective, 0, 0, 1), easing: SETTLE }],
-        [at.flatten, { transform: aim(tilt.y, tilt.z, TILT.angle, 0, TILT.zoom), easing: SETTLE }],
-        [flattenEnd, { transform: aim(0, 0, 0, 0, FLAT_ZOOM), easing: 'linear' }],
-        [at.morph, { transform: aim(0, 0, 0, 0, FLAT_ZOOM * 1.02), easing: COLLAPSE }],
-        [morphEnd, { transform: aim(0, 0, 0, 0, 1) }],
+        [at.gather, { transform: aim(0, RIG_REST_Z * perspective, 0, 0, 0, 1), easing: SETTLE }],
+        [
+          at.flatten,
+          { transform: aim(tilt.y, tilt.z, TILT.angle, 0, 0, TILT.zoom), easing: SETTLE },
+        ],
+        [flattenEnd, { transform: aim(0, 0, 0, 0, 0, FLAT_ZOOM), easing: 'linear' }],
+        [at.morph, { transform: aim(0, 0, 0, 0, 0, FLAT_ZOOM * 1.02), easing: COLLAPSE }],
+        [morphEnd, { transform: aim(0, 0, 0, 0, 0, 1) }],
       ]);
 
       track(chromeRef.current, [
@@ -438,51 +450,82 @@ export function Intro() {
         ],
       ]);
 
+      track(scrollerRef.current, [
+        [
+          FIRST_DOCK,
+          {
+            transform: `translateY(${-rollRemaining(FIRST_DOCK) * pitch}px)`,
+            easing: ROLL_EASING,
+          },
+        ],
+        [FIRST_DOCK + ROLL_MS, { transform: 'translateY(0px)' }],
+      ]);
+      const railCenterX = rail.x + rail.width / 2 - w / 2;
+      const railCenterY = rail.y + rail.height / 2 - h / 2;
+      const railTravelX = tileCenterX + (railCenterX - winCenterX) * shrink - railCenterX;
+      const railTravelY = tileCenterY + (railCenterY - winCenterY) * shrink - railCenterY;
+      track(railRef.current, [
+        [at.morph, { transform: 'translate3d(0px, 0px, 1px) scale(1)', easing: COLLAPSE }],
+        [
+          morphEnd,
+          { transform: `translate3d(${railTravelX}px, ${railTravelY}px, 1px) scale(${shrink})` },
+        ],
+      ]);
+      track(railRef.current, [
+        [at.morph + MORPH_MS * 0.2, { opacity: 1, easing: 'ease-out' }],
+        [at.morph + MORPH_MS * 0.6, { opacity: 0 }],
+      ]);
+
       const cardEls = cardsRef.current?.children ?? [];
+      const thumbEls = scrollerRef.current?.children ?? [];
       cards.forEach((card, i) => {
         const el = cardEls[i];
-        const enter = at.cards + card.enter * 110;
-        const lands = at.gather + card.land;
-        const slotPose = place(card.slotX, card.slotY, 2, 0, card.slotScale);
-        const collapse = place(
-          tileCenterX + (card.slotX - winCenterX) * shrink,
-          tileCenterY + (card.slotY - winCenterY) * shrink,
-          2,
-          0,
-          card.slotScale * shrink,
-        );
+        const enter = at.cards + card.entryOrder * ENTER_STAGGER;
+        const depart = card.land - FLIGHT_MS;
+        const flight = Array.from({ length: FLIGHT_SAMPLES }, (_, sample): Stop => {
+          const progress = (sample + 1) / FLIGHT_SAMPLES;
+          const ms = depart + FLIGHT_MS * progress;
+          const eased = settle(progress);
+          // Weighting by eased² keeps the card from overshooting far above the rail
+          // early on, while still matching the rail's speed at the moment of contact.
+          const chase = (rollRemaining(ms) - rollRemaining(card.land)) * pitch * eased * eased;
+          return [
+            ms,
+            {
+              transform: place({
+                x: lerp(card.drift.x, dock.x, eased),
+                y: lerp(card.drift.y, dock.y, eased) - chase,
+                z: lerp(card.drift.z, 2, eased),
+                pitch: lerp(card.drift.pitch, 0, eased),
+                yaw: lerp(card.drift.yaw, 0, eased),
+                roll: lerp(card.drift.roll, 0, eased),
+                scale: lerp(1, card.dockScale, eased),
+              }),
+            },
+          ];
+        });
         track(el, [
-          [enter, { transform: card.from, easing: SOFT_OUT }],
-          [enter + ENTER_MS, { transform: card.pose, easing: 'linear' }],
-          [lands, { transform: card.drift, easing: SETTLE }],
-          [lands + FLIGHT_MS, { transform: slotPose, easing: 'linear' }],
-          [at.morph, { transform: slotPose, easing: COLLAPSE }],
-          [morphEnd, { transform: collapse }],
+          [enter, { transform: place(card.from), easing: SOFT_OUT }],
+          [enter + ENTER_MS, { transform: place(card.pose), easing: 'linear' }],
+          [depart, { transform: place(card.drift) }],
+          ...flight,
         ]);
-        track(
-          el,
-          // Parked cards vanish once off screen, or flattening would lift them
-          // back into view below the window.
-          card.slot >= VISIBLE_SLOTS
-            ? [
-                [enter, { opacity: 0, easing: 'ease-out' }],
-                [enter + 700, { opacity: 1, easing: 'linear' }],
-                [lands + FLIGHT_MS * 0.85, { opacity: 1, easing: 'linear' }],
-                [lands + FLIGHT_MS, { opacity: 0 }],
-              ]
-            : [
-                [enter, { opacity: 0, easing: 'ease-out' }],
-                [enter + 700, { opacity: 1, easing: 'linear' }],
-                [at.morph + MORPH_MS * 0.2, { opacity: 1, easing: 'ease-out' }],
-                [at.morph + MORPH_MS * 0.6, { opacity: 0 }],
-              ],
-        );
+        track(el, [
+          [enter, { opacity: 0, easing: 'ease-out' }],
+          [enter + ENTER_MS * 0.35, { opacity: 1, easing: 'linear' }],
+          [card.land - 1, { opacity: 1, easing: 'linear' }],
+          [card.land, { opacity: 0 }],
+        ]);
+        track(thumbEls[i], [
+          [card.land - 1, { opacity: 0, easing: 'linear' }],
+          [card.land, { opacity: 1 }],
+        ]);
         // Rack focus: out-of-plane cards sit soft until they gather into the window.
         track(el, [
-          [enter, { filter: 'blur(16px)', easing: SOFT_OUT }],
+          [enter, { filter: 'blur(12px)', easing: SOFT_OUT }],
           [enter + ENTER_MS, { filter: `blur(${card.blur}px)`, easing: 'linear' }],
-          [lands, { filter: `blur(${card.blur}px)`, easing: IN_OUT }],
-          [lands + 800, { filter: 'blur(0px)' }],
+          [depart, { filter: `blur(${card.blur}px)`, easing: IN_OUT }],
+          [depart + 800, { filter: 'blur(0px)' }],
         ]);
       });
 
@@ -620,13 +663,43 @@ export function Intro() {
             />
 
             <div
+              ref={railRef}
+              className="absolute overflow-hidden"
+              style={{
+                ...rectStyle(stage.rail),
+                borderRadius: `${WINDOW_RADIUS}px 0 0 ${WINDOW_RADIUS}px`,
+                transform: 'translate3d(0px, 0px, 1px)',
+              }}
+            >
+              <div
+                ref={scrollerRef}
+                className="absolute inset-0"
+                style={{ willChange: 'transform' }}
+              >
+                {stage.cards.map((card) => (
+                  <div
+                    key={card.slot}
+                    className="absolute opacity-0"
+                    style={{
+                      left: stage.pad,
+                      top: stage.pad + card.slot * stage.pitch,
+                      width: stage.thumbWidth,
+                    }}
+                  >
+                    <SlideSketch variant={card.variant} style={sketchFrame(stage.thumbWidth)} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
               ref={cardsRef}
               className="absolute inset-0"
               style={{ transformStyle: 'preserve-3d' }}
             >
               {stage.cards.map((card) => (
                 <div
-                  key={card.variant}
+                  key={card.slot}
                   className="absolute top-1/2 left-1/2 opacity-0"
                   style={{
                     width: card.cardWidth,
@@ -635,14 +708,7 @@ export function Intro() {
                     willChange: 'transform, opacity, filter',
                   }}
                 >
-                  <SlideSketch
-                    variant={card.variant}
-                    className="rounded-[14px]"
-                    style={{
-                      boxShadow:
-                        'inset 0 0 0 1px rgb(24 22 20 / 0.07), 0 30px 60px -24px rgb(0 0 0 / 0.55)',
-                    }}
-                  />
+                  <SlideSketch variant={card.variant} style={sketchFrame(card.cardWidth)} />
                 </div>
               ))}
             </div>
