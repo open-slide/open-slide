@@ -13,9 +13,9 @@ import { json } from './context.ts';
 export const RESTART_EXIT_CODE = 52;
 export const DEV_SUPERVISED_ENV = 'OPEN_SLIDE_DEV_SUPERVISED';
 
-const executionId = randomUUID();
+export const executionId = randomUUID();
 
-function isSupervised(): boolean {
+export function isSupervised(): boolean {
   return process.env[DEV_SUPERVISED_ENV] === '1';
 }
 

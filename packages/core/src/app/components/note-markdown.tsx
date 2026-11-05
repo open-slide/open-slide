@@ -3,7 +3,7 @@ import { type NoteBlock, type NoteInline, parseNoteMarkdown } from '@/lib/note-m
 
 const CODE_CLASS = 'rounded-[3px] bg-foreground/12 px-[0.3em] py-[0.1em] font-mono text-[0.9em]';
 
-function renderInline(nodes: NoteInline[]): ReactNode {
+export function renderInline(nodes: NoteInline[]): ReactNode {
   return nodes.map((node, i) => {
     switch (node.type) {
       case 'text':

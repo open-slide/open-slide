@@ -1,4 +1,15 @@
-import { Check, Languages, Loader2, Monitor, Moon, RotateCw, Search, Sun } from 'lucide-react';
+import {
+  ArrowUpCircle,
+  Check,
+  Languages,
+  Loader2,
+  Monitor,
+  Moon,
+  RotateCw,
+  Search,
+  Sparkles,
+  Sun,
+} from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { IconTooltip } from '@/components/icon-tooltip';
@@ -8,6 +19,7 @@ import { IS_APPLE } from '@/lib/keys';
 import { LOCALE_OPTIONS, setLocale } from '@/lib/locale-store';
 import { format, useLocale } from '@/lib/use-locale';
 import { useRestartServer } from '@/lib/use-restart-server';
+import { isUpdateLocked, openWhatsNew, startUpdate, useUpdate } from '@/lib/use-update';
 import {
   Command,
   CommandDialog,
@@ -59,7 +71,7 @@ export function CommandMenu({
       if (event.key !== 'k' && event.key !== 'K') return;
       if (!event.metaKey && !event.ctrlKey) return;
       // Auto-repeat while the combo is held would toggle the menu shut again.
-      if (event.repeat) return;
+      if (event.repeat || isUpdateLocked()) return;
       event.preventDefault();
       onOpenChange(!open);
     };
@@ -166,6 +178,7 @@ function useSharedCommandGroups(): CommandGroupSpec[] {
   const t = useLocale();
   const { theme, setTheme } = useTheme();
   const { canRestart, restarting, restartServer } = useRestartServer();
+  const { latest } = useUpdate();
 
   return useMemo(() => {
     const appearance: CommandSpec[] = [
@@ -203,27 +216,43 @@ function useSharedCommandGroups(): CommandGroupSpec[] {
       })),
     ];
 
-    const developer: CommandSpec[] =
-      import.meta.env.DEV && canRestart
-        ? [
-            {
-              id: 'restart-dev-server',
-              label: restarting ? t.home.restartingServer : t.home.restartServer,
-              icon: restarting ? (
-                <Loader2 className="animate-spin motion-reduce:animate-none" />
-              ) : (
-                <RotateCw />
-              ),
-              keywords: ['restart', 'dev', 'server', 'reload'],
-              disabled: restarting,
-              run: restartServer,
-            },
-          ]
-        : [];
+    const developer: CommandSpec[] = [];
+    if (import.meta.env.DEV && latest) {
+      developer.push({
+        id: 'update-open-slide',
+        label: format(t.update.commandUpdate, { version: latest }),
+        icon: <ArrowUpCircle />,
+        keywords: ['update', 'upgrade', 'version', 'release'],
+        run: startUpdate,
+      });
+    }
+    if (import.meta.env.DEV) {
+      developer.push({
+        id: 'whats-new',
+        label: t.update.whatsNew,
+        icon: <Sparkles />,
+        keywords: ['whats new', 'changelog', 'release notes', 'version'],
+        run: openWhatsNew,
+      });
+    }
+    if (import.meta.env.DEV && canRestart) {
+      developer.push({
+        id: 'restart-dev-server',
+        label: restarting ? t.home.restartingServer : t.home.restartServer,
+        icon: restarting ? (
+          <Loader2 className="animate-spin motion-reduce:animate-none" />
+        ) : (
+          <RotateCw />
+        ),
+        keywords: ['restart', 'dev', 'server', 'reload'],
+        disabled: restarting,
+        run: restartServer,
+      });
+    }
 
     return [
       { id: 'appearance', heading: t.commandMenu.groupAppearance, items: appearance },
       { id: 'developer', heading: t.commandMenu.groupDeveloper, items: developer },
     ];
-  }, [t, theme, setTheme, canRestart, restarting, restartServer]);
+  }, [t, theme, setTheme, canRestart, restarting, restartServer, latest]);
 }
