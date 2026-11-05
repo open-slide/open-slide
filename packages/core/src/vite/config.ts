@@ -85,6 +85,8 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
         userCwd,
         slidesDir,
         assetsDir,
+        themesDir,
+        themeImportAllowedHosts: config.themeImport?.allowedHosts,
         coreVersion: CORE_VERSION,
         agentEnabled: config.agent?.enabled ?? true,
       }),
