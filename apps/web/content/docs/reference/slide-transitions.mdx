@@ -164,3 +164,47 @@ export const transition: SlideTransition = {
   },
 };
 ```
+
+## PPTX export
+
+The editable PPTX export resolves the incoming page's transition, then maps it
+to a native PowerPoint transition:
+
+| Authored motion | PPTX |
+| --- | --- |
+| `morph` | Morph (`p159:morph`), with a plain fade in `mc:Fallback` |
+| Opacity-only `enter`, or a translation under the travel threshold | Fade |
+| Exit-only (no `enter`) | Fade approximation |
+| Translation of at least `24px` (or `2%`) on the dominant axis | Push along that axis, in the direction of travel |
+| `clipPath`-only, compound, or otherwise unrecognised phase | Fade |
+| A phase that returns to its starting values with changes in between | Fade |
+| A deliberate hold (no property changes) | Nothing |
+| A phase with fewer than two keyframes (its start is the element's underlying style) | Nothing |
+
+The runtime plays the incoming page's `transition`: its `enter` runs on the
+incoming page, while its `exit` runs on the outgoing page. PowerPoint has no
+outgoing-slide transition, so an exit-only transition is approximated as a fade
+on the incoming slide; using the exit's push direction there would move the
+wrong page.
+
+Rules:
+
+- Priority is `morph` → `enter` → `exit`; the incoming page's transition is the
+  only one the exporter reads.
+- An `enter` that changes nothing stays a no-op and emits nothing; the exporter
+  does not fall through to `exit`. A phase that changes in between but ends on
+  its starting values is approximated as a fade.
+- A phase needs at least two keyframes. With fewer, it animates from the
+  element's underlying style, which the exporter cannot read, so it emits
+  nothing rather than guessing a fade.
+- A subtle fade-plus-lift stays a fade: travel below `24px` or `2%` is
+  decoration, not a push.
+- A transition object with no `enter`, `exit`, or `morph` emits nothing.
+- Easing is not representable and is ignored. Duration is written as
+  PowerPoint's nearest speed preset (`fast` up to `500ms`, `med` up to `1000ms`,
+  `slow` above) plus the exact `p14:dur` where the build supports it, so older
+  viewers land on the preset.
+- [MorphElement](/docs/primitive/morph-element) ids are not written to the
+  file: PowerPoint matches objects itself under `morph`, so a pair it cannot
+  match simply fades in or out.
+- The image PPTX export is static — no transition or timing XML is written.

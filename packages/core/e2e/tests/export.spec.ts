@@ -1,17 +1,6 @@
-import fs from 'node:fs/promises';
-import { expect, type Page, test } from '@playwright/test';
-import { strFromU8, unzipSync } from 'fflate';
-import { openSlide } from './helpers.ts';
-
-async function exportDeck(page: Page, label: string): Promise<Record<string, Uint8Array>> {
-  await page.getByRole('button', { name: 'Download' }).click();
-  const download = page.waitForEvent('download');
-  await page.getByRole('menuitem', { name: label, exact: true }).click();
-  const file = await download;
-  expect(file.suggestedFilename()).toBe('alpha.pptx');
-  const path = await file.path();
-  return unzipSync(new Uint8Array(await fs.readFile(path)));
-}
+import { expect, test } from '@playwright/test';
+import { strFromU8 } from 'fflate';
+import { exportDeck, openSlide } from './helpers.ts';
 
 test.describe('pptx export', () => {
   test('writes native text boxes, backgrounds and speaker notes', async ({ page }) => {
@@ -49,6 +38,8 @@ test.describe('pptx export', () => {
     expect(slide2).toContain('<p:pic>');
     expect(slide2).toContain('<a:ext cx="12192000" cy="6858000"/>');
     expect(slide2).not.toContain('<a:t>');
+    expect(slide2).not.toContain('<p:transition');
+    expect(slide2).not.toContain('<p:timing');
     expect(Object.keys(parts).filter((n) => /^ppt\/media\/image\d+\.png$/.test(n))).toHaveLength(3);
   });
 });
