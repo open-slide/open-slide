@@ -1,5 +1,15 @@
 # @open-slide/core
 
+## 2.3.2
+
+### Patch Changes
+
+- [#588](https://github.com/open-slide/open-slide/pull/588) [`d12e3e1`](https://github.com/open-slide/open-slide/commit/d12e3e1d8b208d326f3fce370e42bede3fb96b74) Thanks [@1weiho](https://github.com/1weiho)! - Show New deck before an agent is connected, so first-time users can create a deck and install an agent from the panel.
+
+- [#599](https://github.com/open-slide/open-slide/pull/599) [`2f7edd0`](https://github.com/open-slide/open-slide/commit/2f7edd01405e3da1d63d603ce4efe09568da3e97) Thanks [@Ruxiu0409](https://github.com/Ruxiu0409)! - Keep slide text left-aligned in the mobile thumbnail strip instead of inheriting the button's centered alignment.
+
+- [#589](https://github.com/open-slide/open-slide/pull/589) [`557b56e`](https://github.com/open-slide/open-slide/commit/557b56e277277ff16860eb7398fffae962866f0c) Thanks [@1weiho](https://github.com/1weiho)! - Fade to black when entering and leaving present mode, and nudge the slide with a hint when stepping past the last slide.
+
 ## 2.3.1
 
 ### Patch Changes
