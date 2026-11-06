@@ -72,6 +72,7 @@ export function createAgentRunner(opts: {
     if (!text) throw new Error('empty prompt');
 
     const provider = providers[session.provider];
+    if (!provider) throw new Error(`unknown agent provider: ${session.provider}`);
     let context = options.context;
     let promptText = text;
     let resumeAt: string | null = null;

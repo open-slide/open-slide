@@ -6,9 +6,16 @@ import { pathToFileURL } from 'node:url';
 const IS_WINDOWS = process.platform === 'win32';
 const VERSION_TIMEOUT_MS = 5000;
 
-export function findOnPath(command: string, env: NodeJS.ProcessEnv = process.env): string | null {
+export function findOnPath(
+  command: string,
+  env: NodeJS.ProcessEnv = process.env,
+  platform = process.platform,
+): string | null {
   const dirs = (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean);
-  const exts = IS_WINDOWS ? (env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';') : [''];
+  const exts =
+    platform === 'win32' && !path.extname(command)
+      ? (env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';')
+      : [''];
   for (const dir of dirs) {
     for (const ext of exts) {
       const candidate = path.join(dir, command + ext.toLowerCase());

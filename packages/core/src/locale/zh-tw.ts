@@ -604,6 +604,8 @@ export const zhTW: Locale = {
     cliFoundNoVersion: '已找到 CLI',
     cliMissing: 'PATH 中找不到 CLI',
     cliHint: '請安裝 {name} CLI 並登入一次；面板會沿用它的登入狀態。',
+    acpMissing: '找不到已設定的 ACP 指令：{command}',
+    acpConfigured: '已透過 Agent Client Protocol 設定。',
     needCliTitle: '請先安裝 Claude Code 或 Codex',
     needCliDescription:
       '面板會操作這台電腦上的 coding agent CLI，但 PATH 中找不到任何一個。請先安裝其中一個並在終端機登入一次，再重新檢查。',

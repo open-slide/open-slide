@@ -1,3 +1,5 @@
+import { statSync } from 'node:fs';
+import path from 'node:path';
 import { type PackageManager, runCommand } from '../vite/routes/update.ts';
 import { commandVersion, findOnPath, resolveWorkspacePackage } from './detect.ts';
 import type { AgentProvider } from './provider.ts';
@@ -9,6 +11,30 @@ async function providerStatus(
   userCwd: string,
   provider: AgentProvider,
 ): Promise<AgentProviderStatus> {
+  if (provider.type === 'acp') {
+    const command = provider.cliCommand;
+    const file = path.isAbsolute(command)
+      ? command
+      : command.includes('/') || command.includes('\\')
+        ? path.resolve(userCwd, command)
+        : findOnPath(command);
+    let executable = false;
+    try {
+      executable = Boolean(file && statSync(file).isFile());
+    } catch {}
+    return {
+      id: provider.id,
+      type: 'acp',
+      name: provider.name,
+      sdkPackage: '',
+      sdkVersion: null,
+      cliCommand: command,
+      cliFound: executable,
+      cliVersion: null,
+      ready: executable,
+      models: await provider.models(),
+    };
+  }
   const sdk = resolveWorkspacePackage(userCwd, provider.sdkPackage);
   const cliPath = findOnPath(provider.cliCommand);
   const [cliVersion, models] = await Promise.all([

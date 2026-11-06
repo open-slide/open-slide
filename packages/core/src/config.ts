@@ -8,6 +8,17 @@ export type OpenSlideBuildConfig = {
 
 export type OpenSlideAgentConfig = {
   enabled?: boolean;
+  providers?: OpenSlideAcpProviderConfig[];
+  /** Offer the built-in Claude Code and Codex providers. Defaults to `true`. */
+  builtinProviders?: boolean;
+};
+
+export type OpenSlideAcpProviderConfig = {
+  id: string;
+  name: string;
+  type: 'acp';
+  command: string;
+  args?: string[];
 };
 
 export type OpenSlideConfig = {
