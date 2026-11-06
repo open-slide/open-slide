@@ -3,11 +3,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  commandVersion,
   entryFromPackageJson,
   findOnPath,
   importWorkspacePackage,
   parseVersion,
   resolveWorkspacePackage,
+  versionSpawnSpec,
 } from './detect.ts';
 
 let dir: string;
@@ -49,6 +51,41 @@ describe('entryFromPackageJson', () => {
     expect(entryFromPackageJson({ module: 'm.js', main: 'c.js' })).toBe('m.js');
     expect(entryFromPackageJson({ main: 'c.js' })).toBe('c.js');
     expect(entryFromPackageJson({})).toBeNull();
+  });
+});
+
+describe('versionSpawnSpec', () => {
+  it('spawns directly, and only routes Windows batch shims through a shell', () => {
+    expect(versionSpawnSpec('/usr/bin/claude', false)).toEqual({
+      file: '/usr/bin/claude',
+      args: ['--version'],
+    });
+    expect(versionSpawnSpec('C:\\Tools\\claude.exe', true)).toEqual({
+      file: 'C:\\Tools\\claude.exe',
+      args: ['--version'],
+    });
+    const batch = versionSpawnSpec('C:\\Tools\\claude.cmd', true);
+    expect(batch).toEqual({ file: '"C:\\Tools\\claude.cmd" --version', args: [], shell: true });
+    expect(versionSpawnSpec('C:\\Tools\\claude.cmd', false)).toEqual({
+      file: 'C:\\Tools\\claude.cmd',
+      args: ['--version'],
+    });
+  });
+});
+
+describe('commandVersion', () => {
+  it('runs the CLI and parses its version output', async () => {
+    const bin = path.join(dir, 'bin');
+    await mkdir(bin);
+    // On Windows a .cmd shim, which also covers the batch-through-shell path.
+    const windows = process.platform === 'win32';
+    const file = path.join(bin, windows ? 'fake-cli.cmd' : 'fake-cli');
+    await writeFile(
+      file,
+      windows ? '@echo fake-cli 4.5.6\r\n' : '#!/bin/sh\n echo fake-cli 4.5.6 \n',
+    );
+    await chmod(file, 0o755);
+    expect(await commandVersion(file)).toBe('4.5.6');
   });
 });
 
