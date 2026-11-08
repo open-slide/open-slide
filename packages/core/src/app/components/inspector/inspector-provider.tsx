@@ -93,6 +93,8 @@ type RevealTarget = {
   instanceId: string | null;
 };
 
+type SavedReveal = { pageIndex: number; targets: RevealTarget[] };
+
 // Only the incoming layer carries it: an interrupted transition relabels and
 // remounts the outgoing one, so anything found there goes stale.
 const PAGE_LAYER_ATTR = 'data-osd-current-page';
@@ -548,7 +550,8 @@ export function InspectorProvider({
   const [selection, setSelectionState] = useState<SelectedTarget[]>([]);
   const selected = selection.at(-1) ?? null;
   // Targets an undo/redo should select once their page is on screen.
-  const pendingRevealRef = useRef<{ pageIndex: number; targets: RevealTarget[] } | null>(null);
+  const pendingRevealRef = useRef<SavedReveal | null>(null);
+  const lastBufferedRevealRef = useRef<SavedReveal | null>(null);
   const setSelection = useCallback((targets: SelectedTarget[]) => {
     pendingRevealRef.current = null;
     setSelectionState(targets.map(rememberTarget));
@@ -962,6 +965,7 @@ export function InspectorProvider({
         : 'noop';
       const coalesceKey = `inspector:${target.line}:${target.column}:${first?.kind ?? 'noop'}:${opKey}`;
       const reveal = [captureRevealTarget(target)];
+      lastBufferedRevealRef.current = { targets: reveal, pageIndex };
       history.record({
         coalesceKey,
         pageIndex,
@@ -1009,6 +1013,7 @@ export function InspectorProvider({
       );
       for (const edit of edits) applyOpsRaw(edit.line, edit.column, edit.anchor, edit.ops);
       const reveal = edits.map(captureRevealTarget);
+      lastBufferedRevealRef.current = { targets: reveal, pageIndex };
       history.record({
         coalesceKey,
         pageIndex,
@@ -1116,23 +1121,26 @@ export function InspectorProvider({
     [enqueueWrite, expectSync, restoreRevision, history, t],
   );
 
-  // Several revisions recorded together undo as one step, newest first.
+  // Several revisions recorded together undo as one step, newest first. A
+  // write of buffered edits keeps the page and elements those edits touched,
+  // so undoing it after the save still lands on them.
   const recordSavedRevision = useCallback(
-    (revisionIds: string | string[], upTo: number | null) => {
+    (revisionIds: string | string[], upTo: number | null, reveal?: SavedReveal | null) => {
       const ids = Array.isArray(revisionIds) ? revisionIds : [revisionIds];
+      const restore = (order: string[], direction: 'undo' | 'redo') => {
+        let last: Promise<void> | undefined;
+        for (const id of order) last = restoreSavedRevision(id, direction);
+        if (reveal) void last?.then(() => revealTargets(reveal.targets, reveal.pageIndex));
+      };
       const entry = {
-        pageIndex: pageIndexRef.current,
-        undo: () => {
-          for (const id of [...ids].reverse()) void restoreSavedRevision(id, 'undo');
-        },
-        redo: () => {
-          for (const id of ids) void restoreSavedRevision(id, 'redo');
-        },
+        pageIndex: reveal?.pageIndex ?? pageIndexRef.current,
+        undo: () => restore([...ids].reverse(), 'undo'),
+        redo: () => restore(ids, 'redo'),
       };
       if (upTo === null) history.record(entry);
       else history.settle(INSPECTOR_HISTORY, upTo, entry);
     },
-    [history, restoreSavedRevision],
+    [history, restoreSavedRevision, revealTargets],
   );
 
   const commitEdits = useCallback(
@@ -1140,6 +1148,8 @@ export function InspectorProvider({
       enqueueWrite(async () => {
         const buckets = pendingRef.current;
         if (buckets.size === 0) return;
+        const reveal = lastBufferedRevealRef.current;
+        lastBufferedRevealRef.current = null;
         type PendingItem = {
           bucket: Bucket;
           seq: number;
@@ -1303,7 +1313,7 @@ export function InspectorProvider({
         } finally {
           refreshCount();
           setSaving(false);
-          if (revisionId) recordSavedRevision(revisionId, upTo);
+          if (revisionId) recordSavedRevision(revisionId, upTo, reveal);
           else history.settle(INSPECTOR_HISTORY, upTo, null);
         }
       }),

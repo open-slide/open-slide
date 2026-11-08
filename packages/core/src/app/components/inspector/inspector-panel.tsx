@@ -159,7 +159,13 @@ export function InspectorPanel({
   );
 
   const multiple = selection.length > 1;
-  const tab = inlineEdit ? 'format' : preferredTab;
+  // A multi-selection opens on Arrange, where aligning and distributing live;
+  // switching it to Format doesn't change the single-selection preference.
+  const [multiTab, setMultiTab] = useState<'format' | 'arrange'>('arrange');
+  useEffect(() => {
+    if (!multiple) setMultiTab('arrange');
+  }, [multiple]);
+  const tab = inlineEdit ? 'format' : multiple ? multiTab : preferredTab;
 
   // Formatting a multi-selection writes the same ops to every element.
   const applyAll = (ops: EditOp[]) => {
@@ -304,7 +310,9 @@ export function InspectorPanel({
       value={tab}
       onValueChange={(value) => {
         if (value === 'arrange') stopInlineEdit();
-        if (value === 'format' || value === 'arrange') onTabChange(value);
+        if (value !== 'format' && value !== 'arrange') return;
+        if (multiple) setMultiTab(value);
+        else onTabChange(value);
       }}
       className="h-full w-full min-w-0 shrink-0 gap-0"
       onPointerDownCapture={(event) => {
