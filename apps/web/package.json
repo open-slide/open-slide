@@ -12,6 +12,7 @@
     "format": "biome format --write"
   },
   "dependencies": {
+    "@vgpu/wgsl": "0.6.0",
     "fumadocs-core": "16.17.8",
     "fumadocs-mdx": "15.4.10",
     "fumadocs-ui": "16.15.12",
@@ -22,7 +23,8 @@
     "next-themes": "^0.4.6",
     "posthog-js": "^1",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "vgpu": "0.6.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",
