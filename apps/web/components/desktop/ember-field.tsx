@@ -65,6 +65,13 @@ export function EmberField({ className = '' }: { className?: string }) {
       }
 
       const device = gpu;
+      void device.lost.then(() => {
+        if (disposed) return;
+        sync = undefined;
+        stop();
+        cancelAnimationFrame(resizeRaf);
+        setLit(false);
+      });
       try {
         const target = surface(device, canvas, { dpr: [1, 1.5] });
         const field = effect(device, emberShader, {
