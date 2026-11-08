@@ -1,4 +1,6 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { app } from 'electron';
 import {
@@ -153,12 +155,20 @@ function cliEntry(): string {
   return path.join(pkgDir, 'dist', 'cli.js');
 }
 
-export async function createWorkspace(
-  request: CreateWorkspaceRequest,
+// Where a first-run workspace goes, so someone who has never heard of a
+// workspace can start without being asked for a folder.
+function defaultWorkspaceRoot(): string {
+  return path.join(homedir(), '.open-slide', 'slides');
+}
+
+async function initWorkspace(
+  parent: string,
+  name: string,
+  flags: string[],
   env: NodeJS.ProcessEnv,
   onChunk: (chunk: string) => void,
 ): Promise<TaskResult & { root?: string }> {
-  const target = path.join(request.parent, request.name);
+  const target = path.join(parent, name);
   const existing = inspectWorkspace(target);
   if (existing.kind === 'project' || existing.kind === 'other') {
     return { ok: false, error: `${target} already exists and is not empty.` };
@@ -169,10 +179,10 @@ export async function createWorkspace(
   } catch {
     return { ok: false, error: 'The bundled @open-slide/cli is missing from this build.' };
   }
-  const args = ['init', request.name, `--use-${request.packageManager}`];
+  const args = ['init', name, ...flags];
   onChunk(`$ open-slide ${args.join(' ')}\n`);
   const { done } = runNodeScript(entry, args, {
-    cwd: request.parent,
+    cwd: parent,
     env,
     onChunk,
     timeoutMs: INSTALL_TIMEOUT_MS,
@@ -182,4 +192,32 @@ export async function createWorkspace(
     return { ok: false, error: `open-slide init exited with code ${code}` };
   }
   return { ok: true, root: target };
+}
+
+export function createWorkspace(
+  request: CreateWorkspaceRequest,
+  env: NodeJS.ProcessEnv,
+  onChunk: (chunk: string) => void,
+): Promise<TaskResult & { root?: string }> {
+  return initWorkspace(
+    request.parent,
+    request.name,
+    [`--use-${request.packageManager}`],
+    env,
+    onChunk,
+  );
+}
+
+// The bundled core already provides everything the template imports, so this
+// skips the install and needs no package manager. It also skips git: on a Mac
+// without the developer tools, merely probing for git opens an install prompt.
+export async function createDefaultWorkspace(
+  env: NodeJS.ProcessEnv,
+  onChunk: (chunk: string) => void,
+): Promise<TaskResult & { root?: string }> {
+  const root = defaultWorkspaceRoot();
+  if (inspectWorkspace(root).kind === 'project') return { ok: true, root };
+  const parent = path.dirname(root);
+  await mkdir(parent, { recursive: true });
+  return initWorkspace(parent, path.basename(root), ['--no-install', '--no-git'], env, onChunk);
 }

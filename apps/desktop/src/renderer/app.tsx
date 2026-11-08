@@ -69,8 +69,9 @@ function MainWindow() {
             <Onboarding
               state={state}
               error={actions.error}
+              starting={actions.starting}
               onChoose={chooseWorkspace}
-              onCreate={actions.createNew}
+              onStart={() => void actions.quickStart()}
               onOpenRecent={(path) => void actions.open(path)}
             />
           )}
@@ -78,8 +79,9 @@ function MainWindow() {
             <Welcome
               state={state}
               error={actions.error}
+              starting={actions.starting}
               onChoose={chooseWorkspace}
-              onCreate={actions.createNew}
+              onStart={() => void actions.quickStart()}
               onOpenRecent={(path) => void actions.open(path)}
             />
           )}

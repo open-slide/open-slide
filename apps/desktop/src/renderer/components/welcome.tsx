@@ -1,21 +1,24 @@
-import { FolderOpen, Plus, X } from 'lucide-react';
+import { FolderOpen, Sparkles, X } from 'lucide-react';
 import logo from '@/assets/open-slide.svg';
 import { cn } from '@/lib/utils';
 import type { AppState } from '../../shared/types';
 import { desktop } from '../lib/desktop';
 import { splitPath, tildify } from '../lib/paths';
+import { LineLoader } from './primitives';
 
 export function Welcome({
   state,
   error,
+  starting,
   onChoose,
-  onCreate,
+  onStart,
   onOpenRecent,
 }: {
   state: AppState;
   error: string | null;
+  starting: boolean;
   onChoose: () => void;
-  onCreate: () => void;
+  onStart: () => void;
   onOpenRecent: (path: string) => void;
 }) {
   return (
@@ -26,22 +29,27 @@ export function Welcome({
           Welcome to open-slide
         </h1>
         <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted-foreground">
-          Decks live in a workspace folder. Open one you already have, or create a new one — the
-          agent skills come preconfigured.
+          Jump straight in and your decks are kept for you, or open an open-slide folder you already
+          have.
         </p>
 
         <div className="mt-7 grid grid-cols-2 gap-3">
           <ActionTile
-            icon={<FolderOpen className="size-4" />}
-            title="Open workspace…"
-            description="Pick a folder that holds an open-slide workspace."
-            onClick={onChoose}
+            icon={<Sparkles className="size-4" />}
+            title="Start creating"
+            description={
+              starting ? 'Getting things ready…' : 'Jump straight in. Nothing to set up.'
+            }
+            busy={starting}
+            disabled={starting}
+            onClick={onStart}
           />
           <ActionTile
-            icon={<Plus className="size-4" />}
-            title="Create workspace…"
-            description="Scaffold a new workspace and install it."
-            onClick={onCreate}
+            icon={<FolderOpen className="size-4" />}
+            title="Open a folder…"
+            description="Pick up an open-slide folder you already have."
+            disabled={starting}
+            onClick={onChoose}
           />
         </div>
 
@@ -90,21 +98,28 @@ function ActionTile({
   icon,
   title,
   description,
+  busy = false,
+  disabled = false,
   onClick,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
+  busy?: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      aria-busy={busy}
       className={cn(
-        'flex flex-col items-start gap-3 rounded-[10px] border border-border bg-card p-4 text-left shadow-edge outline-none',
-        'transition-[background-color] duration-100 active:bg-muted/70',
+        'relative flex flex-col items-start gap-3 overflow-hidden rounded-[10px] border border-border bg-card p-4 text-left shadow-edge outline-none',
+        'transition-[background-color,opacity] duration-100 enabled:active:bg-muted/70',
         'focus-visible:ring-2 focus-visible:ring-ring/40',
+        disabled && !busy && 'opacity-50',
       )}
     >
       <span className="flex size-8 items-center justify-center rounded-[7px] bg-muted text-foreground/80">
@@ -118,6 +133,7 @@ function ActionTile({
           {description}
         </span>
       </span>
+      {busy && <LineLoader className="absolute inset-x-0 bottom-0 w-full bg-transparent" />}
     </button>
   );
 }

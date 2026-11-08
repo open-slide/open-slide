@@ -40,6 +40,7 @@ import { TabManager } from './tabs';
 import {
   availablePackageManagers,
   bundledCore,
+  createDefaultWorkspace,
   createWorkspace,
   detectPackageManager,
   inspectWorkspace,
@@ -629,6 +630,13 @@ function registerIpc() {
     );
     if (!result.ok || !result.root) return result;
     settings.update({ packageManager: request.packageManager });
+    return openWorkspace(result.root);
+  });
+  handle('workspace:create-default', async () => {
+    const result = await createDefaultWorkspace(await childEnv(), (chunk) =>
+      sendLog('create', chunk),
+    );
+    if (!result.ok || !result.root) return result;
     return openWorkspace(result.root);
   });
   handle('workspace:install', () => installWorkspace());

@@ -9,7 +9,6 @@ import {
   Move,
   Palette,
   PenLine,
-  Plus,
   Presentation,
   Sparkles,
   SwatchBook,
@@ -122,10 +121,10 @@ const STEPS: Step[] = [
   },
   {
     kind: 'workspace',
-    eyebrow: 'Workspace',
-    title: 'Give your decks a home.',
-    body: 'A workspace is a folder that holds your decks, themes, and assets. Start a fresh one, or open one you already have.',
-    file: '~/Documents/my-slides',
+    eyebrow: 'Get started',
+    title: 'Ready when you are.',
+    body: 'Your decks, themes, and images are kept together for you, so there is nothing to set up. Already using open-slide? Open the folder you work in.',
+    file: 'My decks',
     Scene: WorkspaceScene,
   },
 ];
@@ -154,14 +153,16 @@ function useArmed(ready: boolean): boolean {
 export function Onboarding({
   state,
   error,
+  starting,
   onChoose,
-  onCreate,
+  onStart,
   onOpenRecent,
 }: {
   state: AppState;
   error: string | null;
+  starting: boolean;
   onChoose: () => void;
-  onCreate: () => void;
+  onStart: () => void;
   onOpenRecent: (path: string) => void;
 }) {
   const armed = useArmed(!state.intro);
@@ -301,8 +302,9 @@ export function Onboarding({
                     <WorkspaceChoices
                       state={state}
                       error={error}
+                      starting={starting}
                       onChoose={onChoose}
-                      onCreate={onCreate}
+                      onStart={onStart}
                       onOpenRecent={onOpenRecent}
                     />
                   )}
@@ -499,14 +501,16 @@ function AgentRow({
 function WorkspaceChoices({
   state,
   error,
+  starting,
   onChoose,
-  onCreate,
+  onStart,
   onOpenRecent,
 }: {
   state: AppState;
   error: string | null;
+  starting: boolean;
   onChoose: () => void;
-  onCreate: () => void;
+  onStart: () => void;
   onOpenRecent: (path: string) => void;
 }) {
   const current = state.workspace;
@@ -516,15 +520,18 @@ function WorkspaceChoices({
       <div className="grid w-full grid-cols-2 gap-3 text-left">
         <ChoiceTile
           primary
-          icon={<Plus className="size-4" />}
-          title="Create a workspace"
-          description="Start fresh, with the agent skills set up."
-          onClick={onCreate}
+          icon={<Sparkles className="size-4" />}
+          title="Start creating"
+          description={starting ? 'Getting things ready…' : 'Jump straight in. Nothing to set up.'}
+          busy={starting}
+          disabled={starting}
+          onClick={onStart}
         />
         <ChoiceTile
           icon={<FolderOpen className="size-4" />}
           title="Open a folder…"
-          description="Pick up a workspace you already have."
+          description="Pick up an open-slide folder you already have."
+          disabled={starting}
           onClick={onChoose}
         />
       </div>
@@ -552,6 +559,7 @@ function WorkspaceChoices({
               key={path}
               type="button"
               title={path}
+              disabled={starting}
               onClick={() => onOpenRecent(path)}
               className="rounded-full border border-border bg-card px-2.5 py-1 text-[12px] font-medium shadow-edge outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40"
             >
@@ -569,22 +577,29 @@ function ChoiceTile({
   title,
   description,
   primary = false,
+  busy = false,
+  disabled = false,
   onClick,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
   primary?: boolean;
+  busy?: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      aria-busy={busy}
       className={cn(
-        'group flex flex-col items-start gap-3 rounded-[12px] border border-border bg-card p-4 text-left shadow-edge outline-none',
-        'transition-[translate,box-shadow,background-color] duration-200 ease-[var(--ease-swift)] hover:-translate-y-0.5 hover:shadow-floating active:translate-y-0 active:bg-muted/60',
+        'group relative flex flex-col items-start gap-3 overflow-hidden rounded-[12px] border border-border bg-card p-4 text-left shadow-edge outline-none',
+        'transition-[translate,box-shadow,background-color,opacity] duration-200 ease-[var(--ease-swift)] enabled:hover:-translate-y-0.5 enabled:hover:shadow-floating enabled:active:translate-y-0 enabled:active:bg-muted/60',
         'focus-visible:ring-2 focus-visible:ring-ring/40 motion-reduce:hover:translate-y-0',
+        disabled && !busy && 'opacity-50',
       )}
     >
       <span
@@ -605,6 +620,7 @@ function ChoiceTile({
           {description}
         </span>
       </span>
+      {busy && <LineLoader className="absolute inset-x-0 bottom-0 w-full bg-transparent" />}
     </button>
   );
 }

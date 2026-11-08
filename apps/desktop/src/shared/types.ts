@@ -140,6 +140,7 @@ export type ShellApi = {
     packageManagers(): Promise<PackageManager[]>;
     open(path: string): Promise<TaskResult>;
     create(request: CreateWorkspaceRequest): Promise<TaskResult>;
+    createDefault(): Promise<TaskResult>;
     install(): Promise<TaskResult>;
     reveal(path?: string): void;
     forget(path: string): void;

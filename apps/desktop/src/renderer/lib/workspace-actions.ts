@@ -5,6 +5,7 @@ import { splitPath } from './paths';
 
 export function useWorkspaceActions(openCreate: (target: CreateTarget) => void) {
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
 
   const open = useCallback(async (path: string) => {
     setError(null);
@@ -37,5 +38,13 @@ export function useWorkspaceActions(openCreate: (target: CreateTarget) => void) 
     });
   }, [openCreate]);
 
-  return { error, setError, open, choose, createNew };
+  const quickStart = useCallback(async () => {
+    setError(null);
+    setStarting(true);
+    const result = await desktop.workspace.createDefault();
+    setStarting(false);
+    if (!result.ok) setError(result.error);
+  }, []);
+
+  return { error, setError, starting, open, choose, createNew, quickStart };
 }
