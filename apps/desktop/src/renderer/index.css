@@ -112,9 +112,10 @@ html[data-route="intro"] body {
   }
 }
 
-@keyframes ob-aurora {
+@keyframes ob-breathe {
   to {
-    transform: translate3d(6%, 4%, 0) scale(1.14) rotate(4deg);
+    opacity: 0.7;
+    transform: scale(1.08);
   }
 }
 
@@ -173,8 +174,62 @@ html[data-route="intro"] body {
   animation: ob-caret 1.05s steps(1) infinite;
 }
 
-.ob-aurora {
-  animation: ob-aurora 22s ease-in-out infinite alternate;
+/* Hairline grid that only shows near the middle of the window. */
+.ob-grid {
+  background-image:
+    linear-gradient(to right, var(--hairline) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--hairline) 1px, transparent 1px);
+  background-position: center center;
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 50% 60% at 62% 48%, black, transparent 80%);
+  opacity: 0.6;
+}
+
+/* Light spilling from beneath the stage. */
+.ob-glow {
+  inset: 30% 6% -14%;
+  border-radius: 9999px;
+  background: radial-gradient(
+    closest-side,
+    oklch(0.68 0.19 32 / 0.42),
+    oklch(0.62 0.2 25 / 0.08) 60%,
+    transparent
+  );
+  filter: blur(28px);
+  animation:
+    ob-fade 1.4s ease-out both,
+    ob-breathe 7s ease-in-out 1.4s infinite alternate;
+}
+
+.ob-bezel {
+  padding: 5px;
+  border-radius: 18px;
+  background: oklch(1 0 0 / 0.55);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.9),
+    0 0 0 1px oklch(0 0 0 / 0.06),
+    0 2px 4px -2px oklch(0 0 0 / 0.06),
+    0 28px 56px -28px oklch(0 0 0 / 0.3);
+  backdrop-filter: blur(24px) saturate(1.5);
+}
+
+.dark .ob-bezel {
+  background: oklch(1 0 0 / 0.05);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.08),
+    0 0 0 1px oklch(1 0 0 / 0.07),
+    0 28px 56px -28px oklch(0 0 0 / 0.8);
+}
+
+.ob-screen {
+  overflow: hidden;
+  border-radius: 13px;
+  background-color: var(--card);
+  box-shadow: 0 0 0 1px oklch(0 0 0 / 0.07);
+}
+
+.dark .ob-screen {
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 0.06);
 }
 
 .ob-ripple {
@@ -215,7 +270,7 @@ html[data-route="intro"] body {
 
   .ob-grow,
   .ob-caret,
-  .ob-aurora,
+  .ob-glow,
   .ob-shimmer,
   .ob-ripple,
   .ob-dash {

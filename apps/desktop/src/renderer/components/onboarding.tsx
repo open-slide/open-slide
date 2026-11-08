@@ -38,9 +38,8 @@ import { LineLoader, StatusDot } from './primitives';
 type Step = {
   kind: 'feature' | 'agents' | 'workspace';
   eyebrow: string;
-  title: string;
+  title: [string, string];
   body: string;
-  file: string;
   Scene: () => React.ReactNode;
   points?: { icon: typeof Sparkles; label: string }[];
 };
@@ -49,9 +48,8 @@ const STEPS: Step[] = [
   {
     kind: 'feature',
     eyebrow: 'Describe it',
-    title: 'Say what you need. Get a whole deck.',
+    title: ['Say what you need.', 'Get a whole deck.'],
     body: 'Describe your talk in plain words and your agent drafts every slide — layout, copy, and charts — while you watch.',
-    file: 'Q4 launch',
     Scene: CreateScene,
     points: [
       { icon: Sparkles, label: 'A full deck from one sentence' },
@@ -62,9 +60,8 @@ const STEPS: Step[] = [
   {
     kind: 'feature',
     eyebrow: 'Edit directly',
-    title: 'Click anything to change it.',
+    title: ['Click anything', 'to change it.'],
     body: 'Select text, images, or shapes right on the slide. Drag to move, pull to resize, and pick fonts and colours from the panel.',
-    file: 'Q4 launch',
     Scene: EditScene,
     points: [
       { icon: Move, label: 'Move and resize' },
@@ -75,9 +72,8 @@ const STEPS: Step[] = [
   {
     kind: 'feature',
     eyebrow: 'Comment',
-    title: 'Leave notes. Your agent applies them.',
+    title: ['Leave notes.', 'Your agent applies them.'],
     body: 'Pin feedback to any part of a slide, the way you would review a doc. Send them off together and every note gets worked in.',
-    file: 'Q4 launch',
     Scene: CommentScene,
     points: [
       { icon: MessageSquareText, label: 'Pin to any element' },
@@ -88,9 +84,8 @@ const STEPS: Step[] = [
   {
     kind: 'feature',
     eyebrow: 'Design',
-    title: 'A new look in one click.',
+    title: ['A new look', 'in one click.'],
     body: 'Restyle the whole deck at once — colours, fonts, and corners. Shuffle for ideas, save looks you love as themes, and bring in your own images and logos.',
-    file: 'Q4 launch',
     Scene: DesignScene,
     points: [
       { icon: Palette, label: 'Restyle every slide' },
@@ -101,9 +96,8 @@ const STEPS: Step[] = [
   {
     kind: 'feature',
     eyebrow: 'Present',
-    title: 'Present it. Then share it.',
+    title: ['Present it.', 'Then share it.'],
     body: 'Go full screen with speaker notes, a timer, and the next slide in view. When you are done, export a PDF anyone can open.',
-    file: 'Q4 launch — Presenter',
     Scene: PresentScene,
     points: [
       { icon: Presentation, label: 'Presenter view' },
@@ -114,17 +108,15 @@ const STEPS: Step[] = [
   {
     kind: 'agents',
     eyebrow: 'Your agent',
-    title: 'Your agent, one sign-in away.',
+    title: ['Your agent,', 'one sign-in away.'],
     body: 'Sign in to Claude Code or Codex with the account you already use. If it is not on this computer yet, the app fetches it for you.',
-    file: 'Agents',
     Scene: AgentsScene,
   },
   {
     kind: 'workspace',
     eyebrow: 'Get started',
-    title: 'Ready when you are.',
+    title: ['Ready', 'when you are.'],
     body: 'Your decks, themes, and images are kept together for you, so there is nothing to set up. Already using open-slide? Open the folder you work in.',
-    file: 'My decks',
     Scene: WorkspaceScene,
   },
 ];
@@ -186,12 +178,15 @@ export function Onboarding({
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement;
       if (el.closest('input, textarea, [role="dialog"]')) return;
-      if (e.key === 'ArrowRight' || (e.key === 'Enter' && el === document.body)) go(step + 1);
-      else if (e.key === 'ArrowLeft') go(step - 1);
+      if (e.key === 'Enter' && el === document.body && step === LAST) {
+        if (!starting) onStart();
+      } else if (e.key === 'ArrowRight' || (e.key === 'Enter' && el === document.body)) {
+        go(step + 1);
+      } else if (e.key === 'ArrowLeft') go(step - 1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [go, step]);
+  }, [go, step, starting, onStart]);
 
   const onPointerMove = (e: React.PointerEvent) => {
     const el = tiltRef.current;
@@ -199,107 +194,68 @@ export function Onboarding({
     const bounds = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - bounds.left) / bounds.width - 0.5;
     const y = (e.clientY - bounds.top) / bounds.height - 0.5;
-    el.style.setProperty('--tilt-x', `${(-y * 4).toFixed(2)}deg`);
-    el.style.setProperty('--tilt-y', `${(x * 5).toFixed(2)}deg`);
+    el.style.setProperty('--tilt-x', `${(-y * 3).toFixed(2)}deg`);
+    el.style.setProperty('--tilt-y', `${(x * 4).toFixed(2)}deg`);
   };
 
   if (!armed) return null;
 
-  const { kind, eyebrow, title, body, file, Scene, points } = STEPS[step] ?? STEPS[0];
-  const feature = kind === 'feature';
+  const { kind, eyebrow, title, body, Scene, points } = STEPS[step] ?? STEPS[0];
   const motion = { '--dir': direction } as React.CSSProperties;
+  const isMac = state.platform === 'darwin';
 
   return (
     <div className="relative h-full overflow-hidden" onPointerMove={onPointerMove}>
-      <div aria-hidden className="ob-fade pointer-events-none absolute inset-0">
-        <div
-          className="ob-aurora absolute -top-[38%] left-1/2 aspect-[2/1] w-[110%] -translate-x-1/2 rounded-full"
-          style={{
-            background:
-              'radial-gradient(closest-side, oklch(0.7 0.18 38 / 0.2), oklch(0.62 0.2 25 / 0.07) 55%, transparent)',
-          }}
-        />
-      </div>
+      <div aria-hidden className="ob-fade ob-grid pointer-events-none absolute inset-0" />
 
       <div className="relative flex h-full flex-col">
-        <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-8 pt-4 pb-2">
-          <div className="my-auto flex w-full max-w-[960px] flex-col items-center">
-            <div
-              className="w-full transition-[max-width] duration-700 ease-[var(--ease-swift)]"
-              style={{
-                maxWidth: feature
-                  ? 'min(920px, max(320px, calc((100vh - 410px) * 1.74)))'
-                  : 'min(680px, max(240px, calc((100vh - 500px) * 1.62)))',
-              }}
-            >
-              <div ref={tiltRef} className="ob-tilt w-full">
-                <div className="ob-stage-in @container overflow-hidden rounded-[14px] border border-border bg-card shadow-overlay">
-                  <div className="flex h-[26px] items-center border-b border-hairline px-3">
-                    <span className="flex gap-[5px]">
-                      {[0, 1, 2].map((i) => (
-                        <span key={i} className="size-[7px] rounded-full bg-foreground/[0.13]" />
-                      ))}
-                    </span>
-                    <span
-                      key={file}
-                      className="ob-fade flex-1 pr-[34px] text-center font-mono text-[10.5px] text-muted-foreground"
-                    >
-                      {file}
-                    </span>
-                  </div>
-                  <div className="relative aspect-video">
-                    <div key={step} className="ob-scene-in absolute inset-0" style={motion}>
-                      <Scene />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div
-              key={step}
-              className="mt-7 flex w-full max-w-[560px] flex-col items-center text-center"
-              style={motion}
-            >
-              <span className="eyebrow ob-in" style={{ '--i': 0 } as React.CSSProperties}>
-                <span className="nums text-brand">{String(step + 1).padStart(2, '0')}</span>
-                <span className="mx-2 text-foreground/25">/</span>
-                {eyebrow}
-              </span>
+        <div className="flex min-h-0 flex-1 overflow-y-auto px-10 py-6">
+          <div className="m-auto grid w-full max-w-[1320px] grid-cols-[clamp(280px,26vw,360px)_minmax(0,1fr)] items-center gap-[clamp(32px,4.5vw,72px)]">
+            <div key={step} className="flex flex-col py-2" style={motion}>
+              <p
+                className="ob-in flex items-center gap-2.5"
+                style={{ '--i': 0 } as React.CSSProperties}
+              >
+                <span className="nums font-mono text-[11px] font-medium text-brand">
+                  {String(step + 1).padStart(2, '0')}
+                </span>
+                <span className="h-px w-5 bg-foreground/15" />
+                <span className="eyebrow">{eyebrow}</span>
+              </p>
               <h1
-                className="ob-in mt-3 font-heading text-[30px] leading-[1.1] font-semibold tracking-[-0.032em] text-balance"
+                className="ob-in mt-4 font-heading text-[clamp(26px,2.5vw,36px)] leading-[1.06] font-semibold tracking-[-0.038em] text-balance"
                 style={{ '--i': 1 } as React.CSSProperties}
               >
-                {title}
+                <span className="block">{title[0]}</span>
+                <span className="block text-foreground/35">{title[1]}</span>
               </h1>
               <p
-                className="ob-in mt-3 max-w-[500px] text-[14px] leading-relaxed text-pretty text-muted-foreground"
+                className="ob-in mt-4 text-[clamp(13px,1vw,14.5px)] leading-relaxed text-pretty text-muted-foreground"
                 style={{ '--i': 2 } as React.CSSProperties}
               >
                 {body}
               </p>
               {points && (
-                <ul
-                  className="ob-in mt-5 flex flex-wrap justify-center gap-2"
-                  style={{ '--i': 3 } as React.CSSProperties}
-                >
-                  {points.map(({ icon: Icon, label }) => (
+                <ul className="mt-6 flex flex-col">
+                  {points.map(({ icon: Icon, label }, i) => (
                     <li
                       key={label}
-                      className="flex items-center gap-1.5 rounded-full border border-border bg-card py-1 pr-3 pl-2 text-[12px] font-medium shadow-edge"
+                      className="ob-in flex items-center gap-3 border-t border-hairline py-2 text-[13px] font-medium last:border-b"
+                      style={{ '--i': 3 + i * 0.6 } as React.CSSProperties}
                     >
-                      <Icon className="size-3.5 text-brand" aria-hidden />
+                      <Icon className="size-[15px] shrink-0 text-brand" aria-hidden />
                       {label}
                     </li>
                   ))}
                 </ul>
               )}
-              {!feature && (
-                <div className="ob-in mt-6 w-full" style={{ '--i': 3 } as React.CSSProperties}>
+              {kind !== 'feature' && (
+                <div className="ob-in mt-7" style={{ '--i': 3 } as React.CSSProperties}>
                   {kind === 'agents' ? (
                     <AgentList />
                   ) : (
                     <WorkspaceChoices
+                      isMac={isMac}
                       state={state}
                       error={error}
                       starting={starting}
@@ -311,26 +267,52 @@ export function Onboarding({
                 </div>
               )}
             </div>
+
+            <div
+              className="relative isolate justify-self-center"
+              style={{ width: 'min(100%, calc((100vh - 200px) * 16 / 9))' }}
+            >
+              <div aria-hidden className="ob-glow ob-fade pointer-events-none absolute -z-10" />
+              <div ref={tiltRef} className="ob-tilt">
+                <div className="ob-stage-in ob-bezel">
+                  <div className="ob-screen @container relative aspect-video">
+                    <div key={step} className="ob-scene-in absolute inset-0" style={motion}>
+                      <Scene />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <footer
-          className="ob-in grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center px-6"
-          style={{ '--i': 4 } as React.CSSProperties}
+          className="ob-in grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-t border-hairline px-5"
+          style={{ '--i': 5 } as React.CSSProperties}
         >
           <div>
             {step < LAST ? (
-              <Button variant="ghost" size="sm" onClick={() => go(LAST)}>
-                Skip
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => go(LAST)}
+              >
+                Skip tour
               </Button>
             ) : (
-              <Button variant="ghost" size="sm" onClick={() => desktop.onboarding.finish()}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => desktop.onboarding.finish()}
+              >
                 Not now
               </Button>
             )}
           </div>
           <Progress step={step} onSelect={go} />
-          <div className="flex justify-end gap-1.5">
+          <div className="flex justify-end gap-1">
             {step > 0 && (
               <Button variant="ghost" size="sm" onClick={() => go(step - 1)}>
                 <ArrowLeft aria-hidden />
@@ -338,9 +320,9 @@ export function Onboarding({
               </Button>
             )}
             {step < LAST && (
-              <Button size="sm" onClick={() => go(step + 1)}>
+              <Button size="sm" className="pr-1.5" onClick={() => go(step + 1)}>
                 Continue
-                <ArrowRight aria-hidden />
+                <Kbd className="bg-primary-foreground/15 text-primary-foreground/80">↵</Kbd>
               </Button>
             )}
           </div>
@@ -350,9 +332,22 @@ export function Onboarding({
   );
 }
 
+function Kbd({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <kbd
+      className={cn(
+        'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[4px] px-1 font-sans text-[11px] leading-none font-medium',
+        className,
+      )}
+    >
+      {children}
+    </kbd>
+  );
+}
+
 function Progress({ step, onSelect }: { step: number; onSelect: (step: number) => void }) {
   return (
-    <div className="flex items-center" role="tablist" aria-label="Welcome tour">
+    <div className="flex items-center gap-0.5" role="tablist" aria-label="Welcome tour">
       {STEPS.map((s, i) => (
         <button
           key={s.eyebrow}
@@ -360,15 +355,18 @@ function Progress({ step, onSelect }: { step: number; onSelect: (step: number) =
           role="tab"
           aria-selected={i === step}
           aria-label={s.eyebrow}
+          title={s.eyebrow}
           onClick={() => onSelect(i)}
-          className="group flex h-6 items-center rounded-full px-[3px] outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="group flex h-6 items-center rounded-full px-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           <span
             className={cn(
-              'block h-1.5 rounded-full transition-[width,background-color] duration-500 ease-[var(--ease-swift)]',
+              'block h-[3px] rounded-full transition-[width,background-color] duration-500 ease-[var(--ease-swift)]',
               i === step
-                ? 'w-5 bg-foreground'
-                : 'w-1.5 bg-foreground/20 group-hover:bg-foreground/40',
+                ? 'w-7 bg-foreground'
+                : i < step
+                  ? 'w-3.5 bg-foreground/40 group-hover:bg-foreground/60'
+                  : 'w-3.5 bg-foreground/12 group-hover:bg-foreground/30',
             )}
           />
         </button>
@@ -380,7 +378,7 @@ function Progress({ step, onSelect }: { step: number; onSelect: (step: number) =
 function AgentList() {
   const { agents, logins, signIn, signOut, dismiss } = useAgents();
   return (
-    <div className="mx-auto w-full max-w-[440px]">
+    <div className="w-full">
       <div className="overflow-hidden rounded-[12px] border border-border bg-card text-left shadow-edge">
         {agents === null ? (
           <div className="flex h-[118px] items-center justify-center">
@@ -506,6 +504,7 @@ function AgentRow({
 }
 
 function WorkspaceChoices({
+  isMac,
   state,
   error,
   starting,
@@ -513,6 +512,7 @@ function WorkspaceChoices({
   onStart,
   onOpenRecent,
 }: {
+  isMac: boolean;
   state: AppState;
   error: string | null;
   starting: boolean;
@@ -523,27 +523,30 @@ function WorkspaceChoices({
   const current = state.workspace;
   const recent = state.recent.filter((path) => path !== current?.root).slice(0, 3);
   return (
-    <div className="mx-auto flex w-full max-w-[500px] flex-col items-center">
-      <div className="grid w-full grid-cols-2 gap-3 text-left">
-        <ChoiceTile
+    <div className="flex w-full flex-col items-start">
+      <div className="w-full overflow-hidden rounded-[12px] border border-border bg-card shadow-edge">
+        <ChoiceRow
           primary
           icon={<Sparkles className="size-4" />}
           title="Start creating"
           description={starting ? 'Getting things ready…' : 'Jump straight in. Nothing to set up.'}
+          shortcut="↵"
           busy={starting}
           disabled={starting}
           onClick={onStart}
         />
-        <ChoiceTile
+        <ChoiceRow
+          className="border-t border-hairline"
           icon={<FolderOpen className="size-4" />}
           title="Open a folder…"
           description="Pick up an open-slide folder you already have."
+          shortcut={isMac ? '⌘O' : 'Ctrl O'}
           disabled={starting}
           onClick={onChoose}
         />
       </div>
       {error && (
-        <p className="mt-3 w-full rounded-[8px] border border-destructive/25 bg-destructive/5 px-3 py-2 text-left text-[12.5px] leading-relaxed text-destructive">
+        <p className="mt-3 w-full rounded-[8px] border border-destructive/25 bg-destructive/5 px-3 py-2 text-[12.5px] leading-relaxed text-destructive">
           {error}
         </p>
       )}
@@ -551,7 +554,7 @@ function WorkspaceChoices({
         <Button
           variant="link"
           size="sm"
-          className="mt-3"
+          className="mt-3 px-0"
           onClick={() => desktop.onboarding.finish()}
         >
           Continue in {current.name}
@@ -559,8 +562,8 @@ function WorkspaceChoices({
         </Button>
       )}
       {recent.length > 0 && (
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
-          <span className="eyebrow mr-1">Recent</span>
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="eyebrow">Recent</span>
           {recent.map((path) => (
             <button
               key={path}
@@ -568,7 +571,7 @@ function WorkspaceChoices({
               title={path}
               disabled={starting}
               onClick={() => onOpenRecent(path)}
-              className="rounded-full border border-border bg-card px-2.5 py-1 text-[12px] font-medium shadow-edge outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-[4px] text-[12.5px] font-medium text-foreground/70 underline decoration-foreground/15 underline-offset-[3px] outline-none transition-colors hover:text-foreground hover:decoration-foreground/50 focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               {splitPath(path).name}
             </button>
@@ -579,21 +582,25 @@ function WorkspaceChoices({
   );
 }
 
-function ChoiceTile({
+function ChoiceRow({
   icon,
   title,
   description,
+  shortcut,
   primary = false,
   busy = false,
   disabled = false,
+  className,
   onClick,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
+  shortcut: string;
   primary?: boolean;
   busy?: boolean;
   disabled?: boolean;
+  className?: string;
   onClick: () => void;
 }) {
   return (
@@ -603,30 +610,34 @@ function ChoiceTile({
       disabled={disabled}
       aria-busy={busy}
       className={cn(
-        'group relative flex flex-col items-start gap-3 overflow-hidden rounded-[12px] border border-border bg-card p-4 text-left shadow-edge outline-none',
-        'transition-[translate,box-shadow,background-color,opacity] duration-200 ease-[var(--ease-swift)] enabled:hover:-translate-y-0.5 enabled:hover:shadow-floating enabled:active:translate-y-0 enabled:active:bg-muted/60',
-        'focus-visible:ring-2 focus-visible:ring-ring/40 motion-reduce:hover:translate-y-0',
+        'group relative flex w-full items-center gap-3 px-3.5 py-3 text-left outline-none',
+        'transition-[background-color,opacity] duration-150 enabled:hover:bg-foreground/[0.03] enabled:active:bg-foreground/[0.05]',
+        'focus-visible:bg-foreground/[0.04] focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-inset',
         disabled && !busy && 'opacity-50',
+        className,
       )}
     >
       <span
         className={cn(
-          'flex size-8 items-center justify-center rounded-[8px] transition-transform duration-300 ease-[var(--ease-swift)] group-hover:scale-105',
+          'flex size-8 shrink-0 items-center justify-center rounded-[8px] transition-transform duration-300 ease-[var(--ease-swift)] group-enabled:group-hover:scale-105',
           primary
-            ? 'bg-brand text-brand-foreground shadow-[0_4px_12px_-4px_var(--brand)]'
-            : 'bg-muted text-foreground/80',
+            ? 'bg-brand text-brand-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_4px_12px_-4px_var(--brand)]'
+            : 'bg-muted text-foreground/80 shadow-edge',
         )}
       >
         {icon}
       </span>
-      <span>
+      <span className="min-w-0 flex-1">
         <span className="block font-heading text-[13.5px] font-semibold tracking-tight">
           {title}
         </span>
-        <span className="mt-0.5 block text-[12px] leading-relaxed text-muted-foreground">
+        <span className="mt-0.5 block text-[12px] leading-snug text-muted-foreground">
           {description}
         </span>
       </span>
+      <Kbd className="shrink-0 border border-border bg-muted/60 text-muted-foreground transition-colors group-enabled:group-hover:text-foreground">
+        {shortcut}
+      </Kbd>
       {busy && <LineLoader className="absolute inset-x-0 bottom-0 w-full bg-transparent" />}
     </button>
   );
