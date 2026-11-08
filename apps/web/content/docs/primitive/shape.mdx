@@ -1,0 +1,61 @@
+---
+title: Shape
+description: Rectangles, ellipses, polygons, arrows, callouts, and lines with fill and stroke.
+---
+
+`Shape` draws a filled and/or stroked outline inside a box. The
+[inspector](/docs/core-feature/inspector#add-slides-and-objects) inserts shapes
+as this component, and its Format panel edits their props, so decks edited by
+hand, by an agent, and on the canvas share one vocabulary.
+
+```tsx title="slides/diagram/index.tsx"
+import { Shape, type Page } from '@open-slide/core';
+
+const Diagram: Page = () => (
+  <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <Shape
+      kind="rect"
+      fill="var(--osd-accent)"
+      radius={24}
+      style={{ position: 'absolute', left: 160, top: 320, width: 480, height: 280 }}
+    />
+    <Shape
+      kind="line-arrow"
+      stroke="var(--osd-text)"
+      strokeWidth={6}
+      style={{ position: 'absolute', left: 680, top: 448, width: 280, height: 24 }}
+    />
+    <Shape
+      kind="ellipse"
+      fill="none"
+      stroke="var(--osd-accent)"
+      strokeWidth={8}
+      style={{ position: 'absolute', left: 1000, top: 300, width: 320, height: 320 }}
+    >
+      <span style={{ fontSize: 40 }}>Done</span>
+    </Shape>
+  </div>
+);
+
+export default [Diagram] satisfies Page[];
+```
+
+## Props
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `kind` | `ShapeKind` | `rect`, `ellipse`, `triangle`, `right-triangle`, `diamond`, `pentagon`, `hexagon`, `star`, `arrow`, `chevron`, `callout`, `line`, or `line-arrow`. |
+| `fill` | `string` | Any CSS color, including `var(--osd-…)` tokens. Defaults to `currentColor`; lines have no fill. |
+| `stroke` | `string` | Outline color. |
+| `strokeWidth` | `number` | Outline width in slide pixels, drawn inside the box. |
+| `radius` | `number` | Corner radius for `rect`. |
+| `style` | `CSSProperties` | Position and size, like any element. |
+| `children` | `ReactNode` | Content centered on top of the shape, such as a label. |
+
+Rectangles and ellipses render as CSS boxes, so exports keep them as native
+shapes; the other kinds are SVG paths drawn at the box's actual size, so
+strokes keep their width when a shape is stretched. `line` and `line-arrow`
+are horizontal — rotate the box for other angles.
+
+Pass literal values for `fill`, `stroke`, and `strokeWidth` when a shape should
+stay editable on the canvas; the inspector only rewrites literal props.

@@ -1,6 +1,6 @@
 ---
 title: Inspector
-description: Move, resize, align, and edit slide elements directly on the canvas.
+description: Add, move, resize, align, and edit slide elements directly on the canvas.
 ---
 
 ![Open-slide inspector with the property panel docked beside the canvas, editing a selected element's typography and colour](/assets/screenshots/inspector.webp)
@@ -18,6 +18,27 @@ the agent panel share this sidebar, so opening one closes the others.
 
 Choose **Preview** to interact with the slide and play its animations, then
 **Edit** to resume editing. **Present** opens presentation mode.
+
+## Add slides and objects
+
+In edit mode the toolbar shows **Text box**, **Shape**, and **Image** buttons.
+Each adds the object to the current slide, centered and selected, using the
+deck's [design tokens](/docs/core-feature/themes) for color and type. Shapes
+come from a menu of rectangles, ellipses, polygons, stars, arrows, callouts,
+and lines, and are written as the [`<Shape>`](#shapes) component. Image opens
+the asset picker; you can also drop an image file anywhere on the canvas, or
+paste one from the clipboard.
+
+The **+** button above the page thumbnails adds a slide after the current one.
+Pick a layout — blank, title, title & body, section, two columns, image &
+caption, or quote — and the new slide opens with every element ready to move
+and restyle. With nothing selected, the Format panel's **Slide** section sets
+the slide's background color.
+
+Copy, cut, and paste work on selected objects. Pasting on the same slide
+offsets the copy; pasting on another slide keeps its position. Copied objects
+also reach the system clipboard as JSX, and pasting JSX or plain text from
+elsewhere creates the matching element.
 
 ## Arrange objects
 
@@ -43,6 +64,11 @@ plus alignment and layer controls:
 - **Select parent** — move up to the containing element to arrange a whole
   component, card, or text block. Hold `Cmd` / `Ctrl` while clicking to select a child
   inside an already selected container.
+- **Group** — combine two or more freely positioned objects so they select and
+  move as one; ungroup to split them again. Click a group to select it and
+  `Cmd` / `Ctrl`-click to reach an object inside.
+- **Lock** — keep an object from being moved, resized, deleted, or grouped by
+  accident. Locked objects can still be selected and formatted.
 
 Hold `Shift` while clicking to add or remove elements from the selection.
 Drag the combined selection to move all selected elements together. Drag on
@@ -64,14 +90,20 @@ Width, height, and rotation inputs apply to one element at a time.
 | `Shift` while rotating | Snap to 15-degree increments |
 | `Escape` during a drag | Cancel the current gesture |
 | `Cmd` / `Ctrl` + `A` | Select all editable objects |
+| `Delete` / `Backspace` | Delete the selection |
+| `Cmd` / `Ctrl` + `D` | Duplicate the selection |
+| `Cmd` / `Ctrl` + `C` / `X` / `V` | Copy, cut, and paste |
+| `Cmd` / `Ctrl` + `Alt` + `G` | Group |
+| `Cmd` / `Ctrl` + `Alt` + `Shift` + `G` | Ungroup |
+| `Cmd` / `Ctrl` + `L` | Lock or unlock |
 | `Cmd` / `Ctrl` + `Z` | Undo |
 | `Cmd` / `Ctrl` + `Shift` + `Z` | Redo |
-| `Cmd` / `Ctrl` + `S` | Save pending edits |
+| `Cmd` / `Ctrl` + `S` | Save now |
 
 Inline text spans inherit their containing block's layout. Use **Select
 parent** to move that block. Elements rendered repeatedly from the same JSX
 definition also share source styles; select a unique parent container to
-arrange an instance independently. The panel explains when a selected element
+arrange, delete, duplicate, or group an instance independently. The panel explains when a selected element
 cannot be transformed.
 Layer changes preserve nested content's position and size. If shared nested
 content prevents this, select a positioned parent container to change layers.
@@ -79,9 +111,11 @@ content prevents this, select a positioned parent container to change layers.
 ## Format text and images
 
 The Format panel shows controls for the selected object. Use the **Text** tab
-for typography, text colour, and paragraph alignment; the **Image** tab for
-replacement and cropping; and **Style** for a shape's appearance. Switch to
-**Arrange** for geometry, alignment, and layers.
+for font, typography, text colour, and paragraph alignment; the **Image** tab
+for replacement and cropping; and **Style** for a shape's appearance. Every
+object also has an **Appearance** section for opacity, corner radius, border,
+and shadow. Switch to **Arrange** for geometry, alignment, and layers. With
+several objects selected, colour and appearance changes apply to all of them.
 
 Select a word or phrase directly on the canvas, then change its size, weight,
 style, or colour in the panel. The selection stays active so you can continue
@@ -98,9 +132,29 @@ Image replacement lets you choose any file in the deck's or the global assets
 folder; see the [assets manager](/docs/core-feature/assets-manager) for how the
 two scopes work.
 
-Edits buffer in memory. Press **Save** or `Cmd` / `Ctrl` + `S` to write them to
-source. Switching to Preview or leaving the deck also saves pending edits.
-Use **Undo**, **Redo**, or **Discard** to revise changes before saving.
+Edits save to source automatically once you pause, and right away when you
+switch to Preview or leave the deck. Undo and redo keep working after a save,
+including for added, deleted, and grouped objects. If the file changes outside
+the editor in the meantime, undo stops at that point rather than overwrite it.
+
+## Shapes
+
+Shapes are written as the [`<Shape>`](/docs/primitive/shape) component from
+`@open-slide/core`, so the source stays readable for you and your agent:
+
+```tsx
+<Shape
+  kind="star"
+  fill="var(--osd-accent)"
+  stroke="#111111"
+  strokeWidth={4}
+  style={{ position: 'absolute', left: 780, top: 360, width: 360, height: 360 }}
+/>
+```
+
+Select a shape to change its **Type**, **Fill**, **Stroke**, and stroke
+**Width** in the Format panel. Lines and arrow lines are horizontal; use the
+rotation handle for other angles.
 
 ## Comments
 
