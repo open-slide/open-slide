@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { contextBridge, ipcRenderer } from 'electron';
-import { SPARE_PATH } from '../shared/types';
+import { type EditorCommand, SPARE_PATH } from '../shared/types';
 
 const config = ipcRenderer.sendSync('host:config') as { translucent: boolean };
 
@@ -54,6 +54,13 @@ contextBridge.exposeInMainWorld('openSlideDesktop', {
   haptic: (pattern: string) => ipcRenderer.send('host:haptic', pattern),
   printToPdf: (filename: string): Promise<boolean> =>
     ipcRenderer.invoke('host:print-to-pdf', filename),
+  onEditorCommand: (listener: (command: EditorCommand) => void) => {
+    const handler = (_e: unknown, command: EditorCommand) => listener(command);
+    ipcRenderer.on('host:editor-command', handler);
+    return () => {
+      ipcRenderer.off('host:editor-command', handler);
+    };
+  },
   onNavigate: (listener: (path: string) => void) => {
     listeners.add(listener);
     if (pending !== null) {

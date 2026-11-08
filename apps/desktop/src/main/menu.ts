@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { app, Menu, type MenuItemConstructorOptions, shell } from 'electron';
+import type { EditorCommand } from '../shared/types';
 
 export type MenuActions = {
   openSettings: () => void;
@@ -15,7 +16,87 @@ export type MenuActions = {
   openRecent: (root: string) => void;
   clearRecent: () => void;
   replayIntro: () => void;
+  editor: (command: EditorCommand) => void;
 };
+
+const SHAPES: Array<[string, string]> = [
+  ['rect', 'Rectangle'],
+  ['ellipse', 'Ellipse'],
+  ['triangle', 'Triangle'],
+  ['right-triangle', 'Right Triangle'],
+  ['diamond', 'Diamond'],
+  ['pentagon', 'Pentagon'],
+  ['hexagon', 'Hexagon'],
+  ['star', 'Star'],
+  ['arrow', 'Arrow'],
+  ['chevron', 'Chevron'],
+  ['callout', 'Callout'],
+  ['line', 'Line'],
+  ['line-arrow', 'Arrow Line'],
+];
+
+const LAYOUTS: Array<[string, string]> = [
+  ['blank', 'Blank'],
+  ['title', 'Title'],
+  ['title-body', 'Title & Body'],
+  ['section', 'Section'],
+  ['two-column', 'Two Columns'],
+  ['image', 'Image & Caption'],
+  ['quote', 'Quote'],
+];
+
+// The deck page owns these shortcuts, so the menu only shows them: a
+// registered accelerator would run the action a second time, or steal the
+// key from a text field.
+function shown(accelerator: string) {
+  return { accelerator, registerAccelerator: false };
+}
+
+function editorMenus(run: (command: EditorCommand) => void): MenuItemConstructorOptions[] {
+  return [
+    {
+      label: 'Insert',
+      submenu: [
+        {
+          label: 'New Slide',
+          submenu: LAYOUTS.map(([layout, label]) => ({
+            label,
+            click: () => run({ type: 'new-slide', layout }),
+          })),
+        },
+        { type: 'separator' },
+        { label: 'Text Box', click: () => run({ type: 'insert-text' }) },
+        {
+          label: 'Shape',
+          submenu: SHAPES.map(([kind, label]) => ({
+            label,
+            click: () => run({ type: 'insert-shape', kind }),
+          })),
+        },
+        { label: 'Image…', click: () => run({ type: 'insert-image' }) },
+      ],
+    },
+    {
+      label: 'Arrange',
+      submenu: [
+        { label: 'Bring to Front', click: () => run({ type: 'arrange', direction: 'front' }) },
+        { label: 'Bring Forward', click: () => run({ type: 'arrange', direction: 'forward' }) },
+        { label: 'Send Backward', click: () => run({ type: 'arrange', direction: 'backward' }) },
+        { label: 'Send to Back', click: () => run({ type: 'arrange', direction: 'back' }) },
+        { type: 'separator' },
+        { label: 'Group', ...shown('CmdOrCtrl+Alt+G'), click: () => run({ type: 'group' }) },
+        {
+          label: 'Ungroup',
+          ...shown('CmdOrCtrl+Alt+Shift+G'),
+          click: () => run({ type: 'ungroup' }),
+        },
+        { label: 'Lock / Unlock', ...shown('CmdOrCtrl+L'), click: () => run({ type: 'lock' }) },
+        { type: 'separator' },
+        { label: 'Duplicate', ...shown('CmdOrCtrl+D'), click: () => run({ type: 'duplicate' }) },
+      ],
+    },
+  ];
+}
 
 export function installMenu(actions: MenuActions, recent: string[]) {
   const isMac = process.platform === 'darwin';
@@ -81,6 +162,7 @@ export function installMenu(actions: MenuActions, recent: string[]) {
       ],
     },
     { role: 'editMenu' },
+    ...editorMenus(actions.editor),
     {
       label: 'View',
       submenu: [

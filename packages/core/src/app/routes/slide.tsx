@@ -36,6 +36,7 @@ import { AgentPresence } from '@/components/agent/agent-presence';
 import { AssetView } from '@/components/asset-view';
 import { HistoryProvider } from '@/components/history-provider';
 import { CommentLayer } from '@/components/inspector/comment-layer';
+import { DesktopEditorCommands } from '@/components/inspector/desktop-editor-commands';
 import { InlineEditLayer } from '@/components/inspector/inline-text-editor';
 import { InsertToolbar } from '@/components/inspector/insert-toolbar';
 import { InspectOverlay } from '@/components/inspector/inspect-overlay';
@@ -724,6 +725,7 @@ export function Slide() {
         }}
       >
         <SelectionReporter />
+        {import.meta.env.DEV && <DesktopEditorCommands onPageInserted={setPendingPage} />}
         <div className="flex h-dvh flex-col overflow-hidden bg-sidebar text-foreground">
           <header className="grid min-h-12 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2 py-2 md:px-3">
             <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1.5 md:gap-2">

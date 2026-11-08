@@ -5,6 +5,18 @@ import { slideIds } from './slides';
 
 export type HapticPattern = 'alignment' | 'levelChange' | 'generic';
 
+// Sent by the desktop app's Insert and Arrange menus to the active deck tab.
+export type EditorCommand =
+  | { type: 'insert-text' }
+  | { type: 'insert-shape'; kind: string }
+  | { type: 'insert-image' }
+  | { type: 'new-slide'; layout: string }
+  | { type: 'duplicate' }
+  | { type: 'group' }
+  | { type: 'ungroup' }
+  | { type: 'lock' }
+  | { type: 'arrange'; direction: 'front' | 'forward' | 'backward' | 'back' };
+
 // Injected by the open-slide desktop app's preload into every tab. Home and
 // each deck live in their own tab there, so moving between them asks the host
 // to switch tabs instead of navigating this page.
@@ -19,6 +31,8 @@ export type DesktopHost = {
   // when the user cancels. Absent in desktop builds that predate it.
   printToPdf?: (filename: string) => Promise<boolean>;
   onNavigate: (listener: (path: string) => void) => () => void;
+  // Absent in desktop builds that predate the Insert and Arrange menus.
+  onEditorCommand?: (listener: (command: EditorCommand) => void) => () => void;
 };
 
 declare global {

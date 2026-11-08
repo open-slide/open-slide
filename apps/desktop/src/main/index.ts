@@ -718,6 +718,7 @@ const menuActions: MenuActions = {
     void openWorkspace(root);
   },
   replayIntro: () => replayIntro(),
+  editor: (command) => tabs?.activeContents()?.send('host:editor-command', command),
   clearRecent: () => {
     for (const root of settings.recent()) {
       if (root !== workspace?.root) settings.forget(root);

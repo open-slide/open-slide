@@ -162,3 +162,16 @@ export type ShellApi = {
     onLogin(listener: (event: LoginEvent) => void): () => void;
   };
 };
+
+// Editor actions the native Insert and Arrange menus send to the active deck
+// tab; mirrored by `EditorCommand` in packages/core/src/app/lib/desktop.ts.
+export type EditorCommand =
+  | { type: 'insert-text' }
+  | { type: 'insert-shape'; kind: string }
+  | { type: 'insert-image' }
+  | { type: 'new-slide'; layout: string }
+  | { type: 'duplicate' }
+  | { type: 'group' }
+  | { type: 'ungroup' }
+  | { type: 'lock' }
+  | { type: 'arrange'; direction: 'front' | 'forward' | 'backward' | 'back' };

@@ -35,22 +35,27 @@ function ShapeGlyph({ kind }: { kind: ShapeKind }) {
   );
 }
 
+export function useInsertKind() {
+  const t = useLocale();
+  const { objects } = useInspector();
+  return (kind: 'text' | ShapeKind) => {
+    const canvas = readCanvas();
+    if (!canvas) return;
+    const frame = defaultInsertFrame(kind, canvas);
+    void objects.insert(insertSpec(kind, frame, t.inspector.newText), frame);
+  };
+}
+
 export function InsertToolbar() {
   const t = useLocale();
   const insp = useInspector();
   const [picking, setPicking] = useState(false);
   const disabled = insp.committing;
 
+  const insertKind = useInsertKind();
   useCanvasImageDrop();
 
   if (import.meta.env.PROD || !insp.active) return null;
-
-  const insertKind = (kind: 'text' | ShapeKind) => {
-    const canvas = readCanvas();
-    if (!canvas) return;
-    const frame = defaultInsertFrame(kind, canvas);
-    void insp.objects.insert(insertSpec(kind, frame, t.inspector.newText), frame);
-  };
 
   const button = buttonVariants({ variant: 'ghost', size: 'icon-sm' });
 
