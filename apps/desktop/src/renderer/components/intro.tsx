@@ -296,9 +296,10 @@ export function Intro() {
     ) => el?.animate(keyframes, { fill: 'both', easing: SWIFT, ...options });
 
     let faded: Promise<void> | null = null;
+    let skipped = false;
     const finish = () => {
       if (cancelled) return;
-      desktop.intro.done();
+      desktop.intro.done(skipped);
       void faded?.then(() => {
         if (!cancelled) desktop.intro.close();
       });
@@ -307,6 +308,7 @@ export function Intro() {
     const exit = (fast: boolean) => {
       if (exiting || cancelled) return;
       exiting = true;
+      skipped = fast;
       for (const timer of timers) clearTimeout(timer);
       faded = sound.fadeOut(fast ? 3.5 : 9.5);
       const fadeOut = animate(

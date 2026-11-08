@@ -5,6 +5,7 @@ directories:
   buildResources: build
 files:
   - dist/**
+  - "!dist/**/*.map"
   - package.json
   # The agents' native CLIs are a few hundred MB each, so they are downloaded
   # on first sign-in instead (src/main/agent-cli.ts).

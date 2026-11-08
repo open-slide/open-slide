@@ -46,6 +46,15 @@ export type AppState = {
 export type DesktopSettings = {
   translucent: boolean;
   packageManager: PackageManager | null;
+  // Anonymous usage events and crash reports.
+  telemetry: boolean;
+};
+
+export type ReportedError = {
+  name: string;
+  message: string;
+  stack: string | null;
+  chunkIds: Record<string, string> | null;
 };
 
 export type WorkspaceInspection = {
@@ -112,6 +121,7 @@ export type ShellApi = {
   openExternal(url: string): void;
   sendCommand(command: ShellCommand): void;
   haptic(pattern: HapticPattern): void;
+  reportError(error: ReportedError): void;
   window: {
     isFocused(): Promise<boolean>;
     onFocus(listener: (focused: boolean) => void): () => void;
@@ -124,7 +134,7 @@ export type ShellApi = {
   intro: {
     target(): Promise<IntroTarget | null>;
     reveal(): void;
-    done(): void;
+    done(skipped: boolean): void;
     close(): void;
   };
   settings: {

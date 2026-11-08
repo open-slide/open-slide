@@ -7,11 +7,12 @@ const coreApp = resolve(import.meta.dirname, '../../packages/core/src/app');
 
 export default defineConfig({
   main: {
-    build: { outDir: 'dist/main' },
+    build: { outDir: 'dist/main', sourcemap: 'hidden' },
   },
   preload: {
     build: {
       outDir: 'dist/preload',
+      sourcemap: 'hidden',
       // Sandboxed preloads cannot require sibling chunks, so each entry is
       // bundled on its own.
       isolatedEntries: true,
@@ -33,6 +34,6 @@ export default defineConfig({
       dedupe: ['react', 'react-dom'],
     },
     plugins: [react(), tailwindcss()],
-    build: { outDir: 'dist/renderer' },
+    build: { outDir: 'dist/renderer', sourcemap: 'hidden' },
   },
 });

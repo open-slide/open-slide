@@ -1,20 +1,21 @@
-import { Bot, FolderClosed, Palette } from 'lucide-react';
+import { Bot, FolderClosed, Palette, ShieldCheck } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import type { AppState, DesktopSettings, PackageManager } from '../../shared/types';
-import { desktop, useAppState, useLog } from '../lib/desktop';
+import { desktop, TELEMETRY_DOCS_URL, useAppState, useLog } from '../lib/desktop';
 import { splitPath, tildify } from '../lib/paths';
 import { AgentsSection } from './agents-section';
 import { LogView, SectionCard, StatusDot } from './primitives';
 
-type SectionId = 'workspace' | 'agents' | 'appearance';
+type SectionId = 'workspace' | 'agents' | 'appearance' | 'privacy';
 
 const SECTIONS: { id: SectionId; label: string; icon: React.ReactNode }[] = [
   { id: 'workspace', label: 'Workspace', icon: <FolderClosed /> },
   { id: 'agents', label: 'Agents', icon: <Bot /> },
   { id: 'appearance', label: 'Appearance', icon: <Palette /> },
+  { id: 'privacy', label: 'Privacy', icon: <ShieldCheck /> },
 ];
 
 const SECTION_KEY = 'settings-section';
@@ -141,6 +142,7 @@ export function SettingsWindow() {
           {section === 'appearance' && (
             <AppearanceSection state={state} prefs={prefs} onUpdate={update} />
           )}
+          {section === 'privacy' && <PrivacySection prefs={prefs} onUpdate={update} />}
         </div>
       </div>
     </div>
@@ -344,6 +346,39 @@ function AppearanceSection({
         <ToggleGroupItem value="translucent">Translucent</ToggleGroupItem>
         <ToggleGroupItem value="solid">Solid</ToggleGroupItem>
       </ToggleGroup>
+    </SectionCard>
+  );
+}
+
+function PrivacySection({
+  prefs,
+  onUpdate,
+}: {
+  prefs: DesktopSettings | null;
+  onUpdate: (patch: Partial<DesktopSettings>) => void;
+}) {
+  return (
+    <SectionCard
+      title="Usage & crash reports"
+      description="Send anonymous usage events and crash reports to help improve open-slide. Nothing from your decks, file paths, or agent conversations is included."
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          disabled={!prefs}
+          value={[prefs?.telemetry === false ? 'off' : 'on']}
+          onValueChange={(value: string[]) => {
+            if (value[0]) onUpdate({ telemetry: value[0] === 'on' });
+          }}
+        >
+          <ToggleGroupItem value="on">On</ToggleGroupItem>
+          <ToggleGroupItem value="off">Off</ToggleGroupItem>
+        </ToggleGroup>
+        <Button size="sm" variant="ghost" onClick={() => desktop.openExternal(TELEMETRY_DOCS_URL)}>
+          What’s collected
+        </Button>
+      </div>
     </SectionCard>
   );
 }

@@ -21,7 +21,7 @@ import { ProviderLogo } from '@/components/agent/provider-logo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { AgentInfo, AppState } from '../../shared/types';
-import { desktop } from '../lib/desktop';
+import { desktop, TELEMETRY_DOCS_URL } from '../lib/desktop';
 import { splitPath } from '../lib/paths';
 import { DownloadStatus, IDLE_LOGIN, type Login, LoginCodeForm, useAgents } from './agents-section';
 import {
@@ -578,6 +578,16 @@ function WorkspaceChoices({
           ))}
         </div>
       )}
+      <p className="mt-6 text-[11.5px] leading-relaxed text-pretty text-muted-foreground">
+        open-slide sends anonymous usage and crash reports. Turn them off anytime in Settings.{' '}
+        <button
+          type="button"
+          onClick={() => desktop.openExternal(TELEMETRY_DOCS_URL)}
+          className="rounded-[4px] underline decoration-foreground/15 underline-offset-[3px] outline-none hover:text-foreground hover:decoration-foreground/50 focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          What’s collected
+        </button>
+      </p>
     </div>
   );
 }

@@ -63,6 +63,9 @@ importers:
       '@openai/codex-sdk':
         specifier: ^0.163.0
         version: 0.163.0
+      posthog-node:
+        specifier: ^5.63.1
+        version: 5.63.1(@opentelemetry/api@1.10.0)
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.3.3
@@ -1342,8 +1345,14 @@ packages:
   '@posthog/core@1.51.0':
     resolution: {integrity: sha512-LilmmtjcrjV1LgaVNQXrAUt4IXcWIYMrwEtx6VJUUFDeBBdmeI99jshKGtAWugYeB3Wkcp9xQIVCrxIYRpNiRA==}
 
+  '@posthog/core@1.64.1':
+    resolution: {integrity: sha512-2ziryOLWTxftHrTLhGYQzLHDpPughaRRi/+L1vhg4cQFHJfgTevMzAz21R1zR7MKFDkyJ9lCJD/K2jxIkGbnfg==}
+
   '@posthog/types@1.409.1':
     resolution: {integrity: sha512-lA2sSGQUdVknSQl93uN9eUXDwkCMjAuthq24GONGHzMWwVygsKNHlWCnlJsVv2giDokj2p1NopO4zsE2S7gYjA==}
+
+  '@posthog/types@1.421.1':
+    resolution: {integrity: sha512-475eg+usYiQ2m7GfxgylnBTVa3aPsEfaE6gQoDvg5nEkWAjcNiGm1u3WsESOErfrFFUajpYcxc71JCzfdoJ8gg==}
 
   '@quansync/fs@1.0.0':
     resolution: {integrity: sha512-4TJ3DFtlf1L5LDMaM6CanJ/0lckGNtJcMjQ1NAV6zDmA0tEHKZtxNKin8EgPaVX1YzljbxckyT2tJrpQKAtngQ==}
@@ -4525,6 +4534,18 @@ packages:
       react:
         optional: true
 
+  posthog-node@5.63.1:
+    resolution: {integrity: sha512-CwJ1JEbFYtXYf8rctJdQy8S61bGNenqf1lBd5xw9z6MGMlfRwtWRrs96D3I3yV5MzKPctyGp0wPtYSTECBcLbQ==}
+    engines: {node: ^20.20.0 || >=22.22.0}
+    peerDependencies:
+      '@opentelemetry/api': ^1.2.0
+      rxjs: ^7.0.0
+    peerDependenciesMeta:
+      '@opentelemetry/api':
+        optional: true
+      rxjs:
+        optional: true
+
   postject@1.0.0-alpha.6:
     resolution: {integrity: sha512-b9Eb8h2eVqNE8edvKdwqkrY6O7kAwmI8kcnBv1NScolYJbo59XUF0noFq+lxbC1yN20bmC0WBEbDC5H/7ASb0A==}
     engines: {node: '>=14.0.0'}
@@ -6505,7 +6526,13 @@ snapshots:
     dependencies:
       '@posthog/types': 1.409.1
 
+  '@posthog/core@1.64.1':
+    dependencies:
+      '@posthog/types': 1.421.1
+
   '@posthog/types@1.409.1': {}
+
+  '@posthog/types@1.421.1': {}
 
   '@quansync/fs@1.0.0':
     dependencies:
@@ -9790,6 +9817,12 @@ snapshots:
       react: 19.2.7
     transitivePeerDependencies:
       - preact-render-to-string
+
+  posthog-node@5.63.1(@opentelemetry/api@1.10.0):
+    dependencies:
+      '@posthog/core': 1.64.1
+    optionalDependencies:
+      '@opentelemetry/api': 1.10.0
 
   postject@1.0.0-alpha.6:
     dependencies:

@@ -9,6 +9,8 @@ declare global {
 
 export const desktop = window.desktop;
 
+export const TELEMETRY_DOCS_URL = 'https://open-slide.dev/docs/reference/desktop-telemetry';
+
 let current: AppState | null = null;
 const listeners = new Set<() => void>();
 

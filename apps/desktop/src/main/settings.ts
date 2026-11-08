@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
@@ -17,6 +18,9 @@ type Stored = DesktopSettings & {
   loginPath: string | null;
   introSeen: boolean;
   onboarded: boolean;
+  installId: string | null;
+  lastVersion: string | null;
+  crashCheckedAt: number;
 };
 
 const RECENT_LIMIT = 8;
@@ -24,6 +28,7 @@ const RECENT_LIMIT = 8;
 const defaults: Stored = {
   translucent: true,
   packageManager: null,
+  telemetry: true,
   workspace: null,
   recent: [],
   sessions: {},
@@ -33,6 +38,9 @@ const defaults: Stored = {
   loginPath: null,
   introSeen: false,
   onboarded: false,
+  installId: null,
+  lastVersion: null,
+  crashCheckedAt: 0,
 };
 
 function file(): string {
@@ -76,8 +84,8 @@ function save() {
 export const settings = {
   flush,
   get(): DesktopSettings {
-    const { translucent, packageManager } = current();
-    return { translucent, packageManager };
+    const { translucent, packageManager, telemetry } = current();
+    return { translucent, packageManager, telemetry };
   },
   update(patch: Partial<DesktopSettings>): DesktopSettings {
     Object.assign(current(), patch);
@@ -158,6 +166,29 @@ export const settings = {
   setOnboarded(onboarded: boolean) {
     if (current().onboarded === onboarded) return;
     current().onboarded = onboarded;
+    save();
+  },
+  installId(): string {
+    const s = current();
+    if (!s.installId) {
+      s.installId = randomUUID();
+      save();
+    }
+    return s.installId;
+  },
+  lastVersion(): string | null {
+    return current().lastVersion;
+  },
+  setLastVersion(version: string) {
+    if (current().lastVersion === version) return;
+    current().lastVersion = version;
+    save();
+  },
+  crashCheckedAt(): number {
+    return current().crashCheckedAt;
+  },
+  setCrashCheckedAt(time: number) {
+    current().crashCheckedAt = time;
     save();
   },
 };

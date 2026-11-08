@@ -39,6 +39,15 @@ import { settings } from './settings';
 import { shellEnv } from './shell-env';
 import { TabManager } from './tabs';
 import {
+  bucket,
+  captureError,
+  initTelemetry,
+  reportRendererError,
+  shutdownTelemetry,
+  startCrashReporter,
+  track,
+} from './telemetry';
+import {
   availablePackageManagers,
   bundledCore,
   createDefaultWorkspace,
@@ -168,11 +177,20 @@ function persistSession() {
   if (workspace && tabs) settings.setSession(workspace.root, tabs.session);
 }
 
+let serverStartedAt = 0;
+
 server.on('status', (status) => {
-  if (status.state === 'ready') tabs?.setBaseUrl(status.url);
+  if (status.state === 'starting') serverStartedAt = Date.now();
+  if (status.state === 'ready') {
+    tabs?.setBaseUrl(status.url);
+    track('server_ready', { duration_ms: Date.now() - serverStartedAt });
+  }
   broadcast();
 });
 server.on('log', (chunk) => sendLog('server', chunk));
+server.on('failure', ({ reason, code, signal }) => {
+  track('server_failed', { reason, exit_code: code, signal });
+});
 
 // Skills describe the core that runs the workspace, so they follow the bundled
 // core: synced once per app update, like an in-app core update used to.
@@ -183,11 +201,14 @@ async function syncSkillsOnce(root: string) {
   if (result.ok) settings.setSkillsVersion(root, version);
 }
 
-async function openWorkspace(root: string): Promise<TaskResult> {
+type OpenSource = 'restored' | 'created' | 'shell' | 'menu';
+
+async function openWorkspace(root: string, source: OpenSource): Promise<TaskResult> {
   const inspection = inspectWorkspace(root);
   if (inspection.kind !== 'project') {
     return { ok: false, error: `${inspection.path} is not an open-slide workspace.` };
   }
+  track('workspace_opened', { source });
   persistSession();
   workspace = { root: inspection.path, name: inspection.name };
   settings.setWorkspace(inspection.path);
@@ -203,9 +224,14 @@ async function installWorkspace(): Promise<TaskResult> {
   const root = workspace.root;
   const pm = detectPackageManager(root, fallbackPackageManager());
   server.markInstalling();
+  const started = Date.now();
   const result = await installDependencies(root, pm, await childEnv(), (chunk) =>
     sendLog('install', chunk),
   );
+  track(result.ok ? 'install_completed' : 'install_failed', {
+    package_manager: pm,
+    duration_ms: Date.now() - started,
+  });
   if (workspace?.root === root) await server.start(root);
   return result;
 }
@@ -546,7 +572,51 @@ async function printToPdf(sender: WebContents, filename: unknown): Promise<boole
     margins: { top: 0, right: 0, bottom: 0, left: 0 },
   });
   await writeFile(filePath, pdf);
+  track('pdf_exported');
   return true;
+}
+
+function windowKind(win: BrowserWindow): string {
+  if (win === settingsWindow) return 'settings';
+  if (win === introWindow) return 'intro';
+  return 'main';
+}
+
+async function createWorkspaceTracked(
+  method: 'custom' | 'default',
+  create: () => Promise<TaskResult & { root?: string }>,
+  packageManager?: PackageManager,
+): Promise<TaskResult> {
+  const started = Date.now();
+  const result = await create();
+  const props = { method, package_manager: packageManager, duration_ms: Date.now() - started };
+  track(result.ok ? 'workspace_created' : 'workspace_create_failed', props);
+  if (!result.ok || !result.root) return result;
+  return openWorkspace(result.root, 'created');
+}
+
+async function loginTracked(id: AgentId): Promise<TaskResult> {
+  const started = Date.now();
+  let downloaded = false;
+  track('agent_login_started', { agent: id });
+  const result = await login(
+    id,
+    await childEnv(),
+    (event) => {
+      if (event.type === 'installed') {
+        downloaded = true;
+        track('agent_cli_downloaded', { agent: id, duration_ms: Date.now() - started });
+      }
+      sendAll('agents:login-event', event);
+    },
+    (url) => void shell.openExternal(url),
+  );
+  track(result.ok ? 'agent_login_succeeded' : 'agent_login_failed', {
+    agent: id,
+    cli_downloaded: downloaded,
+    duration_ms: Date.now() - started,
+  });
+  return result;
 }
 
 function registerIpc() {
@@ -559,6 +629,10 @@ function registerIpc() {
     if (command === 'open-workspace' || command === 'new-workspace') sendCommand(command);
   });
   listen('settings:open-window', () => openSettingsWindow());
+  ipcMain.on('telemetry:error', (e, report: unknown) => {
+    const win = senderWindow(e.sender);
+    if (win) reportRendererError(report, windowKind(win));
+  });
   ipcMain.handle('window:is-focused', (e) => senderWindow(e.sender)?.isFocused() ?? false);
   ipcMain.on('window:fit-content', (e, height: unknown) => {
     const win = senderWindow(e.sender);
@@ -570,7 +644,8 @@ function registerIpc() {
   handle('intro:target', () => introTarget());
   listen('intro:reveal', () => revealMain());
   // Released rather than closed, so the score can ring out; the intro closes itself once quiet.
-  listen('intro:done', () => {
+  listen('intro:done', (skipped: unknown) => {
+    track('intro_finished', { skipped: skipped === true });
     releaseIntro?.();
     revealMain();
     window?.focus();
@@ -579,6 +654,7 @@ function registerIpc() {
     if (introWindow && !introWindow.isDestroyed()) introWindow.close();
   });
   listen('onboarding:finish', () => {
+    track('onboarding_finished', { has_workspace: workspace !== null });
     settings.setOnboarded(true);
     broadcast();
   });
@@ -590,8 +666,13 @@ function registerIpc() {
     if (patch.packageManager === null || PACKAGE_MANAGERS.includes(patch.packageManager as never)) {
       next.packageManager = patch.packageManager;
     }
+    if (typeof patch.telemetry === 'boolean') next.telemetry = patch.telemetry;
+    const previous = settings.get();
     const before = translucent();
     const result = settings.update(next);
+    for (const key of ['translucent', 'packageManager'] as const) {
+      if (result[key] !== previous[key]) track('settings_changed', { key, value: result[key] });
+    }
     if (translucent() !== before) {
       for (const win of shellWindows()) applyMaterial(win);
       tabs?.reloadAll();
@@ -626,22 +707,25 @@ function registerIpc() {
   });
   handle('workspace:default-parent', () => app.getPath('documents'));
   handle('workspace:package-managers', async () => availablePackageManagers(await childEnv()));
-  handle('workspace:open', (root: string) => openWorkspace(String(root)));
-  handle('workspace:create', async (request: CreateWorkspaceRequest) => {
-    const result = await createWorkspace(request, await childEnv(), (chunk) =>
-      sendLog('create', chunk),
-    );
-    if (!result.ok || !result.root) return result;
-    settings.update({ packageManager: request.packageManager });
-    return openWorkspace(result.root);
-  });
-  handle('workspace:create-default', async () => {
-    const result = await createDefaultWorkspace(await childEnv(), (chunk) =>
-      sendLog('create', chunk),
-    );
-    if (!result.ok || !result.root) return result;
-    return openWorkspace(result.root);
-  });
+  handle('workspace:open', (root: string) => openWorkspace(String(root), 'shell'));
+  handle('workspace:create', (request: CreateWorkspaceRequest) =>
+    createWorkspaceTracked(
+      'custom',
+      async () => {
+        const result = await createWorkspace(request, await childEnv(), (chunk) =>
+          sendLog('create', chunk),
+        );
+        if (result.ok) settings.update({ packageManager: request.packageManager });
+        return result;
+      },
+      request.packageManager,
+    ),
+  );
+  handle('workspace:create-default', () =>
+    createWorkspaceTracked('default', async () =>
+      createDefaultWorkspace(await childEnv(), (chunk) => sendLog('create', chunk)),
+    ),
+  );
   handle('workspace:install', () => installWorkspace());
   listen('workspace:reveal', (target?: string) => {
     const dir = typeof target === 'string' ? target : workspace?.root;
@@ -657,14 +741,7 @@ function registerIpc() {
   handle('server:log', () => server.log);
 
   handle('agents:list', async () => listAgents(await childEnv()));
-  handle('agents:login', async (id: AgentId) =>
-    login(
-      id,
-      await childEnv(),
-      (event) => sendAll('agents:login-event', event),
-      (url) => void shell.openExternal(url),
-    ),
-  );
+  handle('agents:login', (id: AgentId) => loginTracked(id));
   handle('agents:logout', async (id: AgentId) => logout(id, await childEnv()));
   listen('agents:login-input', (id: AgentId, text: string) => sendLoginInput(id, String(text)));
   listen('agents:login-cancel', (id: AgentId) => cancelLogin(id));
@@ -675,7 +752,12 @@ function registerIpc() {
   });
   ipcMain.on('host:adopted', (e) => tabs?.adopted(e.sender));
   ipcMain.on('host:open-deck', (_e, slideId: unknown) => {
-    if (typeof slideId === 'string' && slideId) tabs?.openDeck(slideId);
+    if (typeof slideId === 'string' && slideId && tabs) {
+      const before = tabs.info.tabs.length;
+      tabs.openDeck(slideId);
+      const decks = tabs.info.tabs.length - 1;
+      if (decks >= before) track('deck_opened', { open_tabs: bucket(decks) });
+    }
     window?.focus();
   });
   ipcMain.on('host:open-home', (_e, path: unknown) => {
@@ -683,7 +765,12 @@ function registerIpc() {
     window?.focus();
   });
   ipcMain.on('host:haptic', (_e, pattern: unknown) => performHaptic(pattern));
-  ipcMain.handle('host:print-to-pdf', (e, filename: unknown) => printToPdf(e.sender, filename));
+  ipcMain.handle('host:print-to-pdf', (e, filename: unknown) =>
+    printToPdf(e.sender, filename).catch((err: unknown) => {
+      captureError(err, { step: 'pdf_export' });
+      throw err;
+    }),
+  );
   ipcMain.on('host:set-theme', (_e, theme: unknown) => {
     if (typeof theme !== 'string' || !THEMES.has(theme)) return;
     nativeTheme.themeSource = theme as 'light' | 'dark' | 'system';
@@ -715,7 +802,7 @@ const menuActions: MenuActions = {
   toggleTabDevTools: () => tabs?.activeContents()?.toggleDevTools(),
   openRecent: (root) => {
     window?.focus();
-    void openWorkspace(root);
+    void openWorkspace(root, 'menu');
   },
   replayIntro: () => replayIntro(),
   clearRecent: () => {
@@ -729,6 +816,8 @@ const menuActions: MenuActions = {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  startCrashReporter();
+
   app.on('second-instance', () => {
     if (!window) createWindow();
     if (window?.isMinimized()) window.restore();
@@ -736,6 +825,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    initTelemetry();
     registerIpc();
     refreshMenu();
     app.setAboutPanelOptions({
@@ -753,14 +843,14 @@ if (!app.requestSingleInstanceLock()) {
       systemPreferences.on('accent-color-changed', () => broadcast());
     }
     void shellEnv();
-    void syncManagedClis().catch(() => {});
+    void syncManagedClis().catch((err: unknown) => captureError(err, { step: 'sync_clis' }));
     createWindow();
     if (!settings.introSeen()) {
       if (reducedMotion()) settings.setIntroSeen();
       else playIntro();
     }
     const saved = settings.workspace();
-    if (saved) void openWorkspace(saved);
+    if (saved) void openWorkspace(saved, 'restored');
 
     app.on('activate', () => {
       if (!window) createWindow();
@@ -779,6 +869,6 @@ if (!app.requestSingleInstanceLock()) {
     persistSession();
     settings.flush();
     cancelAllLogins();
-    void server.stop().finally(() => app.quit());
+    void Promise.all([server.stop(), shutdownTelemetry()]).finally(() => app.quit());
   });
 }

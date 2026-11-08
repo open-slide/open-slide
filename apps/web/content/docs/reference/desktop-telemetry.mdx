@@ -1,0 +1,52 @@
+---
+title: Desktop telemetry
+description: What the open-slide desktop app reports, and how to turn it off.
+---
+
+The desktop app sends anonymous usage events and crash reports to
+[PostHog](https://posthog.com). They tell us which parts of the app people use and
+where it breaks. The `open-slide` CLI and the `@open-slide/core` package send
+nothing.
+
+## Turning it off
+
+- **Settings → Privacy → Usage & crash reports → Off.** The change applies at once.
+- Launch with `OPEN_SLIDE_TELEMETRY=0` or `DO_NOT_TRACK=1` to disable it entirely.
+
+## What is never sent
+
+- Slide content, deck names, themes, or assets
+- File or folder paths. The home directory is replaced with `~` in error stacks.
+- Agent prompts, replies, or account emails
+- Dev server, install, or sign-in logs
+
+## Identity
+
+Each install gets a random ID, stored in the app's `settings.json`. It is not tied
+to your machine, your agent accounts, or the website. Every event carries the app
+version, OS name and version, CPU architecture, Electron version, and locale.
+
+## Events
+
+| Event | Properties |
+| --- | --- |
+| `app_launched` | first launch, update, or normal launch; previous version |
+| `intro_finished` | whether it was skipped |
+| `onboarding_finished` | whether a workspace was open |
+| `workspace_created` / `workspace_create_failed` | default or custom, package manager, duration |
+| `workspace_opened` | how it was opened (restored, created, from the app, from the menu) |
+| `install_completed` / `install_failed` | package manager, duration |
+| `server_ready` / `server_failed` | startup time; failure reason and exit code |
+| `deck_opened` | number of open tabs, as a range |
+| `pdf_exported` | none |
+| `agent_login_started` / `agent_login_succeeded` / `agent_login_failed` | Claude Code or Codex, whether the CLI was downloaded, duration |
+| `agent_cli_downloaded` | Claude Code or Codex, duration |
+| `settings_changed` | window material or default package manager, and its new value |
+
+## Crash reports
+
+- Errors thrown in the app's own code are sent with their stack trace.
+- When a window or helper process exits abnormally, the app sends the process type,
+  the reason, and the exit code.
+- Native crash dumps stay on your machine. On the next launch, the app reports only
+  how many new dumps appeared.

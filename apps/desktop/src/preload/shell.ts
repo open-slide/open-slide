@@ -16,6 +16,7 @@ const api: ShellApi = {
   openExternal: (url) => ipcRenderer.send('external:open', url),
   sendCommand: (command) => ipcRenderer.send('shell:command', command),
   haptic: (pattern) => ipcRenderer.send('host:haptic', pattern),
+  reportError: (error) => ipcRenderer.send('telemetry:error', error),
   window: {
     isFocused: () => ipcRenderer.invoke('window:is-focused'),
     onFocus: (listener) => subscribe('window:focus', listener),
@@ -28,7 +29,7 @@ const api: ShellApi = {
   intro: {
     target: () => ipcRenderer.invoke('intro:target'),
     reveal: () => ipcRenderer.send('intro:reveal'),
-    done: () => ipcRenderer.send('intro:done'),
+    done: (skipped) => ipcRenderer.send('intro:done', skipped),
     close: () => ipcRenderer.send('intro:close'),
   },
   settings: {

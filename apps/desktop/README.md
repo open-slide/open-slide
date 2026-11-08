@@ -14,3 +14,10 @@ pnpm --filter desktop dist      # installers
 - First launch plays a full-screen intro in its own clear window over the display, which folds into the main window, then a three-step tour. **Help → Welcome to open-slide** replays both.
 
 The bundled core keeps its Vite cache under the app's user data, syncs its built-in skills into a workspace once per app version, and hides the in-app core update — updating the app updates core.
+
+## Telemetry
+
+Packaged builds send anonymous usage events and crash reports to PostHog from the main process (`src/main/telemetry.ts`); renderers forward their errors over IPC. Settings → Privacy turns it off, and `OPEN_SLIDE_TELEMETRY=0` or `DO_NOT_TRACK=1` disables it outright. Unpackaged runs send nothing unless `OPEN_SLIDE_TELEMETRY=1`.
+
+- `MAIN_VITE_POSTHOG_TOKEN` — the desktop project's token, read at build time (env or `apps/desktop/.env.local`). Without it telemetry is compiled out to no-ops.
+- `POSTHOG_CLI_API_KEY`, `POSTHOG_CLI_PROJECT_ID` — when set, `pnpm --filter desktop dist` uploads source maps after building and deletes them before packaging.

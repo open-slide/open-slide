@@ -17,9 +17,16 @@ const MANAGED_CORE_ENV = 'OPEN_SLIDE_MANAGED_CORE';
 const LISTEN_TIMEOUT_MS = 60_000;
 const LOG_LIMIT = 200 * 1024;
 
+export type ServerFailure = {
+  reason: 'core-missing' | 'timeout' | 'exited';
+  code?: number | null;
+  signal?: string | null;
+};
+
 type ServerEvents = {
   status: [ServerStatus];
   log: [string];
+  failure: [ServerFailure];
 };
 
 function reservePort(port: number): Promise<number> {
@@ -115,6 +122,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
     const { bin } = bundledCore();
     if (!existsSync(bin)) {
       this.setStatus({ state: 'error', message: 'The bundled @open-slide/core is missing.' });
+      this.emit('failure', { reason: 'core-missing' });
       return;
     }
     if (needsInstall(root)) {
@@ -155,6 +163,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
     const timeout = setTimeout(() => {
       if (generation === this.generation && this.status.state === 'starting') {
         this.setStatus({ state: 'error', message: 'The dev server did not start in time.' });
+        this.emit('failure', { reason: 'timeout' });
       }
     }, LISTEN_TIMEOUT_MS);
 
@@ -179,6 +188,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
       }
       const reason = signal ? `signal ${signal}` : `code ${code}`;
       this.setStatus({ state: 'error', message: `The dev server exited (${reason}).` });
+      this.emit('failure', { reason: 'exited', code, signal });
     });
   }
 }
