@@ -236,11 +236,11 @@ export function Onboarding({
                 {body}
               </p>
               {points && (
-                <ul className="mt-6 flex flex-col">
+                <ul className="mt-6 flex flex-col gap-3">
                   {points.map(({ icon: Icon, label }, i) => (
                     <li
                       key={label}
-                      className="ob-in flex items-center gap-3 border-t border-hairline py-2 text-[13px] font-medium last:border-b"
+                      className="ob-in flex items-center gap-3 text-[13px] font-medium"
                       style={{ '--i': 3 + i * 0.6 } as React.CSSProperties}
                     >
                       <Icon className="size-[15px] shrink-0 text-brand" aria-hidden />
