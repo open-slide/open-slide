@@ -59,7 +59,9 @@ export const meta: SlideMeta = { title: 'Whitespace replay', createdAt: '2026-01
 function Harness() {
   const ref = useRef<HTMLParagraphElement>(null);
   const [text, setText] = useState('');
-  const { bufferOps, cancelEdits } = useInspector();
+  // A gesture marker holds autosave, keeping the edits buffered for replay.
+  const [hold, setHold] = useState(true);
+  const { bufferOps } = useInspector();
   const { undo, redo } = useHistory();
   const edit = (kind: 'bold' | 'italic' | 'text') => {
     const anchor = ref.current;
@@ -81,13 +83,14 @@ function Harness() {
         <p ref={ref} data-testid="whitespace-text">${fixture.content}</p>
       </section>
       <output data-testid="rendered-text">{text}</output>
+      {hold && <span data-visual-gesture hidden />}
       <div data-inspector-ui style={{ display: 'flex', gap: 24 }}>
         <button type="button" onClick={() => edit('bold')}>Bold word</button>
         <button type="button" onClick={() => edit('italic')}>Italic word</button>
         <button type="button" onClick={() => edit('text')}>Append text</button>
         <button type="button" onClick={undo}>Undo fixture edit</button>
         <button type="button" onClick={redo}>Redo fixture edit</button>
-        <button type="button" onClick={cancelEdits}>Discard fixture edits</button>
+        <button type="button" onClick={() => setHold(false)}>Release autosave</button>
       </div>
     </div>
   );
@@ -123,7 +126,8 @@ export default [Only] satisfies Page[];
       await canvas.getByRole('button', { name: 'Redo fixture edit', exact: true }).click();
       await expect(text.locator('[style*="font-style"]')).toHaveText('target');
       await expect(text.getByText('target', { exact: true })).toHaveCSS('font-weight', '700');
-      await canvas.getByRole('button', { name: 'Discard fixture edits', exact: true }).click();
+      const undo = canvas.getByRole('button', { name: 'Undo fixture edit', exact: true });
+      for (let i = 0; i < 3 && (await text.innerHTML()) !== initialHtml; i++) await undo.click();
       await expect.poll(() => text.innerHTML()).toBe(initialHtml);
 
       if (fixture.name.startsWith('inherited-')) {
@@ -134,7 +138,7 @@ export default [Only] satisfies Page[];
           (response) =>
             response.url().includes('/__edit') && response.request().method() === 'POST',
         );
-        await page.getByRole('button', { name: 'Save', exact: true }).click();
+        await canvas.getByRole('button', { name: 'Release autosave', exact: true }).click();
         const response = await saved;
         expect(response.status()).toBe(200);
         const result = (await response.json()) as { results: { ok: boolean; error?: string }[] };

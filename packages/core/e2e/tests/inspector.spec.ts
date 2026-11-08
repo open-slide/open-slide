@@ -44,26 +44,24 @@ test.describe('inspector editing', () => {
     await expect(panel.getByPlaceholder('Element text')).toHaveValue('Editable headline');
   });
 
-  test('saving a text edit rewrites the slide source on disk', async ({ page, request }) => {
+  test('a text edit autosaves to the slide source on disk', async ({ page, request }) => {
     await openEditable(page, request, 'insp-save');
     await editorCanvas(page).getByText('Editable headline').click();
 
+    const saved = page.waitForResponse(
+      (res) => res.url().includes('/__edit') && res.request().method() === 'POST',
+    );
     await page
       .locator('aside[data-inspector-ui]')
       .getByPlaceholder('Element text')
       .fill('Edited via inspector');
     await expect(editorCanvas(page).getByText('Edited via inspector')).toBeVisible();
-    await expect(page.getByText('1 unsaved change')).toBeVisible();
-
-    const saved = page.waitForResponse(
-      (res) => res.url().includes('/__edit') && res.request().method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Save' }).click();
     expect((await saved).status()).toBe(200);
     await expect.poll(() => readSlideSource('insp-save')).toContain('Edited via inspector');
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
   });
 
-  test('discard reverts the edit without touching the file', async ({ page, request }) => {
+  test('undo after an autosave restores the file', async ({ page, request }) => {
     await openEditable(page, request, 'insp-discard');
     await editorCanvas(page).getByText('Editable headline').click();
 
@@ -71,11 +69,11 @@ test.describe('inspector editing', () => {
       .locator('aside[data-inspector-ui]')
       .getByPlaceholder('Element text')
       .fill('Discarded text');
-    await expect(editorCanvas(page).getByText('Discarded text')).toBeVisible();
+    await expect.poll(() => readSlideSource('insp-discard')).toContain('Discarded text');
 
-    await page.getByRole('button', { name: 'Discard' }).click();
+    await page.getByRole('button', { name: 'Undo' }).click();
     await expect(editorCanvas(page).getByText('Editable headline')).toBeVisible();
-    expect(await readSlideSource('insp-discard')).not.toContain('Discarded text');
+    await expect.poll(() => readSlideSource('insp-discard')).not.toContain('Discarded text');
   });
 
   test('switching to preview commits pending edits', async ({ page, request }) => {
@@ -112,11 +110,6 @@ test.describe('inspector editing', () => {
     await expect(headline).toHaveCSS('font-style', 'italic');
     await expect(headline).toHaveCSS('text-align', 'center');
 
-    const saved = page.waitForResponse(
-      (res) => res.url().includes('/__edit') && res.request().method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Save' }).click();
-    expect((await saved).status()).toBe(200);
     await expect.poll(() => readSlideSource('insp-style')).toContain('textAlign');
     const src = await readSlideSource('insp-style');
     expect(src).toContain('fontWeight');

@@ -191,7 +191,7 @@ test.describe('editor interaction flow', () => {
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect(headline).toHaveCSS('font-weight', '700');
-    await panel.getByRole('combobox').first().click();
+    await panel.getByRole('combobox', { name: 'Weight' }).click();
     await page.getByRole('option', { name: 'Regular', exact: true }).click();
     await expect(headline).toHaveCSS('font-weight', '400');
   });
@@ -354,7 +354,7 @@ test.describe('editor interaction flow', () => {
     const saved = page.waitForResponse(
       (response) => response.url().includes('/__edit') && response.request().method() === 'POST',
     );
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.keyboard.press('ControlOrMeta+s');
     const response = await saved;
     expect(response.status()).toBe(200);
     const result = (await response.json()) as { results: { ok: boolean; error?: string }[] };
@@ -496,7 +496,7 @@ test.describe('editor interaction flow', () => {
     await expect(headline).toHaveAttribute('contenteditable', 'true');
     await headline.dispatchEvent('keydown', { key: 'Escape', isComposing: true });
     await expect(headline).toHaveAttribute('contenteditable', 'true');
-    await panel.getByRole('combobox').first().click();
+    await panel.getByRole('combobox', { name: 'Weight' }).click();
     await expect(page.getByRole('listbox')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('listbox')).toHaveCount(0);

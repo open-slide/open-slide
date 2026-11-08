@@ -5,6 +5,7 @@ import {
   duplicateSlide,
   editorCanvas,
   openSlide,
+  readSlideSource,
   slideSourcePath,
 } from './helpers.ts';
 
@@ -121,7 +122,7 @@ export default [Only] satisfies Page[];
     await duplicateSlide(request, 'edit-target', slideId);
     await writeFile(
       slideSourcePath(slideId),
-      `import { type RefObject, useRef } from 'react';
+      `import { type ReactNode, type RefObject, useRef } from 'react';
 import { type Page, type SlideMeta, useIsActivePage } from '@open-slide/core';
 import { readEditableText, useInspector } from '@/components/inspector/inspector-provider';
 export const meta: SlideMeta = { title: 'Paged history', createdAt: '2026-01-01T00:00:00.000Z' };
@@ -143,17 +144,24 @@ function Controls({ value, titleRef }: { value: string; titleRef: RefObject<HTML
     </div>
   );
 }
-function Harness({ value }: { value: string }) {
-  const titleRef = useRef<HTMLHeadingElement>(null);
+function Harness({ value, titleRef, children }: { value: string; titleRef: RefObject<HTMLHeadingElement | null>; children: ReactNode }) {
   return (
     <div style={{ padding: 80, fontFamily: 'system-ui', fontSize: 32 }}>
-      <Title nodeRef={titleRef} value={value} />
+      {children}
       {useIsActivePage() && <Controls value={value} titleRef={titleRef} />}
     </div>
   );
 }
-const One: Page = () => <Harness value="Page one" />;
-const Two: Page = () => <Harness value="Page two" />;
+// Each page hands its title text straight to Title so a saved rename can
+// follow the literal back to its call site.
+const One: Page = () => {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  return <Harness value="Page one" titleRef={titleRef}><Title nodeRef={titleRef} value="Page one" /></Harness>;
+};
+const Two: Page = () => {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  return <Harness value="Page two" titleRef={titleRef}><Title nodeRef={titleRef} value="Page two" /></Harness>;
+};
 export default [One, Two] satisfies Page[];
 ${
   withTransition
@@ -205,8 +213,11 @@ ${
           expect(await editorCanvas(page).getByTestId('paged-title').count()).toBe(2);
       };
 
+      const source = () =>
+        readSlideSource(withTransition ? 'history-cross-page-transition' : 'history-cross-page');
       await rename.click();
       await expect(title).toHaveText('Page one edited');
+      await expect.poll(source).toContain('Page one edited');
       await releaseFocus();
       await page.keyboard.press('ArrowRight');
       await expect(page).toHaveURL(/[?&]p=2/);
@@ -214,6 +225,7 @@ ${
       await rename.click();
       await expect(title).toHaveText('Page two edited');
       await expect(selection).toHaveText('none');
+      await expect.poll(source).toContain('Page two edited');
       await releaseFocus();
 
       await page.keyboard.press('ControlOrMeta+z');
@@ -281,6 +293,10 @@ ${
         const slideId = sharedStyle ? 'history-shared-style-order' : 'history-style-text-order';
         const paragraphs = await openStyleHistoryFixture(page, request, slideId);
         const controls = editorCanvas(page);
+        const saved = page.waitForResponse(
+          (response) =>
+            response.url().endsWith('/__edit/batch') && response.request().method() === 'POST',
+        );
         await controls.getByRole('button', { name: 'Set first size', exact: true }).click();
         await expect(paragraphs.first()).toHaveCSS('font-size', '40px');
         await controls.getByRole('button', { name: 'Rename first', exact: true }).click();
@@ -297,11 +313,6 @@ ${
         await expect(paragraphs.first()).toHaveCSS('font-size', '40px');
         await expect(paragraphs.first()).toHaveText('After first');
 
-        const saved = page.waitForResponse(
-          (response) =>
-            response.url().endsWith('/__edit/batch') && response.request().method() === 'POST',
-        );
-        await page.getByRole('button', { name: 'Save', exact: true }).click();
         const response = await saved;
         expect(response.status()).toBe(200);
         const result = (await response.json()) as { results: { ok: boolean; error?: string }[] };

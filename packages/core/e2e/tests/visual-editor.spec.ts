@@ -147,13 +147,6 @@ export default [Only] satisfies Page[];
       height: before.height,
     };
     await expectGeometry(headline, expected);
-    await expect(page.getByText('1 unsaved change')).toBeVisible();
-
-    const saved = page.waitForResponse(
-      (response) => response.url().includes('/__edit') && response.request().method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
-    expect((await saved).status()).toBe(200);
     await expect.poll(() => readSlideSource('visual-drag-save')).not.toBe(source);
 
     await page.reload();
@@ -279,7 +272,6 @@ export default [Only] satisfies Page[];
     await page.keyboard.press('Escape');
     await page.mouse.up();
     await expectGeometry(headline, { x: before.x + 10, y: before.y });
-    await expect(page.getByText('1 unsaved change')).toBeVisible();
 
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expectGeometry(headline, { x: before.x, y: before.y });
@@ -623,11 +615,7 @@ export default [Only] satisfies Page[];
     await expectUnmoved();
     await expect(first).toHaveCSS('z-index', '0');
     await expect(second).toHaveCSS('z-index', '1');
-    const saved = page.waitForResponse(
-      (response) => response.url().includes('/__edit') && response.request().method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
-    expect((await saved).ok()).toBe(true);
+    await expect.poll(() => readSlideSource(slideId)).toContain("zIndex: '0'");
     await page.reload();
     await expect(first).toBeVisible();
     await expectUnmoved();
@@ -743,7 +731,6 @@ export default [Only] satisfies Page[];
     await expectGeometry(edited, { x: before.x, y: before.y });
     await page.keyboard.press('Escape');
     await expect(edited).not.toHaveAttribute('contenteditable', 'true');
-    await expect(page.getByText('1 unsaved change')).toBeVisible();
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect(headline).toBeVisible();
     await headline.dblclick();
@@ -866,6 +853,9 @@ export default [Only] satisfies Page[];
     request,
   }) => {
     const { first, second } = await openBlocks(page, request, 'visual-save-selection');
+    const isBatch = (response: import('@playwright/test').Response) =>
+      response.url().includes('/__edit') && response.request().method() === 'POST';
+    const saved = page.waitForResponse(isBatch);
     await first.click();
     await page.keyboard.press('Shift+ArrowRight');
     await second.click();
@@ -875,28 +865,20 @@ export default [Only] satisfies Page[];
     await expectGeometry(first, { x: 130, y: 160 });
     await expectGeometry(second, { x: 520, y: 370 });
 
-    const saved = page.waitForResponse(
-      (response) => response.url().includes('/__edit') && response.request().method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
     const response = await saved;
     expect(response.status()).toBe(200);
     const body = (await response.json()) as { results: { ok: boolean; error?: string }[] };
     expect(body.results.filter((result) => !result.ok)).toEqual([]);
-    await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
     await expect
       .poll(async () => {
         const location = await second.getAttribute('data-slide-loc');
         return !!location && location !== originalLocation;
       })
       .toBe(true);
+    const savedAgain = page.waitForResponse(isBatch);
     await page.keyboard.press('Shift+ArrowRight');
     await expectGeometry(second, { x: 530, y: 370 });
 
-    const savedAgain = page.waitForResponse(
-      (response) => response.url().includes('/__edit') && response.request().method() === 'POST',
-    );
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
     const secondResponse = await savedAgain;
     expect(secondResponse.status()).toBe(200);
     const secondBody = (await secondResponse.json()) as {
