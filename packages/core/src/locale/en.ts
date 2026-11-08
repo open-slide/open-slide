@@ -311,6 +311,8 @@ export const en: Locale = {
     commentRegionNoTarget: "Couldn't find an element to attach this region to.",
     saveFailed: "Couldn't save:",
     undoFailed: "Couldn't undo:",
+    sharedStructureHint:
+      'This element shares its JSX definition with other instances. Select a unique parent container to delete, duplicate or group it.',
     decreaseFontSize: 'Decrease font size',
     increaseFontSize: 'Increase font size',
   },

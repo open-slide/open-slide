@@ -314,6 +314,8 @@ export const ja: Locale = {
     commentRegionNoTarget: 'この範囲を付けられる要素が見つかりませんでした。',
     saveFailed: '保存に失敗しました:',
     undoFailed: '元に戻せませんでした:',
+    sharedStructureHint:
+      'この要素は他のインスタンスと JSX 定義を共有しています。削除・複製・グループ化するには、固有の親コンテナを選択してください。',
     decreaseFontSize: 'フォントサイズを縮小',
     increaseFontSize: 'フォントサイズを拡大',
   },

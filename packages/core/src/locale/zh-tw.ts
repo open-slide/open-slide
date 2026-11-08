@@ -308,6 +308,8 @@ export const zhTW: Locale = {
     commentRegionNoTarget: '找不到可以附加這個範圍的元件。',
     saveFailed: '儲存失敗：',
     undoFailed: '無法復原：',
+    sharedStructureHint:
+      '此元素與其他實例共用同一個 JSX 定義。請選擇唯一的父容器來刪除、複製或群組。',
     decreaseFontSize: '縮小字級',
     increaseFontSize: '放大字級',
   },

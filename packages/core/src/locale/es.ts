@@ -316,6 +316,8 @@ export const es: Locale = {
     commentRegionNoTarget: 'No se encontró un elemento al que asociar esta zona.',
     saveFailed: 'No se pudo guardar:',
     undoFailed: 'No se pudo deshacer:',
+    sharedStructureHint:
+      'Este elemento comparte su definición JSX con otras instancias. Selecciona un contenedor padre único para eliminarlo, duplicarlo o agruparlo.',
     decreaseFontSize: 'Reducir tamaño de fuente',
     increaseFontSize: 'Aumentar tamaño de fuente',
   },

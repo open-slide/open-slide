@@ -115,6 +115,9 @@ export type TransformSnapshot = {
   frame: Rect;
   style: string | null;
   translate: Point;
+  // Set for absolutely positioned elements placed with px `left`/`top` and no
+  // `translate`: moves rewrite those insets instead of stacking a translate.
+  inset: Point | null;
   basis: { a: number; b: number; c: number; d: number };
   rotation: number;
   width: number;
@@ -146,7 +149,26 @@ export function captureTransform(target: SelectedTarget, canvas: Canvas): Transf
     d: (y.y - zero.y) / 100,
   };
   const translate = localDelta(basis, { x: before.x - zero.x, y: before.y - zero.y });
-  return { target, frame, style, translate, basis, rotation, width, height };
+  return {
+    target,
+    frame,
+    style,
+    translate,
+    inset: readInset(anchor, computed),
+    basis,
+    rotation,
+    width,
+    height,
+  };
+}
+
+function readInset(anchor: HTMLElement, computed: CSSStyleDeclaration): Point | null {
+  if (computed.position !== 'absolute') return null;
+  const translate = anchor.style.translate;
+  if (translate && translate !== 'none' && !/^0(px)?( 0(px)?)?$/.test(translate)) return null;
+  const px = /^-?\d+(\.\d+)?px$/;
+  if (!px.test(anchor.style.left) || !px.test(anchor.style.top)) return null;
+  return { x: Number.parseFloat(anchor.style.left), y: Number.parseFloat(anchor.style.top) };
 }
 
 function localDelta(basis: TransformSnapshot['basis'], delta: Point): Point {
@@ -167,6 +189,12 @@ export function moveOps(snapshot: TransformSnapshot, delta: Point, canvas: Canva
     x: delta.x * canvas.scale,
     y: delta.y * canvas.scale,
   });
+  if (snapshot.inset) {
+    return [
+      styleOp('left', `${round(snapshot.inset.x + local.x)}px`),
+      styleOp('top', `${round(snapshot.inset.y + local.y)}px`),
+    ];
+  }
   return [
     styleOp(
       'translate',
@@ -183,15 +211,18 @@ export function sizeOps(
 ): EditOp[] {
   const anchor = snapshot.target.anchor;
   restoreTransform(snapshot);
-  const constraints = [
-    styleOp('minWidth', '0px'),
-    styleOp('minHeight', '0px'),
-    styleOp('maxWidth', 'none'),
-    styleOp('maxHeight', 'none'),
-    styleOp('flexShrink', '0'),
-    styleOp('flexGrow', '0'),
-    styleOp('flexBasis', 'auto'),
-  ];
+  // Absolutely positioned boxes ignore flex sizing, so they only need w/h.
+  const constraints = snapshot.inset
+    ? []
+    : [
+        styleOp('minWidth', '0px'),
+        styleOp('minHeight', '0px'),
+        styleOp('maxWidth', 'none'),
+        styleOp('maxHeight', 'none'),
+        styleOp('flexShrink', '0'),
+        styleOp('flexGrow', '0'),
+        styleOp('flexBasis', 'auto'),
+      ];
   const dimensions = (width: number, height: number) => [
     styleOp('width', `${round(Math.max(8, width))}px`),
     styleOp('height', `${round(Math.max(8, height))}px`),

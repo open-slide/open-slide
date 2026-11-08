@@ -313,6 +313,7 @@ export type Locale = {
     /** Prefix for the toast shown when one or more buffered edits fail to write to disk. */
     saveFailed: string;
     undoFailed: string;
+    sharedStructureHint: string;
     decreaseFontSize: string;
     increaseFontSize: string;
   };

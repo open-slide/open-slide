@@ -24,6 +24,7 @@ import {
 } from '@/lib/inspector/text-edit-timeline';
 import { type AddCommentInput, type SlideComment, useComments } from '@/lib/inspector/use-comments';
 import { type Edit, type EditOp, useEditor } from '@/lib/inspector/use-editor';
+import { useObjectCommands } from '@/lib/inspector/use-object-commands';
 import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-editor';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import type { ElementLoc, StructureOp } from '@/lib/structure';
@@ -129,6 +130,24 @@ export type InlineEditTarget = SelectedTarget & {
 };
 
 export type InlineTextSelection = { start: number; end: number };
+
+export type StructureOptions = {
+  // Ops that move the freshly rendered elements into place; written as part
+  // of the same undo step.
+  place?: (created: SelectedTarget[]) => VisualEdit[];
+};
+
+function locateCreated(created: ElementLoc[]): SelectedTarget[] {
+  const layer = document.querySelector(`[data-inspector-root] [${PAGE_LAYER_ATTR}]`);
+  const targets: SelectedTarget[] = [];
+  for (const loc of created) {
+    const anchor = layer?.querySelector<HTMLElement>(
+      `[data-slide-loc="${loc.line}:${loc.column}"]`,
+    );
+    if (anchor) targets.push({ ...loc, anchor });
+  }
+  return targets;
+}
 type InlineStyleHandler = (ops: EditOp[]) => boolean;
 
 type AssetAttrOp = { assetPath: string; previewUrl: string };
@@ -424,7 +443,8 @@ type InspectorCtx = {
   committing: boolean;
   // Inserts, deletes, duplicates or regroups JSX, flushing buffered edits
   // first. Resolves to the created elements once they are on the canvas.
-  runStructure: (op: StructureOp) => Promise<SelectedTarget[]>;
+  runStructure: (op: StructureOp, options?: StructureOptions) => Promise<SelectedTarget[]>;
+  objects: ReturnType<typeof useObjectCommands>;
   copyElements: (targets: ElementLoc[]) => Promise<string[]>;
   openCrop: (anchor: HTMLImageElement) => void;
   openReplace: (anchor: HTMLElement) => void;
@@ -1040,12 +1060,18 @@ export function InspectorProvider({
     [enqueueWrite, expectSync, restoreRevision, history, t],
   );
 
+  // Several revisions recorded together undo as one step, newest first.
   const recordSavedRevision = useCallback(
-    (revisionId: string, upTo: number | null) => {
+    (revisionIds: string | string[], upTo: number | null) => {
+      const ids = Array.isArray(revisionIds) ? revisionIds : [revisionIds];
       const entry = {
         pageIndex: pageIndexRef.current,
-        undo: () => void restoreSavedRevision(revisionId, 'undo'),
-        redo: () => void restoreSavedRevision(revisionId, 'redo'),
+        undo: () => {
+          for (const id of [...ids].reverse()) void restoreSavedRevision(id, 'undo');
+        },
+        redo: () => {
+          for (const id of ids) void restoreSavedRevision(id, 'redo');
+        },
       };
       if (upTo === null) history.record(entry);
       else history.settle(INSPECTOR_HISTORY, upTo, entry);
@@ -1256,10 +1282,11 @@ export function InspectorProvider({
   );
 
   const runStructure = useCallback(
-    async (op: StructureOp): Promise<SelectedTarget[]> => {
+    async (op: StructureOp, options?: StructureOptions): Promise<SelectedTarget[]> => {
       await commitEdits().catch(() => {});
       return enqueueWrite(async () => {
         setBusy(true);
+        const revisions: string[] = [];
         try {
           await pendingSyncRef.current;
           const sync = expectSync();
@@ -1271,17 +1298,27 @@ export function InspectorProvider({
             sync.release();
             return [];
           }
-          recordSavedRevision(written, null);
+          revisions.push(written);
           await sync.synced;
-          const layer = document.querySelector(
-            `[data-inspector-root] [${PAGE_LAYER_ATTR}="${pageIndexRef.current}"]`,
-          );
-          const targets: SelectedTarget[] = [];
-          for (const loc of created) {
-            const anchor = layer?.querySelector<HTMLElement>(
-              `[data-slide-loc="${loc.line}:${loc.column}"]`,
-            );
-            if (anchor) targets.push({ ...loc, anchor });
+          let targets = locateCreated(created);
+          // New elements land wherever their parent puts them; nudge them to
+          // the frame the user asked for in the same undo step.
+          const placement = options?.place?.(targets) ?? [];
+          if (placement.length > 0) {
+            const placeSync = expectSync();
+            const { revision: placed } = await applyEdits(
+              placement.map(({ line, column, ops }) => ({ line, column, ops })),
+            ).catch((err) => {
+              placeSync.release();
+              throw err;
+            });
+            if (placed) {
+              revisions.push(placed);
+              await placeSync.synced;
+              targets = locateCreated(created);
+            } else {
+              placeSync.release();
+            }
           }
           return targets;
         } catch (err) {
@@ -1289,12 +1326,25 @@ export function InspectorProvider({
           toast.error(msg);
           return [];
         } finally {
+          if (revisions.length > 0) recordSavedRevision(revisions, null);
           setBusy(false);
         }
       });
     },
-    [commitEdits, enqueueWrite, expectSync, applyStructure, recordSavedRevision],
+    [commitEdits, enqueueWrite, expectSync, applyStructure, applyEdits, recordSavedRevision],
   );
+
+  const objects = useObjectCommands({
+    active,
+    inlineEditing: !!inlineEdit,
+    busy,
+    slideId,
+    pageIndex,
+    selection,
+    setSelection,
+    runStructure,
+    copyElements,
+  });
 
   // Auto-flush on inspector close and on route unmount so toggling
   // off or navigating away doesn't drop buffered edits. Failures are
@@ -1632,6 +1682,7 @@ export function InspectorProvider({
       saving,
       committing: busy,
       runStructure,
+      objects,
       copyElements,
       openCrop,
       openReplace,
@@ -1674,6 +1725,7 @@ export function InspectorProvider({
       saving,
       busy,
       runStructure,
+      objects,
       copyElements,
       openCrop,
       openReplace,

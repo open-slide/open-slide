@@ -308,6 +308,8 @@ export const zhCN: Locale = {
     commentRegionNoTarget: '找不到可以附加该区域的元素。',
     saveFailed: '保存失败：',
     undoFailed: '无法撤销：',
+    sharedStructureHint:
+      '此元素与其他实例共用同一个 JSX 定义。请选择唯一的父容器来删除、复制或编组。',
     decreaseFontSize: '缩小字号',
     increaseFontSize: '放大字号',
   },
