@@ -1,6 +1,7 @@
 import { useTheme } from 'next-themes';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { slideIds } from './slides';
 
 export type HapticPattern = 'alignment' | 'levelChange' | 'generic';
 
@@ -95,7 +96,21 @@ export function DesktopBridge() {
     return () => document.removeEventListener('click', onClick, true);
   }, []);
 
-  useEffect(() => desktopHost?.onNavigate((path) => navigate(path)), [navigate]);
+  useEffect(
+    () =>
+      desktopHost?.onNavigate((path) => {
+        // The host may route a pre-warmed page to a deck created after it
+        // booted; its baked-in slide list can't load that deck, so do a
+        // full load instead.
+        const deck = deckIdFromPath(path);
+        if (deck && !slideIds.includes(deck)) {
+          window.location.replace(`${import.meta.env.BASE_URL.replace(/\/$/, '')}${path}`);
+          return;
+        }
+        navigate(path);
+      }),
+    [navigate],
+  );
 
   useEffect(() => {
     if (theme) desktopHost?.setTheme(theme);
