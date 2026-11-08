@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 import type { AgentInfo, AppState } from '../../shared/types';
 import { desktop } from '../lib/desktop';
 import { splitPath } from '../lib/paths';
-import { IDLE_LOGIN, type Login, LoginCodeForm, useAgents } from './agents-section';
+import { DownloadStatus, IDLE_LOGIN, type Login, LoginCodeForm, useAgents } from './agents-section';
 import {
   AgentsScene,
   CommentScene,
@@ -114,8 +114,8 @@ const STEPS: Step[] = [
   {
     kind: 'agents',
     eyebrow: 'Your agent',
-    title: 'Your agent is already here.',
-    body: 'Claude Code and Codex come built in — nothing else to install. Sign in with the account you already use.',
+    title: 'Your agent, one sign-in away.',
+    body: 'Sign in to Claude Code or Codex with the account you already use. If it is not on this computer yet, the app fetches it for you.',
     file: 'Agents',
     Scene: AgentsScene,
   },
@@ -422,12 +422,14 @@ function AgentRow({
   onSignOut: () => void;
   onDismiss: () => void;
 }) {
-  const available = agent.cliPath !== null;
+  const available = agent.cliPath !== null || agent.cliInstallable;
   const status = !available
-    ? { tone: 'warn' as const, label: 'Unavailable in this build' }
-    : agent.signedIn
-      ? { tone: 'ok' as const, label: agent.account ?? 'Signed in' }
-      : { tone: 'off' as const, label: 'Not signed in' };
+    ? { tone: 'warn' as const, label: 'Unavailable on this platform' }
+    : agent.cliPath === null
+      ? { tone: 'off' as const, label: 'Downloads when you sign in' }
+      : agent.signedIn
+        ? { tone: 'ok' as const, label: agent.account ?? 'Signed in' }
+        : { tone: 'off' as const, label: 'Not signed in' };
 
   return (
     <div className={cn('px-4 py-3', className)}>
@@ -466,7 +468,12 @@ function AgentRow({
             </Button>
           ))}
       </div>
-      {login.running && (
+      {login.download && (
+        <div className="ob-pop mt-3 pl-11">
+          <DownloadStatus name={agent.name} download={login.download} />
+        </div>
+      )}
+      {login.running && !login.download && (
         <div className="ob-pop mt-3 flex flex-col gap-2 pl-11">
           <p className="text-[12px] leading-relaxed">
             Finish signing in from your browser.

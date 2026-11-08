@@ -30,6 +30,7 @@ import {
   type TaskResult,
   type WorkspaceInfo,
 } from '../shared/types';
+import { managedCliDirs, syncManagedClis } from './agent-cli';
 import { cancelAllLogins, cancelLogin, listAgents, login, logout, sendLoginInput } from './agents';
 import { performHaptic } from './haptics';
 import { installMenu, type MenuActions } from './menu';
@@ -71,7 +72,9 @@ let tabs: TabManager | null = null;
 let workspace: WorkspaceInfo | null = null;
 
 async function childEnv(): Promise<NodeJS.ProcessEnv> {
-  return { ...(await shellEnv()), OPEN_SLIDE_AGENT_MODULES: modulesDir() };
+  const env = await shellEnv();
+  const PATH = [env.PATH ?? '', ...managedCliDirs()].filter(Boolean).join(path.delimiter);
+  return { ...env, PATH, OPEN_SLIDE_AGENT_MODULES: modulesDir() };
 }
 
 function fallbackPackageManager(): PackageManager {
@@ -750,6 +753,7 @@ if (!app.requestSingleInstanceLock()) {
       systemPreferences.on('accent-color-changed', () => broadcast());
     }
     void shellEnv();
+    void syncManagedClis().catch(() => {});
     createWindow();
     if (!settings.introSeen()) {
       if (reducedMotion()) settings.setIntroSeen();

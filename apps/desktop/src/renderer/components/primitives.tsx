@@ -12,6 +12,25 @@ export function LineLoader({ className }: { className?: string }) {
   );
 }
 
+export function ProgressLine({ value, className }: { value: number; className?: string }) {
+  const clamped = Math.min(1, Math.max(0, value));
+  return (
+    <div
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(clamped * 100)}
+      className={cn('relative h-px w-56 overflow-hidden bg-hairline', className)}
+    >
+      <span
+        aria-hidden
+        className="absolute inset-y-[-0.5px] left-0 w-full origin-left bg-foreground transition-transform duration-150 ease-out motion-reduce:transition-none"
+        style={{ transform: `scaleX(${clamped})` }}
+      />
+    </div>
+  );
+}
+
 export function LogView({ text, className }: { text: string; className?: string }) {
   const ref = useRef<HTMLPreElement>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: follow the tail whenever text grows

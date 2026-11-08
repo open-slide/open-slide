@@ -1,8 +1,9 @@
 import type { ChildProcess } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentId, AgentInfo, LoginEvent, TaskResult } from '../shared/types';
+import { cancelInstall, canInstallCli, installCli, isManagedCli } from './agent-cli';
 import { run } from './process';
 import { findOnPath } from './shell-env';
 import { modulesDir } from './workspace';
@@ -16,51 +17,11 @@ type AgentSpec = {
   name: string;
   sdkPackage: string;
   command: string;
-  bundledCli: (sdkDir: string) => string | null;
   statusArgs: string[];
   parseStatus: (code: number | null, output: string) => Pick<AgentInfo, 'signedIn' | 'account'>;
   loginArgs: string[];
   logoutArgs: string[];
 };
-
-const EXE = process.platform === 'win32' ? '.exe' : '';
-
-// Node's lookup, walking up from a package's real directory: pnpm keeps a
-// package's dependencies next to it in the store rather than below it.
-function findPackageDir(fromDir: string, name: string): string | null {
-  let dir = fromDir;
-  while (true) {
-    if (path.basename(dir) !== 'node_modules') {
-      const candidate = path.join(dir, 'node_modules', name);
-      if (existsSync(path.join(candidate, 'package.json'))) return realpathSync(candidate);
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-
-function platformSuffix(): string {
-  return `${process.platform}-${process.arch}`;
-}
-
-function claudeBundledCli(sdkDir: string): string | null {
-  const pkg = findPackageDir(sdkDir, `@anthropic-ai/claude-agent-sdk-${platformSuffix()}`);
-  const file = pkg && path.join(pkg, `claude${EXE}`);
-  return file && existsSync(file) ? file : null;
-}
-
-function codexBundledCli(sdkDir: string): string | null {
-  const codex = findPackageDir(sdkDir, '@openai/codex');
-  const native = codex && findPackageDir(codex, `@openai/codex-${platformSuffix()}`);
-  if (!native) return null;
-  const vendor = path.join(native, 'vendor');
-  for (const triple of existsSync(vendor) ? readdirSync(vendor) : []) {
-    const file = path.join(vendor, triple, 'bin', `codex${EXE}`);
-    if (existsSync(file)) return file;
-  }
-  return null;
-}
 
 const AGENTS: AgentSpec[] = [
   {
@@ -68,7 +29,6 @@ const AGENTS: AgentSpec[] = [
     name: 'Claude Code',
     sdkPackage: '@anthropic-ai/claude-agent-sdk',
     command: 'claude',
-    bundledCli: claudeBundledCli,
     statusArgs: ['auth', 'status', '--json'],
     parseStatus(_code, output) {
       try {
@@ -90,7 +50,6 @@ const AGENTS: AgentSpec[] = [
     name: 'Codex',
     sdkPackage: '@openai/codex-sdk',
     command: 'codex',
-    bundledCli: codexBundledCli,
     statusArgs: ['login', 'status'],
     parseStatus(code, output) {
       const line = output.trim().split('\n').pop()?.trim() ?? '';
@@ -126,14 +85,13 @@ function readVersion(pkgDir: string | null): string | null {
   }
 }
 
-// Core's providers prefer a CLI on PATH and otherwise let the SDK run the
-// copy it ships, so status and sign-in go through the same binary.
+// The app ships no agent CLI of its own: one on the user's PATH wins, and
+// otherwise the copy downloaded on first sign-in, which the child env appends
+// to PATH so core's providers find the same binary.
 function resolveCli(agent: AgentSpec, env: NodeJS.ProcessEnv) {
-  const onPath = findOnPath(agent.command, env);
-  if (onPath) return { path: onPath, source: 'path' as const };
-  const dir = sdkDir(agent);
-  const bundled = dir ? agent.bundledCli(dir) : null;
-  return bundled ? { path: bundled, source: 'bundled' as const } : null;
+  const found = findOnPath(agent.command, env);
+  if (!found) return null;
+  return { path: found, source: isManagedCli(found) ? ('downloaded' as const) : ('path' as const) };
 }
 
 async function cliVersion(cli: string, env: NodeJS.ProcessEnv): Promise<string | null> {
@@ -153,6 +111,7 @@ async function describe(agent: AgentSpec, env: NodeJS.ProcessEnv): Promise<Agent
     sdkVersion: readVersion(sdkDir(agent)),
     cliPath: cli?.path ?? null,
     cliSource: cli?.source ?? null,
+    cliInstallable: !cli && canInstallCli(agent.id),
     cliVersion: null,
     signedIn: null,
     account: null,
@@ -182,8 +141,17 @@ export async function login(
   openUrl: (url: string) => void,
 ): Promise<TaskResult> {
   const agent = spec(id);
+  if (!resolveCli(agent, env) && canInstallCli(id)) {
+    try {
+      await installCli(id, (progress) => emit({ id, type: 'download', ...progress }));
+    } catch (err) {
+      const aborted = err instanceof Error && err.name === 'AbortError';
+      return { ok: false, error: aborted ? 'Download cancelled.' : (err as Error).message };
+    }
+    emit({ id, type: 'installed' });
+  }
   const cli = resolveCli(agent, env);
-  if (!cli) return { ok: false, error: `${agent.name} is not available in this build.` };
+  if (!cli) return { ok: false, error: `${agent.name} is not available on this platform.` };
   logins.get(id)?.kill();
   let opened = false;
   const handle = run(cli.path, agent.loginArgs, {
@@ -213,13 +181,14 @@ export function sendLoginInput(id: AgentId, text: string) {
 }
 
 export function cancelLogin(id: AgentId) {
+  cancelInstall(id);
   logins.get(id)?.kill();
 }
 
 export async function logout(id: AgentId, env: NodeJS.ProcessEnv): Promise<TaskResult> {
   const agent = spec(id);
   const cli = resolveCli(agent, env);
-  if (!cli) return { ok: false, error: `${agent.name} is not available in this build.` };
+  if (!cli) return { ok: false, error: `${agent.name} is not installed.` };
   const { code, output } = await run(cli.path, agent.logoutArgs, {
     cwd: os.homedir(),
     env,

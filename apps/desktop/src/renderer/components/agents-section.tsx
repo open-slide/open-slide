@@ -7,16 +7,23 @@ import { cn } from '@/lib/utils';
 import type { AgentId, AgentInfo } from '../../shared/types';
 import { desktop } from '../lib/desktop';
 import { tildify } from '../lib/paths';
-import { LineLoader, LogView, SectionCard, StatusDot } from './primitives';
+import { LineLoader, LogView, ProgressLine, SectionCard, StatusDot } from './primitives';
 
 export type Login = {
   output: string;
   url: string | null;
   running: boolean;
   error: string | null;
+  download: { received: number; total: number | null } | null;
 };
 
-export const IDLE_LOGIN: Login = { output: '', url: null, running: false, error: null };
+export const IDLE_LOGIN: Login = {
+  output: '',
+  url: null,
+  running: false,
+  error: null,
+  download: null,
+};
 
 export function useAgents() {
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
@@ -45,9 +52,16 @@ export function useAgents() {
             return { ...prev, [event.id]: { ...current, output: current.output + event.chunk } };
           }
           if (event.type === 'url') return { ...prev, [event.id]: { ...current, url: event.url } };
+          if (event.type === 'download') {
+            const download = { received: event.received, total: event.total };
+            return { ...prev, [event.id]: { ...current, download } };
+          }
+          if (event.type === 'installed') {
+            return { ...prev, [event.id]: { ...current, download: null } };
+          }
           return { ...prev, [event.id]: { ...current, running: false } };
         });
-        if (event.type === 'exit') void refresh();
+        if (event.type === 'exit' || event.type === 'installed') void refresh();
       }),
     [refresh],
   );
@@ -58,7 +72,7 @@ export function useAgents() {
     if (!result.ok) {
       setLogins((prev) => ({
         ...prev,
-        [id]: { ...(prev[id] ?? IDLE_LOGIN), running: false, error: result.error },
+        [id]: { ...(prev[id] ?? IDLE_LOGIN), running: false, download: null, error: result.error },
       }));
     }
   };
@@ -79,8 +93,8 @@ export function AgentsSection() {
   return (
     <>
       <p className="text-[13px] leading-relaxed text-muted-foreground">
-        The agent panel inside each deck drives Claude Code or Codex. Both SDKs ship with the app,
-        so a workspace connects without installing anything — just sign in once.
+        The agent panel inside each deck drives Claude Code or Codex. If the agent isn't installed
+        on this computer yet, signing in downloads it once — there is nothing else to set up.
       </p>
       {agents === null ? (
         <SectionCard>
@@ -131,14 +145,16 @@ function AgentCard({
   onSignOut: () => void;
   onDismiss: () => void;
 }) {
-  const available = agent.cliPath !== null;
+  const available = agent.cliPath !== null || agent.cliInstallable;
   const status = !available
     ? { tone: 'warn' as const, label: 'Unavailable' }
-    : agent.signedIn
-      ? { tone: 'ok' as const, label: 'Signed in' }
-      : agent.signedIn === false
-        ? { tone: 'off' as const, label: 'Not signed in' }
-        : { tone: 'off' as const, label: 'Status unknown' };
+    : agent.cliPath === null
+      ? { tone: 'off' as const, label: 'Not installed' }
+      : agent.signedIn
+        ? { tone: 'ok' as const, label: 'Signed in' }
+        : agent.signedIn === false
+          ? { tone: 'off' as const, label: 'Not signed in' }
+          : { tone: 'off' as const, label: 'Status unknown' };
 
   return (
     <SectionCard>
@@ -189,15 +205,18 @@ function AgentCard({
         <dd className="min-w-0 truncate font-mono text-[11.5px]" title={agent.cliPath ?? undefined}>
           {agent.cliPath
             ? `${agent.cliVersion ?? 'unknown version'} · ${
-                agent.cliSource === 'path' ? tildify(agent.cliPath) : 'bundled'
+                agent.cliSource === 'path' ? tildify(agent.cliPath) : 'downloaded'
               }`
-            : 'not found'}
+            : agent.cliInstallable
+              ? 'downloads when you sign in'
+              : 'not found'}
         </dd>
       </dl>
 
       {(login.running || login.output || login.error) && (
         <div className="mt-4 flex flex-col gap-2.5 border-t border-hairline pt-4">
-          {login.running && (
+          {login.download && <DownloadStatus name={agent.name} download={login.download} />}
+          {login.running && !login.download && (
             <p className="text-[12.5px] leading-relaxed">
               Finish signing in from your browser.
               {login.url && (
@@ -215,8 +234,8 @@ function AgentCard({
             </p>
           )}
           {login.error && <p className="text-[12.5px] text-destructive">{login.error}</p>}
-          <LogView text={login.output} className="max-h-40" />
-          {login.running ? (
+          {!login.download && <LogView text={login.output} className="max-h-40" />}
+          {login.download ? null : login.running ? (
             <LoginCodeForm id={agent.id} />
           ) : (
             <Button size="xs" variant="ghost" className="self-start" onClick={onDismiss}>
@@ -226,6 +245,35 @@ function AgentCard({
         </div>
       )}
     </SectionCard>
+  );
+}
+
+function megabytes(bytes: number): string {
+  return `${Math.round(bytes / 1_000_000)} MB`;
+}
+
+export function DownloadStatus({
+  name,
+  download,
+}: {
+  name: string;
+  download: NonNullable<Login['download']>;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="flex items-baseline justify-between gap-3 text-[12.5px]">
+        <span>Downloading {name}</span>
+        <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+          {megabytes(download.received)}
+          {download.total ? ` / ${megabytes(download.total)}` : ''}
+        </span>
+      </p>
+      {download.total ? (
+        <ProgressLine value={download.received / download.total} className="w-full" />
+      ) : (
+        <LineLoader className="w-full" />
+      )}
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 # open-slide desktop
 
-Electron shell around `@open-slide/core`. It ships its own core and runs its dev server against the open workspace (on Electron's Node runtime), so a workspace only supplies slides, themes, assets, and its config — no install needed unless its slides import packages of their own. It shows Home and each deck in their own tab, and ships the Claude Code and Codex SDKs so the agent panel connects without installing anything.
+Electron shell around `@open-slide/core`. It ships its own core and runs its dev server against the open workspace (on Electron's Node runtime), so a workspace only supplies slides, themes, assets, and its config — no install needed unless its slides import packages of their own. It shows Home and each deck in their own tab, and ships the Claude Code and Codex SDKs. Their native CLIs are not bundled: one already on PATH is used, and otherwise the first sign-in downloads the build the SDK pins from npm into the app's user data.
 
 ```bash
 pnpm dev:desktop      # from the repo root: builds the CLI, then starts electron-vite

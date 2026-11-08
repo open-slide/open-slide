@@ -69,7 +69,9 @@ export type AgentInfo = {
   name: string;
   sdkVersion: string | null;
   cliPath: string | null;
-  cliSource: 'path' | 'bundled' | null;
+  cliSource: 'path' | 'downloaded' | null;
+  // No CLI was found, but signing in can download the build the SDK pins.
+  cliInstallable: boolean;
   cliVersion: string | null;
   signedIn: boolean | null;
   account: string | null;
@@ -78,6 +80,8 @@ export type AgentInfo = {
 export type LoginEvent =
   | { id: AgentId; type: 'output'; chunk: string }
   | { id: AgentId; type: 'url'; url: string }
+  | { id: AgentId; type: 'download'; received: number; total: number | null }
+  | { id: AgentId; type: 'installed' }
   | { id: AgentId; type: 'exit'; ok: boolean };
 
 export type LogTask = 'server' | 'install' | 'create';
