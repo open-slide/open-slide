@@ -1,8 +1,9 @@
 'use client';
 
-import { AnimatePresence, motion, useInView, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useInView } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { type SketchVariant, SlideSketch } from './slide-sketch';
+import { useReducedMotion } from './use-reduced-motion';
 
 type DeckId = 'launch' | 'review' | 'offsite';
 

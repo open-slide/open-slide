@@ -1,7 +1,16 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { clock, effect, type FrameLoopHandle, frameLoop, type Gpu, init, surface } from 'vgpu';
+import {
+  clock,
+  effect,
+  type FrameLoopHandle,
+  frame,
+  frameLoop,
+  type Gpu,
+  init,
+  surface,
+} from 'vgpu';
 import emberShader from './ember-field.wgsl';
 
 const FADE_IN_S = 2.4;
@@ -17,14 +26,15 @@ export function EmberField({ className = '' }: { className?: string }) {
     const canvas = canvasRef.current;
     if (!canvas || !('gpu' in navigator)) return;
 
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const pointer = { x: 0.5, y: 0.5 };
     const aim = { x: 0.5, y: 0.5 };
     let disposed = false;
     let gpu: Gpu | undefined;
     let loop: FrameLoopHandle | undefined;
-    let start: (() => void) | undefined;
-    let visible = true;
+    let sync: (() => void) | undefined;
+    let inView = true;
+    let resizeRaf = 0;
 
     const onPointerMove = (e: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -38,14 +48,10 @@ export function EmberField({ className = '' }: { className?: string }) {
     };
 
     const observer = new IntersectionObserver(([entry]) => {
-      visible = entry.isIntersecting && document.visibilityState === 'visible';
-      if (visible) start?.();
-      else stop();
+      inView = entry.isIntersecting;
+      sync?.();
     });
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') start?.();
-      else stop();
-    };
+    const onChange = () => sync?.();
 
     void (async () => {
       try {
@@ -58,67 +64,94 @@ export function EmberField({ className = '' }: { className?: string }) {
         return;
       }
 
-      const target = surface(gpu, canvas, { dpr: [1, 1.5] });
-      const field = effect(gpu, emberShader, {
-        label: 'ember-field',
-        set: {
-          params: {
-            time: TIME_OFFSET,
-            intensity: reduced ? 1 : 0,
-            pointer: [0.5, 0.5],
-            resolution: target.size,
-            pixelRatio: target.dpr,
+      const device = gpu;
+      try {
+        const target = surface(device, canvas, { dpr: [1, 1.5] });
+        const field = effect(device, emberShader, {
+          label: 'ember-field',
+          set: {
+            params: {
+              time: TIME_OFFSET,
+              intensity: 0,
+              pointer: [0.5, 0.5],
+              resolution: target.size,
+              pixelRatio: target.dpr,
+            },
           },
-        },
-      });
-      target.onResize(() =>
-        field.set({ params: { resolution: target.size, pixelRatio: target.dpr } }),
-      );
+        });
+        const time = clock(device);
+        let elapsed = 0;
+        let last = 0;
 
-      if (reduced) {
-        field.draw(target);
-        setLit(true);
+        const still = () => {
+          field.set({ params: { time: TIME_OFFSET + elapsed, intensity: 1 } });
+          frame(device, (f) => f.pass(target, field));
+        };
+
+        // Resizing clears the canvas, and vgpu forbids opening a frame inside a resize callback.
+        target.onResize(() => {
+          field.set({ params: { resolution: target.size, pixelRatio: target.dpr } });
+          if (!motion.matches) return;
+          cancelAnimationFrame(resizeRaf);
+          resizeRaf = requestAnimationFrame(still);
+        });
+
+        sync = () => {
+          if (motion.matches) {
+            stop();
+            still();
+            return;
+          }
+          if (!inView || document.visibilityState !== 'visible') {
+            stop();
+            return;
+          }
+          if (loop) return;
+          last = time.time;
+          loop = frameLoop(
+            device,
+            (f) => {
+              elapsed += Math.min(time.time - last, 0.1);
+              last = time.time;
+              pointer.x += (aim.x - pointer.x) * POINTER_EASE;
+              pointer.y += (aim.y - pointer.y) * POINTER_EASE;
+              const t = Math.min(elapsed / FADE_IN_S, 1);
+              field.set({
+                params: {
+                  time: TIME_OFFSET + elapsed,
+                  intensity: 1 - (1 - t) ** 3,
+                  pointer: [pointer.x, pointer.y],
+                },
+              });
+              f.pass(target, field);
+            },
+            { fps: 60 },
+          );
+        };
+        sync();
+      } catch {
+        sync = undefined;
+        stop();
+        device.dispose();
+        gpu = undefined;
         return;
       }
 
-      const time = clock(gpu);
-      let elapsed = 0;
-      let last = 0;
-      start = () => {
-        if (loop || !gpu || !visible) return;
-        last = time.time;
-        loop = frameLoop(
-          gpu,
-          (frame) => {
-            elapsed += Math.min(time.time - last, 0.1);
-            last = time.time;
-            pointer.x += (aim.x - pointer.x) * POINTER_EASE;
-            pointer.y += (aim.y - pointer.y) * POINTER_EASE;
-            const t = Math.min(elapsed / FADE_IN_S, 1);
-            field.set({
-              params: {
-                time: TIME_OFFSET + elapsed,
-                intensity: 1 - (1 - t) ** 3,
-                pointer: [pointer.x, pointer.y],
-              },
-            });
-            frame.pass(target, field);
-          },
-          { fps: 60 },
-        );
-      };
-      start();
       setLit(true);
       window.addEventListener('pointermove', onPointerMove, { passive: true });
     })();
 
     observer.observe(canvas);
-    document.addEventListener('visibilitychange', onVisibility);
+    document.addEventListener('visibilitychange', onChange);
+    motion.addEventListener('change', onChange);
 
     return () => {
       disposed = true;
+      sync = undefined;
+      cancelAnimationFrame(resizeRaf);
       observer.disconnect();
-      document.removeEventListener('visibilitychange', onVisibility);
+      document.removeEventListener('visibilitychange', onChange);
+      motion.removeEventListener('change', onChange);
       window.removeEventListener('pointermove', onPointerMove);
       stop();
       gpu?.dispose();

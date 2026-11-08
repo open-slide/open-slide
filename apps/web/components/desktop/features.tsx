@@ -1,8 +1,9 @@
 'use client';
 
-import { AnimatePresence, motion, useInView, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useInView } from 'motion/react';
 import { type PointerEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { SlideSketch } from './slide-sketch';
+import { useReducedMotion } from './use-reduced-motion';
 
 const SWIFT = [0.22, 1, 0.36, 1] as const;
 const SNAP = { type: 'spring', bounce: 0.2, duration: 0.55 } as const;

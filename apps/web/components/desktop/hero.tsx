@@ -1,10 +1,11 @@
 'use client';
 
-import { motion, useReducedMotion, useScroll, useSpring, useTransform } from 'motion/react';
-import { type CSSProperties, useRef } from 'react';
+import { motion, useScroll, useSpring, useTransform } from 'motion/react';
+import { type CSSProperties, Fragment, useRef } from 'react';
 import { AppIcon } from './app-icon';
 import { CtaRow } from './cta';
 import { EmberField } from './ember-field';
+import { useReducedMotion } from './use-reduced-motion';
 import { WindowMock } from './window-mock';
 
 const HEADLINE = ['Your', 'decks,'];
@@ -52,24 +53,25 @@ export function DesktopHero() {
         <h1 className="serif mt-7 text-balance text-[52px] leading-[0.98] text-[color:var(--color-text)] sm:text-[88px] lg:text-[108px]">
           <span className="block">
             {HEADLINE.map((w, i) => (
-              <span
-                key={w}
-                className="rise rise-word mr-[0.22em] last:mr-0"
-                style={{ animationDelay: wordDelay(i) }}
-              >
-                {w}
-              </span>
+              <Fragment key={w}>
+                {i > 0 ? ' ' : null}
+                <span className="rise rise-word" style={{ animationDelay: wordDelay(i) }}>
+                  {w}
+                </span>
+              </Fragment>
             ))}
-          </span>
+          </span>{' '}
           <em className="block">
             {HEADLINE_EM.map((w, i) => (
-              <span
-                key={w}
-                className="rise rise-word ember-ink mr-[0.1em] last:mr-0"
-                style={{ animationDelay: wordDelay(HEADLINE.length + i) }}
-              >
-                {w}
-              </span>
+              <Fragment key={w}>
+                {i > 0 ? ' ' : null}
+                <span
+                  className="rise rise-word ember-ink"
+                  style={{ animationDelay: wordDelay(HEADLINE.length + i) }}
+                >
+                  {w}
+                </span>
+              </Fragment>
             ))}
           </em>
         </h1>

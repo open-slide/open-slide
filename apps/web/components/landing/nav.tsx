@@ -34,7 +34,7 @@ export function Nav({
           <span className="text-[color:var(--color-text)]">open-slide</span>
         </Link>
 
-        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 md:flex">
+        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 lg:flex">
           <Link href="/docs" className={linkClass}>
             Docs
           </Link>

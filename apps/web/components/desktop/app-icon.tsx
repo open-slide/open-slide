@@ -1,14 +1,8 @@
 'use client';
 
-import {
-  motion,
-  useMotionTemplate,
-  useMotionValue,
-  useReducedMotion,
-  useSpring,
-  useTransform,
-} from 'motion/react';
+import { motion, useMotionTemplate, useMotionValue, useSpring, useTransform } from 'motion/react';
 import { useEffect, useRef } from 'react';
+import { useReducedMotion } from './use-reduced-motion';
 
 const TILT = 14;
 const SPRING = { stiffness: 140, damping: 18, mass: 0.6 };

@@ -26,7 +26,7 @@ export function CtaRow({ source = 'hero' }: { source?: string }) {
         onClick={() => posthog.capture('desktop_cta_clicked', { cta: 'docs', source })}
         className="cta-ghost inline-flex h-11 items-center gap-2 rounded-full px-5 text-[14.5px] font-medium"
       >
-        Use it in the browser today
+        Start with the CLI today
         <span aria-hidden className="cta-arrow">
           →
         </span>

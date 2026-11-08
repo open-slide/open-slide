@@ -1,7 +1,8 @@
 'use client';
 
-import { type MotionValue, motion, useReducedMotion, useScroll, useTransform } from 'motion/react';
+import { type MotionValue, motion, useScroll, useTransform } from 'motion/react';
 import { useRef } from 'react';
+import { useReducedMotion } from './use-reduced-motion';
 
 const TEXT =
   'Same canvas. Same inspector. Same agent drafting your slides from a sentence. It just finally has a window of its own — one you can keep in the dock, flip between decks in, and present from without a browser in sight.';
