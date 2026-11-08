@@ -704,6 +704,7 @@ export function Slide() {
       <InspectorProvider
         slideId={slideId}
         pageIndex={index}
+        revision={slide}
         panelHidden={designOpen || agentOpen}
         onPanelOpen={() => {
           setDesignOpen(false);

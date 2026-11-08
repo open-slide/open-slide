@@ -315,6 +315,7 @@ export const es: Locale = {
     commentAddFailed: 'No se pudo añadir el comentario:',
     commentRegionNoTarget: 'No se encontró un elemento al que asociar esta zona.',
     saveFailed: 'No se pudo guardar:',
+    undoFailed: 'No se pudo deshacer:',
     decreaseFontSize: 'Reducir tamaño de fuente',
     increaseFontSize: 'Aumentar tamaño de fuente',
   },

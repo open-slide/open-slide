@@ -313,6 +313,7 @@ export const ja: Locale = {
     commentAddFailed: 'コメントを追加できませんでした：',
     commentRegionNoTarget: 'この範囲を付けられる要素が見つかりませんでした。',
     saveFailed: '保存に失敗しました:',
+    undoFailed: '元に戻せませんでした:',
     decreaseFontSize: 'フォントサイズを縮小',
     increaseFontSize: 'フォントサイズを拡大',
   },

@@ -12,6 +12,8 @@ const REDO_SHORTCUT = IS_APPLE ? '⇧⌘Z' : 'Ctrl Y';
 type SaveCardProps = {
   dirty: boolean;
   committing: boolean;
+  // A background write the user didn't ask for: shown as status, not a button.
+  autosaving?: boolean;
   onSave: () => Promise<void> | void;
   onDiscard: () => void;
   unsavedLabel: React.ReactNode;
@@ -29,6 +31,7 @@ type SaveCardProps = {
 export function SaveCard({
   dirty,
   committing,
+  autosaving = false,
   onSave,
   onDiscard,
   unsavedLabel,
@@ -49,7 +52,13 @@ export function SaveCard({
     return () => clearTimeout(t);
   }, [justSaved]);
 
-  const visible = dirty || committing || justSaved || canUndo || canRedo;
+  const [wasAutosaving, setWasAutosaving] = useState(autosaving);
+  if (wasAutosaving !== autosaving) {
+    setWasAutosaving(autosaving);
+    if (!autosaving) setJustSaved(true);
+  }
+
+  const visible = dirty || committing || autosaving || justSaved || canUndo || canRedo;
   const { mounted, animVisible } = usePanelMount(visible);
   if (!mounted) return null;
 
@@ -60,7 +69,7 @@ export function SaveCard({
 
   const dataAttrs = uiAttr === 'inspector' ? { 'data-inspector-ui': '' } : { 'data-design-ui': '' };
 
-  const showHistory = !justSaved && (onUndo || onRedo);
+  const showHistory = (!justSaved || canUndo || canRedo) && (onUndo || onRedo);
 
   return (
     <div
@@ -98,7 +107,7 @@ export function SaveCard({
             >
               <Redo2 className="size-3.5" />
             </Button>
-            {(justSaved || dirty || committing) && (
+            {(justSaved || dirty || committing || autosaving) && (
               <span aria-hidden className="ml-1 mr-0.5 h-4 w-px bg-hairline" />
             )}
           </div>
@@ -107,6 +116,11 @@ export function SaveCard({
           <span className="flex items-center gap-1.5 whitespace-nowrap px-2.5 text-[12px] font-medium text-foreground">
             <Check className="size-3.5 shrink-0 text-[oklch(0.55_0.13_165)]" strokeWidth={2.5} />
             {resolvedSavedLabel}
+          </span>
+        ) : autosaving && !dirty && !committing ? (
+          <span className="flex items-center gap-1.5 whitespace-nowrap px-2.5 text-[12px] font-medium text-muted-foreground">
+            <Loader2 className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
+            {t.common.saving}
           </span>
         ) : dirty || committing ? (
           <span className="inline-flex items-center gap-1.5 whitespace-nowrap px-2.5 text-[12px] font-medium text-foreground">

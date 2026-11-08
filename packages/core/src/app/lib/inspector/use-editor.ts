@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import type { ElementLoc, StructureOp } from '../structure';
 
 export type EditOp =
   | { kind: 'set-style'; key: string; value: string | null; prevText?: string }
@@ -18,6 +19,30 @@ export type Edit = { line: number; column: number; ops: EditOp[]; dependsOn?: nu
 
 export type EditResult = { ok: boolean; error?: string };
 
+export type BatchResponse = { results: EditResult[]; revision?: string };
+export type StructureResponse = { created: ElementLoc[]; revision?: string };
+
+async function postJson<T>(url: string, payload: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const body = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new EditRequestError(body.error ?? `POST ${url} → ${res.status}`, res.status);
+  return body;
+}
+
+export class EditRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'EditRequestError';
+  }
+}
+
 export class NoOpEditError extends Error {
   constructor() {
     super(
@@ -29,19 +54,15 @@ export class NoOpEditError extends Error {
 
 export function useEditor(slideId: string) {
   const applyEdit = useCallback(
-    async (line: number, column: number, ops: EditOp[]) => {
-      const res = await fetch('/__edit', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slideId, line, column, ops }),
+    async (line: number, column: number, ops: EditOp[]): Promise<string> => {
+      const body = await postJson<{ changed?: boolean; revision?: string }>('/__edit', {
+        slideId,
+        line,
+        column,
+        ops,
       });
-      const body = (await res.json().catch(() => ({}))) as { error?: string; changed?: boolean };
-      if (!res.ok) {
-        throw new Error(body.error ?? `POST /__edit → ${res.status}`);
-      }
-      if (body.changed === false) {
-        throw new NoOpEditError();
-      }
+      if (body.changed === false || !body.revision) throw new NoOpEditError();
+      return body.revision;
     },
     [slideId],
   );
@@ -50,24 +71,36 @@ export function useEditor(slideId: string) {
   // Returns one result per input edit so callers can keep failed
   // edits buffered while clearing the ones that landed.
   const applyEdits = useCallback(
-    async (edits: Edit[]): Promise<EditResult[]> => {
-      if (edits.length === 0) return [];
-      const res = await fetch('/__edit/batch', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slideId, edits }),
-      });
-      const body = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        results?: EditResult[];
-      };
-      if (!res.ok) {
-        throw new Error(body.error ?? `POST /__edit/batch → ${res.status}`);
-      }
-      return body.results ?? [];
+    async (edits: Edit[]): Promise<BatchResponse> => {
+      if (edits.length === 0) return { results: [] };
+      const body = await postJson<Partial<BatchResponse>>('/__edit/batch', { slideId, edits });
+      return { results: body.results ?? [], revision: body.revision };
     },
     [slideId],
   );
 
-  return { applyEdit, applyEdits };
+  const applyStructure = useCallback(
+    async (op: StructureOp): Promise<StructureResponse> => {
+      const body = await postJson<Partial<StructureResponse>>('/__edit/structure', { slideId, op });
+      return { created: body.created ?? [], revision: body.revision };
+    },
+    [slideId],
+  );
+
+  const copyElements = useCallback(
+    async (targets: ElementLoc[]): Promise<string[]> => {
+      const body = await postJson<{ snippets?: string[] }>('/__edit/copy', { slideId, targets });
+      return body.snippets ?? [];
+    },
+    [slideId],
+  );
+
+  const restoreRevision = useCallback(
+    async (revision: string, direction: 'undo' | 'redo'): Promise<void> => {
+      await postJson('/__edit/history', { slideId, revision, direction });
+    },
+    [slideId],
+  );
+
+  return { applyEdit, applyEdits, applyStructure, copyElements, restoreRevision };
 }

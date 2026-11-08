@@ -26,6 +26,7 @@ import { type AddCommentInput, type SlideComment, useComments } from '@/lib/insp
 import { type Edit, type EditOp, useEditor } from '@/lib/inspector/use-editor';
 import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-editor';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
+import type { ElementLoc, StructureOp } from '@/lib/structure';
 import { textDiff } from '@/lib/text-diff';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
@@ -40,6 +41,10 @@ export type SelectedTarget = {
 };
 
 const INSTANCE_ID_ATTR = 'data-slide-instance-id';
+const INSPECTOR_HISTORY = 'inspector';
+const AUTOSAVE_DELAY_MS = 700;
+const AUTOSAVE_RETRY_MS = 250;
+const SYNC_TIMEOUT_MS = 3000;
 
 function elementPath(root: Element, el: Element): number[] | null {
   const path: number[] = [];
@@ -142,7 +147,7 @@ type Bucket = {
   textTargets: Map<string, SelectedTarget & { pageIndex: number }>;
   attrOps: Map<string, Sequenced<AssetAttrOp>>;
   // Pre-edit snapshot of the DOM, captured the first time we touch
-  // each style key / text / attribute. Used by `cancelEdits` to revert.
+  // each style key / text / attribute. Used to revert a failed save.
   origStyle: Map<string, string>;
   origTexts: Map<string /* instanceId */, { value: string }>;
   origHtmls: Map<string /* instanceId */, TextDomSnapshot>;
@@ -406,15 +411,21 @@ type InspectorCtx = {
   // Bumped on every buffered-op mutation (including undo/redo restores) so
   // panels can re-read DOM snapshots without polling.
   opsVersion: number;
+  // Writes immediately, bypassing the buffer, and still lands in history.
   applyEdit: (line: number, column: number, ops: EditOp[]) => Promise<void>;
   // Mutate the DOM optimistically, snapshot the pre-edit values, and
-  // remember the ops. `commitEdits` (manual Save or auto-flush on
-  // close) is what actually writes to disk; `cancelEdits` reverts.
+  // remember the ops. Autosave (or `commitEdits`) writes them to disk.
   bufferOps: (line: number, column: number, anchor: HTMLElement, ops: EditOp[]) => void;
   pendingCount: number;
   commitEdits: () => Promise<void>;
-  cancelEdits: () => void;
+  saving: boolean;
+  // True while a structural change or saved-write undo is in flight; the
+  // canvas is about to remount, so gestures and edits wait.
   committing: boolean;
+  // Inserts, deletes, duplicates or regroups JSX, flushing buffered edits
+  // first. Resolves to the created elements once they are on the canvas.
+  runStructure: (op: StructureOp) => Promise<SelectedTarget[]>;
+  copyElements: (targets: ElementLoc[]) => Promise<string[]>;
   openCrop: (anchor: HTMLImageElement) => void;
   openReplace: (anchor: HTMLElement) => void;
 };
@@ -434,12 +445,15 @@ export function useOptionalInspector(): InspectorCtx | null {
 export function InspectorProvider({
   slideId,
   pageIndex,
+  revision,
   panelHidden = false,
   onPanelOpen,
   children,
 }: {
   slideId: string;
   pageIndex: number;
+  // Changes whenever the slide module reloads (pass the module itself).
+  revision: unknown;
   panelHidden?: boolean;
   onPanelOpen?: () => void;
   children: ReactNode;
@@ -495,7 +509,8 @@ export function InspectorProvider({
   );
   const [opsVersion, setOpsVersion] = useState(0);
   const { comments, error, add, update, remove } = useComments(slideId);
-  const { applyEdit, applyEdits } = useEditor(slideId);
+  const { applyEdit, applyEdits, applyStructure, copyElements, restoreRevision } =
+    useEditor(slideId);
   const history = useHistory();
 
   const pendingRef = useRef<Map<string, Bucket>>(new Map());
@@ -505,7 +520,10 @@ export function InspectorProvider({
   const instanceCounterRef = useRef(0);
   const pendingSeqRef = useRef(0);
   const [pendingCount, setPendingCount] = useState(0);
-  const [committing, setCommitting] = useState(false);
+  // `saving`: buffered edits are being written. `busy`: a structural change
+  // or undo of a saved write is in flight, and the canvas is about to remount.
+  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [cropTarget, setCropTarget] = useState<{
     line: number;
     column: number;
@@ -773,8 +791,8 @@ export function InspectorProvider({
     [ensureInstanceId],
   );
 
-  // Restore the snapshotted values to bucket + DOM. Mirrors the bucket-empty
-  // logic of `cancelEdits` so an undo back to the absolute baseline cleans up.
+  // Restore the snapshotted values to bucket + DOM, dropping the bucket once an
+  // undo brings it back to the absolute baseline.
   const restoreSnapshot = useCallback(
     (line: number, column: number, snaps: Snap[], recreate = false) => {
       const key = `${line}:${column}`;
@@ -871,6 +889,7 @@ export function InspectorProvider({
       history.record({
         coalesceKey,
         pageIndex,
+        bufferedBy: INSPECTOR_HISTORY,
         undo: () => {
           restoreSnapshot(target.line, target.column, snaps);
           revealTargets(reveal, pageIndex);
@@ -904,7 +923,7 @@ export function InspectorProvider({
 
   const bufferBatch = useCallback(
     (input: VisualEdit[], coalesceKey?: string) => {
-      if (input.length === 0 || committing) return;
+      if (input.length === 0 || busy) return;
       const edits = input.map((edit) => ({
         ...edit,
         ...findSlideSource(edit.anchor, slideId, { hostOnly: true }),
@@ -917,6 +936,7 @@ export function InspectorProvider({
       history.record({
         coalesceKey,
         pageIndex,
+        bufferedBy: INSPECTOR_HISTORY,
         undo: () => {
           for (let index = edits.length - 1; index >= 0; index--) {
             const edit = edits[index];
@@ -937,7 +957,7 @@ export function InspectorProvider({
       restoreSnapshot,
       findAnchor,
       history,
-      committing,
+      busy,
       slideId,
       pageIndex,
       revealTargets,
@@ -947,171 +967,334 @@ export function InspectorProvider({
   const visual = useVisualEditor({
     active,
     inlineEditing: !!inlineEdit,
-    committing,
+    committing: busy,
     slideId,
     selection,
     setSelection,
     bufferBatch,
   });
 
-  const commitEdits = useCallback(async () => {
-    const buckets = pendingRef.current;
-    if (buckets.size === 0) return;
-    type PendingItem = {
-      bucket: Bucket;
-      seq: number;
-      instanceId?: string;
-      edit: Edit;
-      onSuccess: (bucket: Bucket) => void;
-    };
-    const pending: PendingItem[] = [];
-    for (const bucket of buckets.values()) {
-      const { line, column, styleOps, textEdits, attrOps } = bucket;
-      for (const [k, op] of styleOps) {
-        pending.push({
-          bucket,
-          seq: op.seq,
-          edit: {
-            line,
-            column,
-            ops: [{ kind: 'set-style', key: k, value: op.value, prevText: op.prevText }],
-          },
-          onSuccess: (b) => {
-            b.styleOps.delete(k);
-            b.origStyle.delete(k);
-          },
-        });
+  // Writes run one at a time so a save, a structural change and an undo never
+  // read the file while another is mid-flight.
+  const writeQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueueWrite = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    const run = writeQueueRef.current.then(task, task);
+    writeQueueRef.current = run.catch(() => {});
+    return run;
+  }, []);
+
+  // Resolves once the slide module re-renders after a write, so locations read
+  // from the DOM match the file again. A write that never reaches HMR (no-op,
+  // or a broken socket) falls back to a timeout rather than wedging the editor.
+  const syncWaitersRef = useRef<Array<() => void>>([]);
+  const pendingSyncRef = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    void revision;
+    const waiters = syncWaitersRef.current;
+    syncWaitersRef.current = [];
+    if (waiters.length === 0) return;
+    requestAnimationFrame(() => {
+      for (const resolve of waiters) resolve();
+    });
+  }, [revision]);
+  // Call before a write; `release` it when the write turned out not to change
+  // the file, since no re-render will follow.
+  const expectSync = useCallback(() => {
+    let release = () => {};
+    const synced = new Promise<void>((resolve) => {
+      const timer = setTimeout(done, SYNC_TIMEOUT_MS);
+      function done() {
+        clearTimeout(timer);
+        syncWaitersRef.current = syncWaitersRef.current.filter((waiter) => waiter !== done);
+        resolve();
       }
-      for (const [attr, op] of attrOps) {
-        pending.push({
-          bucket,
-          seq: op.seq,
-          edit: {
-            line,
-            column,
-            ops: [
-              {
-                kind: 'set-attr-asset',
-                attr,
-                assetPath: op.assetPath,
-                previewUrl: op.previewUrl,
-              },
-            ],
-          },
-          onSuccess: (b) => {
-            b.attrOps.delete(attr);
-            b.origAttrs.delete(attr);
-          },
-        });
-      }
-      for (const [instanceId, steps] of textEdits) {
-        const target = bucket.textTargets.get(instanceId);
-        for (const step of steps) {
-          pending.push({
-            bucket,
-            seq: step.seq,
-            instanceId,
-            edit: {
-              line: target?.line ?? line,
-              column: target?.column ?? column,
-              ops: [step.op],
-            },
-            onSuccess: (b) => {
-              const html = b.origHtmls.get(instanceId);
-              if (html !== undefined) b.origHtmls.set(instanceId, textEditHtml(html, [step]));
-              if (step.op.kind === 'set-text')
-                b.origTexts.set(instanceId, { value: step.op.value });
-              const remaining = (b.textEdits.get(instanceId) ?? []).filter(
-                (item) => item.seq !== step.seq,
-              );
-              if (remaining.length) b.textEdits.set(instanceId, remaining);
-              else b.textEdits.delete(instanceId);
-            },
-          });
+      release = done;
+      syncWaitersRef.current.push(done);
+    });
+    pendingSyncRef.current = synced;
+    return { synced, release };
+  }, []);
+
+  const restoreSavedRevision = useCallback(
+    (revisionId: string, direction: 'undo' | 'redo') =>
+      enqueueWrite(async () => {
+        setBusy(true);
+        try {
+          await pendingSyncRef.current;
+          const sync = expectSync();
+          try {
+            await restoreRevision(revisionId, direction);
+          } catch (err) {
+            sync.release();
+            throw err;
+          }
+          await sync.synced;
+        } catch (err) {
+          history.clear();
+          const msg = err instanceof Error ? err.message : String(err);
+          toast.error(`${t.inspector.undoFailed} ${msg}`);
+        } finally {
+          setBusy(false);
         }
-      }
-    }
-    pending.sort((a, b) => a.seq - b.seq);
-    const lastTextEdit = new Map<string, number>();
-    for (const [index, item] of pending.entries()) {
-      if (!item.instanceId) continue;
-      item.edit.dependsOn = lastTextEdit.get(item.instanceId);
-      lastTextEdit.set(item.instanceId, index);
-    }
-    if (pending.length === 0) {
-      pendingRef.current = new Map();
-      setPendingCount(0);
-      history.clear();
-      return;
-    }
-    setCommitting(true);
-    try {
-      const results = await applyEdits(pending.map((p) => p.edit));
-      const failures: string[] = [];
-      for (let i = 0; i < results.length; i++) {
-        const item = pending[i];
-        const r = results[i];
-        const bucket = item.bucket;
-        if (r.ok) {
-          item.onSuccess(bucket);
-          if (
-            bucket.styleOps.size === 0 &&
-            bucket.textEdits.size === 0 &&
-            bucket.attrOps.size === 0
-          ) {
-            for (const [key, pendingBucket] of pendingRef.current) {
-              if (pendingBucket === bucket) pendingRef.current.delete(key);
+      }),
+    [enqueueWrite, expectSync, restoreRevision, history, t],
+  );
+
+  const recordSavedRevision = useCallback(
+    (revisionId: string, upTo: number | null) => {
+      const entry = {
+        pageIndex: pageIndexRef.current,
+        undo: () => void restoreSavedRevision(revisionId, 'undo'),
+        redo: () => void restoreSavedRevision(revisionId, 'redo'),
+      };
+      if (upTo === null) history.record(entry);
+      else history.settle(INSPECTOR_HISTORY, upTo, entry);
+    },
+    [history, restoreSavedRevision],
+  );
+
+  const commitEdits = useCallback(
+    () =>
+      enqueueWrite(async () => {
+        const buckets = pendingRef.current;
+        if (buckets.size === 0) return;
+        type PendingItem = {
+          bucket: Bucket;
+          seq: number;
+          instanceId?: string;
+          edit: Edit;
+          onSuccess: (bucket: Bucket) => void;
+          onFailure: (bucket: Bucket) => void;
+        };
+        const pending: PendingItem[] = [];
+        for (const bucket of buckets.values()) {
+          const { line, column, styleOps, textEdits, attrOps } = bucket;
+          for (const [k, op] of styleOps) {
+            const drop = (b: Bucket) => {
+              if (b.styleOps.get(k)?.seq !== op.seq) return false;
+              b.styleOps.delete(k);
+              return true;
+            };
+            pending.push({
+              bucket,
+              seq: op.seq,
+              edit: {
+                line,
+                column,
+                ops: [{ kind: 'set-style', key: k, value: op.value, prevText: op.prevText }],
+              },
+              onSuccess: (b) => {
+                if (drop(b)) b.origStyle.delete(k);
+              },
+              onFailure: (b) => {
+                if (!drop(b)) return;
+                const anchor = findAnchor(b.line, b.column);
+                const style = (anchor?.style ?? {}) as unknown as Record<string, string>;
+                if (anchor) style[k] = b.origStyle.get(k) ?? '';
+                b.origStyle.delete(k);
+              },
+            });
+          }
+          for (const [attr, op] of attrOps) {
+            const drop = (b: Bucket) => {
+              if (b.attrOps.get(attr)?.seq !== op.seq) return false;
+              b.attrOps.delete(attr);
+              return true;
+            };
+            pending.push({
+              bucket,
+              seq: op.seq,
+              edit: {
+                line,
+                column,
+                ops: [
+                  {
+                    kind: 'set-attr-asset',
+                    attr,
+                    assetPath: op.assetPath,
+                    previewUrl: op.previewUrl,
+                  },
+                ],
+              },
+              onSuccess: (b) => {
+                if (drop(b)) b.origAttrs.delete(attr);
+              },
+              onFailure: (b) => {
+                if (!drop(b)) return;
+                const anchor = findAnchor(b.line, b.column);
+                const orig = b.origAttrs.get(attr);
+                if (anchor) {
+                  if (orig === null || orig === undefined) anchor.removeAttribute(attr);
+                  else anchor.setAttribute(attr, orig);
+                }
+                b.origAttrs.delete(attr);
+              },
+            });
+          }
+          for (const [instanceId, steps] of textEdits) {
+            const target = bucket.textTargets.get(instanceId);
+            for (const step of steps) {
+              pending.push({
+                bucket,
+                seq: step.seq,
+                instanceId,
+                edit: {
+                  line: target?.line ?? line,
+                  column: target?.column ?? column,
+                  ops: [step.op],
+                },
+                onSuccess: (b) => {
+                  const current = b.textEdits.get(instanceId) ?? [];
+                  if (!current.some((item) => item.seq === step.seq)) return;
+                  const html = b.origHtmls.get(instanceId);
+                  if (html !== undefined) b.origHtmls.set(instanceId, textEditHtml(html, [step]));
+                  if (step.op.kind === 'set-text')
+                    b.origTexts.set(instanceId, { value: step.op.value });
+                  const remaining = current.filter((item) => item.seq !== step.seq);
+                  if (remaining.length) b.textEdits.set(instanceId, remaining);
+                  else b.textEdits.delete(instanceId);
+                },
+                // Later steps for the instance depend on this one, so the
+                // whole instance falls back to its last saved text.
+                onFailure: (b) => {
+                  if (!b.textEdits.has(instanceId)) return;
+                  b.textEdits.delete(instanceId);
+                  const html = b.origHtmls.get(instanceId);
+                  const anchor = findTextAnchor(instanceId, b.textTargets.get(instanceId));
+                  if (anchor?.isConnected && html !== undefined) anchor.innerHTML = html.html;
+                },
+              });
             }
           }
-        } else {
-          failures.push(`line ${item.edit.line}: ${r.error ?? 'edit failed'}`);
         }
-      }
-      refreshCount();
-      if (failures.length > 0) toast.error(`${t.inspector.saveFailed} ${failures.join('; ')}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`${t.inspector.saveFailed} ${msg}`);
-      throw err;
-    } finally {
-      setCommitting(false);
-      history.clear();
-    }
-  }, [applyEdits, history, refreshCount, t]);
+        pending.sort((a, b) => a.seq - b.seq);
+        const lastTextEdit = new Map<string, number>();
+        for (const [index, item] of pending.entries()) {
+          if (!item.instanceId) continue;
+          item.edit.dependsOn = lastTextEdit.get(item.instanceId);
+          lastTextEdit.set(item.instanceId, index);
+        }
+        const upTo = history.mark();
+        const dropEmpty = (bucket: Bucket) => {
+          if (bucket.styleOps.size || bucket.textEdits.size || bucket.attrOps.size) return;
+          for (const [key, pendingBucket] of pendingRef.current) {
+            if (pendingBucket === bucket) pendingRef.current.delete(key);
+          }
+        };
+        if (pending.length === 0) {
+          pendingRef.current = new Map();
+          refreshCount();
+          history.settle(INSPECTOR_HISTORY, upTo, null);
+          return;
+        }
+        setSaving(true);
+        let revisionId: string | undefined;
+        try {
+          await pendingSyncRef.current;
+          const sync = expectSync();
+          const response = await applyEdits(pending.map((p) => p.edit)).catch((err) => {
+            sync.release();
+            throw err;
+          });
+          const { results, revision: written } = response;
+          revisionId = written;
+          if (!written) sync.release();
+          const failures: string[] = [];
+          for (let i = 0; i < pending.length; i++) {
+            const item = pending[i];
+            const r = results[i];
+            if (r?.ok) item.onSuccess(item.bucket);
+            else {
+              item.onFailure(item.bucket);
+              failures.push(`line ${item.edit.line}: ${r?.error ?? 'edit failed'}`);
+            }
+            dropEmpty(item.bucket);
+          }
+          if (failures.length > 0) toast.error(`${t.inspector.saveFailed} ${failures.join('; ')}`);
+        } catch (err) {
+          for (const item of pending) {
+            item.onFailure(item.bucket);
+            dropEmpty(item.bucket);
+          }
+          const msg = err instanceof Error ? err.message : String(err);
+          toast.error(`${t.inspector.saveFailed} ${msg}`);
+          throw err;
+        } finally {
+          refreshCount();
+          setSaving(false);
+          if (revisionId) recordSavedRevision(revisionId, upTo);
+          else history.settle(INSPECTOR_HISTORY, upTo, null);
+        }
+      }),
+    [
+      enqueueWrite,
+      applyEdits,
+      expectSync,
+      history,
+      refreshCount,
+      recordSavedRevision,
+      findAnchor,
+      findTextAnchor,
+      t,
+    ],
+  );
 
-  const cancelEdits = useCallback(() => {
-    if (pendingRef.current.size === 0) {
-      history.clear();
-      return;
-    }
-    const root = document.querySelector<HTMLElement>('[data-inspector-root]');
-    for (const b of pendingRef.current.values()) {
-      const sharedEl = root?.querySelector<HTMLElement>(`[data-slide-loc="${b.line}:${b.column}"]`);
-      if (sharedEl) {
-        const style = sharedEl.style as unknown as Record<string, string>;
-        for (const [k, v] of b.origStyle) style[k] = v;
-        for (const [attr, value] of b.origAttrs) {
-          if (value === null) sharedEl.removeAttribute(attr);
-          else sharedEl.setAttribute(attr, value);
+  const applyEditNow = useCallback(
+    (line: number, column: number, ops: EditOp[]) =>
+      enqueueWrite(async () => {
+        await pendingSyncRef.current;
+        const sync = expectSync();
+        try {
+          const written = await applyEdit(line, column, ops);
+          recordSavedRevision(written, null);
+        } catch (err) {
+          sync.release();
+          throw err;
         }
-      }
-      // Each text edit has its own anchor — locate by instance id.
-      for (const [instanceId, html] of b.origHtmls) {
-        const textEl =
-          root?.querySelector<HTMLElement>(`[${INSTANCE_ID_ATTR}="${instanceId}"]`) ?? null;
-        if (textEl?.isConnected) textEl.innerHTML = html.html;
-      }
-      for (const [instanceId, orig] of b.origTexts) {
-        const textEl =
-          root?.querySelector<HTMLElement>(`[${INSTANCE_ID_ATTR}="${instanceId}"]`) ?? null;
-        if (textEl?.isConnected) setEditableText(textEl, orig.value);
-      }
-    }
-    pendingRef.current = new Map();
-    setPendingCount(0);
-    setOpsVersion((version) => version + 1);
-    history.clear();
-  }, [history]);
+      }),
+    [enqueueWrite, expectSync, applyEdit, recordSavedRevision],
+  );
+
+  const runStructure = useCallback(
+    async (op: StructureOp): Promise<SelectedTarget[]> => {
+      await commitEdits().catch(() => {});
+      return enqueueWrite(async () => {
+        setBusy(true);
+        try {
+          await pendingSyncRef.current;
+          const sync = expectSync();
+          const { created, revision: written } = await applyStructure(op).catch((err) => {
+            sync.release();
+            throw err;
+          });
+          if (!written) {
+            sync.release();
+            return [];
+          }
+          recordSavedRevision(written, null);
+          await sync.synced;
+          const layer = document.querySelector(
+            `[data-inspector-root] [${PAGE_LAYER_ATTR}="${pageIndexRef.current}"]`,
+          );
+          const targets: SelectedTarget[] = [];
+          for (const loc of created) {
+            const anchor = layer?.querySelector<HTMLElement>(
+              `[data-slide-loc="${loc.line}:${loc.column}"]`,
+            );
+            if (anchor) targets.push({ ...loc, anchor });
+          }
+          return targets;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          toast.error(msg);
+          return [];
+        } finally {
+          setBusy(false);
+        }
+      });
+    },
+    [commitEdits, enqueueWrite, expectSync, applyStructure, recordSavedRevision],
+  );
 
   // Auto-flush on inspector close and on route unmount so toggling
   // off or navigating away doesn't drop buffered edits. Failures are
@@ -1127,6 +1310,23 @@ export function InspectorProvider({
       commitRef.current().catch(() => {});
     };
   }, []);
+
+  // Keynote-style autosave: write once the canvas has been idle for a beat.
+  // Inline typing and in-progress drags hold the write until they finish.
+  useEffect(() => {
+    void opsVersion;
+    if (pendingCount === 0 || inlineEdit) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      if (document.querySelector('[data-visual-gesture]')) {
+        timer = setTimeout(tick, AUTOSAVE_RETRY_MS);
+        return;
+      }
+      commitRef.current().catch(() => {});
+    };
+    timer = setTimeout(tick, AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [opsVersion, pendingCount, inlineEdit]);
 
   // Re-apply buffered ops onto any `[data-slide-loc]` element that gets
   // (re)mounted in the slide canvas. Without this, navigating to a
@@ -1425,12 +1625,14 @@ export function InspectorProvider({
       startInlineEdit,
       stopInlineEdit,
       opsVersion,
-      applyEdit,
+      applyEdit: applyEditNow,
       bufferOps,
       pendingCount,
       commitEdits,
-      cancelEdits,
-      committing,
+      saving,
+      committing: busy,
+      runStructure,
+      copyElements,
       openCrop,
       openReplace,
     }),
@@ -1465,12 +1667,14 @@ export function InspectorProvider({
       startInlineEdit,
       stopInlineEdit,
       opsVersion,
-      applyEdit,
+      applyEditNow,
       bufferOps,
       pendingCount,
       commitEdits,
-      cancelEdits,
-      committing,
+      saving,
+      busy,
+      runStructure,
+      copyElements,
       openCrop,
       openReplace,
     ],

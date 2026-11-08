@@ -12,20 +12,12 @@ export function SaveBar() {
   const history = useHistory();
   const t = useLocale();
 
-  const inspectorCount = insp.pendingCount;
+  // Inspector edits autosave; only the design panel still has a draft to save.
   const designCount = design.dirty ? 1 : 0;
-  const total = inspectorCount + designCount;
-
-  const dirty = total > 0;
   const committing = insp.committing || design.committing;
 
   const onSave = async () => {
-    const tasks: Promise<void>[] = [];
-    if (inspectorCount > 0) tasks.push(Promise.resolve(insp.commitEdits()));
-    if (designCount > 0) tasks.push(Promise.resolve(design.commit()));
-    // Each provider surfaces its own errors via toast; swallow here so
-    // one failure doesn't reject the combined save.
-    await Promise.all(tasks).catch(() => {});
+    await Promise.resolve(design.commit()).catch(() => {});
   };
 
   useEffect(() => {
@@ -62,19 +54,17 @@ export function SaveBar() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [insp.active, insp.commitEdits, committing, history, design.dirty, design.commit]);
 
-  const onDiscard = () => {
-    if (inspectorCount > 0) insp.cancelEdits();
-    if (designCount > 0) design.discard();
-  };
-
   return (
     <SaveCard
       uiAttr="inspector"
-      dirty={dirty}
-      committing={committing}
+      dirty={designCount > 0}
+      committing={design.committing}
+      autosaving={insp.saving}
       onSave={onSave}
-      onDiscard={onDiscard}
-      unsavedLabel={format(plural(total, t.inspector.unsavedChanges), { count: total })}
+      onDiscard={design.discard}
+      unsavedLabel={format(plural(designCount, t.inspector.unsavedChanges), {
+        count: designCount,
+      })}
       onUndo={history.undo}
       onRedo={history.redo}
       canUndo={history.canUndo}

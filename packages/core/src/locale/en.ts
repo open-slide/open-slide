@@ -310,6 +310,7 @@ export const en: Locale = {
     commentAddFailed: "Couldn't add comment:",
     commentRegionNoTarget: "Couldn't find an element to attach this region to.",
     saveFailed: "Couldn't save:",
+    undoFailed: "Couldn't undo:",
     decreaseFontSize: 'Decrease font size',
     increaseFontSize: 'Increase font size',
   },

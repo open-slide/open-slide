@@ -307,6 +307,7 @@ export const zhTW: Locale = {
     commentAddFailed: '無法新增留言：',
     commentRegionNoTarget: '找不到可以附加這個範圍的元件。',
     saveFailed: '儲存失敗：',
+    undoFailed: '無法復原：',
     decreaseFontSize: '縮小字級',
     increaseFontSize: '放大字級',
   },

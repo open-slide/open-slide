@@ -307,6 +307,7 @@ export const zhCN: Locale = {
     commentAddFailed: '无法添加评论：',
     commentRegionNoTarget: '找不到可以附加该区域的元素。',
     saveFailed: '保存失败：',
+    undoFailed: '无法撤销：',
     decreaseFontSize: '缩小字号',
     increaseFontSize: '放大字号',
   },

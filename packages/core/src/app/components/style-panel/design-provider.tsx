@@ -67,6 +67,7 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
       setDraft(next);
       history.record({
         coalesceKey,
+        bufferedBy: 'design',
         undo: () => setDraft(prev),
         redo: () => setDraft(next),
       });
@@ -76,16 +77,17 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
 
   const commit = useCallback(async () => {
     if (!draft) return;
+    const upTo = history.mark();
     setCommitting(true);
     const r = await save(draft);
     setCommitting(false);
     if (!r.ok) toast.error(r.error ?? 'Failed to save');
-    history.clear();
+    history.settle('design', upTo, null);
   }, [draft, save, history]);
 
   const discard = useCallback(() => {
     if (design) setDraft(clone(design));
-    history.clear();
+    history.settle('design', history.mark(), null);
   }, [design, history]);
 
   const shuffle = useCallback(() => {
@@ -93,6 +95,7 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
     const next = clone(shuffleDesign(prev));
     setDraft(next);
     history.record({
+      bufferedBy: 'design',
       undo: () => setDraft(prev),
       redo: () => setDraft(next),
     });
