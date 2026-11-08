@@ -2,6 +2,7 @@ import * as t from '@babel/types';
 import {
   type ElementLoc,
   type ElementSpec,
+  LOCKED_STATUS,
   SHAPE_KINDS,
   type StructureOp,
   type StyleMap,
@@ -12,6 +13,7 @@ import {
   applySplices,
   collectTopLevelIdentifiers,
   findImports,
+  findJsxAttr,
   findJsxByStart,
   jsString,
   planAssetImport,
@@ -517,10 +519,18 @@ function unresolvedIdentifiers(snippet: t.File, available: Set<string>): string[
 }
 
 type Located = { element: t.JSXElement; parent: t.JSXElement | t.JSXFragment };
+type LocateError = { error: string; status?: number };
 
-function locateInJsxParent(ast: t.File, loc: ElementLoc): Located | { error: string } {
+function locateInJsxParent(
+  ast: t.File,
+  loc: ElementLoc,
+  { allowLocked = false } = {},
+): Located | LocateError {
   const element = findJsxByStart(ast, loc.line, loc.column);
   if (!element) return { error: `no JSX element at ${loc.line}:${loc.column}` };
+  if (!allowLocked && findJsxAttr(element.openingElement, 'data-locked')) {
+    return { error: 'element is locked', status: LOCKED_STATUS };
+  }
   let parent: t.JSXElement | t.JSXFragment | null = null;
   walkAll(ast, (node) => {
     if (!t.isJSXElement(node) && !t.isJSXFragment(node)) return;
@@ -602,7 +612,7 @@ function planDelete(source: string, ast: t.File, targets: ElementLoc[]): Structu
   const located: t.JSXElement[] = [];
   for (const loc of targets) {
     const hit = locateInJsxParent(ast, loc);
-    if ('error' in hit) return fail(hit.error);
+    if ('error' in hit) return fail(hit.error, hit.status);
     if (!located.includes(hit.element)) located.push(hit.element);
   }
   // Deleting an ancestor already removes its descendants.
@@ -648,8 +658,8 @@ function planDuplicate(
   const created: Created[] = [];
   const seen: t.JSXElement[] = [];
   for (const loc of targets) {
-    const hit = locateInJsxParent(ast, loc);
-    if ('error' in hit) return fail(hit.error);
+    const hit = locateInJsxParent(ast, loc, { allowLocked: true });
+    if ('error' in hit) return fail(hit.error, hit.status);
     if (seen.some((other) => other === hit.element || contains(other, hit.element))) continue;
     seen.push(hit.element);
     const start = hit.element.start ?? 0;
@@ -667,7 +677,7 @@ function planDuplicate(
 function sameParentSiblings(
   ast: t.File,
   targets: ElementLoc[],
-): { elements: t.JSXElement[] } | { error: string } {
+): { elements: t.JSXElement[] } | LocateError {
   let parent: t.JSXElement | t.JSXFragment | null = null;
   const elements: t.JSXElement[] = [];
   for (const loc of targets) {
@@ -694,7 +704,7 @@ function planGroup(
 ): StructureResult {
   if (op.targets.length < 2) return fail('select at least two elements to group', 400);
   const siblings = sameParentSiblings(ast, op.targets);
-  if ('error' in siblings) return fail(siblings.error);
+  if ('error' in siblings) return fail(siblings.error, siblings.status);
   const { elements } = siblings;
   const styleFor = new Map<t.JSXElement, StyleMap | undefined>();
   for (const [index, loc] of op.targets.entries()) {
@@ -712,7 +722,7 @@ function planGroup(
     const delta = indent.length + 2 - indentAt(source, from).length;
     bodies.push(reindent(styled, delta, snippetRanges(styled)));
   }
-  const head = `<div style={${formatStyleObject(op.style)}}>`;
+  const head = `<div data-slide-group style={${formatStyleObject(op.style)}}>`;
   const text = `${head}\n${bodies.map((body) => `${indent}  ${body}`).join('\n')}\n${indent}</div>`;
   const splice: Splice = { from: start, to: first.end ?? 0, text };
   const splices = [splice, ...elements.slice(1).map((element) => removalSplice(source, element))];
@@ -725,7 +735,7 @@ function planUngroup(
   op: Extract<StructureOp, { kind: 'ungroup' }>,
 ): StructureResult {
   const hit = locateInJsxParent(ast, op.target);
-  if ('error' in hit) return fail(hit.error);
+  if ('error' in hit) return fail(hit.error, hit.status);
   const group = hit.element;
   const name = group.openingElement.name;
   if (!t.isJSXIdentifier(name) || !/^[a-z]/.test(name.name)) {

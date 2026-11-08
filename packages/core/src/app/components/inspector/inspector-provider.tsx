@@ -24,11 +24,11 @@ import {
   type TextEditStep,
 } from '@/lib/inspector/text-edit-timeline';
 import { type AddCommentInput, type SlideComment, useComments } from '@/lib/inspector/use-comments';
-import { type Edit, type EditOp, useEditor } from '@/lib/inspector/use-editor';
+import { type Edit, type EditOp, EditRequestError, useEditor } from '@/lib/inspector/use-editor';
 import { useObjectCommands } from '@/lib/inspector/use-object-commands';
 import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-editor';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
-import type { ElementLoc, StructureOp } from '@/lib/structure';
+import { type ElementLoc, LOCKED_STATUS, type StructureOp } from '@/lib/structure';
 import { textDiff } from '@/lib/text-diff';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
@@ -172,7 +172,7 @@ export type StructureOptions = {
   place?: (created: SelectedTarget[]) => VisualEdit[];
 };
 
-function locateCreated(created: ElementLoc[]): SelectedTarget[] {
+function findCreated(created: ElementLoc[]): SelectedTarget[] {
   const layer = document.querySelector(`[data-inspector-root] [${PAGE_LAYER_ATTR}]`);
   const targets: SelectedTarget[] = [];
   for (const loc of created) {
@@ -183,6 +183,21 @@ function locateCreated(created: ElementLoc[]): SelectedTarget[] {
   }
   return targets;
 }
+
+// The page layer can commit the reloaded module a frame or two after the
+// module itself changes, so poll until every new element is on the canvas.
+function locateCreated(created: ElementLoc[], timeout = 1500): Promise<SelectedTarget[]> {
+  const deadline = performance.now() + timeout;
+  return new Promise((resolve) => {
+    const check = () => {
+      const targets = findCreated(created);
+      if (targets.length === created.length || performance.now() > deadline) resolve(targets);
+      else requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+
 type InlineStyleHandler = (ops: EditOp[]) => boolean;
 
 type AssetAttrOp = { assetPath: string; previewUrl: string };
@@ -478,7 +493,8 @@ type InspectorCtx = {
   committing: boolean;
   // Inserts, deletes, duplicates or regroups JSX, flushing buffered edits
   // first. Resolves to the created elements once they are on the canvas.
-  runStructure: (op: StructureOp, options?: StructureOptions) => Promise<SelectedTarget[]>;
+  // Resolves to null when the change was refused.
+  runStructure: (op: StructureOp, options?: StructureOptions) => Promise<SelectedTarget[] | null>;
   objects: ReturnType<typeof useObjectCommands>;
   copyElements: (targets: ElementLoc[]) => Promise<string[]>;
   openCrop: (anchor: HTMLImageElement) => void;
@@ -1316,7 +1332,7 @@ export function InspectorProvider({
   );
 
   const runStructure = useCallback(
-    async (op: StructureOp, options?: StructureOptions): Promise<SelectedTarget[]> => {
+    async (op: StructureOp, options?: StructureOptions): Promise<SelectedTarget[] | null> => {
       await commitEdits().catch(() => {});
       return enqueueWrite(async () => {
         setBusy(true);
@@ -1330,11 +1346,11 @@ export function InspectorProvider({
           });
           if (!written) {
             sync.release();
-            return [];
+            return null;
           }
           revisions.push(written);
           await sync.synced;
-          let targets = locateCreated(created);
+          let targets = await locateCreated(created);
           // New elements land wherever their parent puts them; nudge them to
           // the frame the user asked for in the same undo step.
           const placement = options?.place?.(targets) ?? [];
@@ -1349,23 +1365,25 @@ export function InspectorProvider({
             if (placed) {
               revisions.push(placed);
               await placeSync.synced;
-              targets = locateCreated(created);
+              targets = await locateCreated(created);
             } else {
               placeSync.release();
             }
           }
           return targets;
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          toast.error(msg);
-          return [];
+          const locked = err instanceof EditRequestError && err.status === LOCKED_STATUS;
+          toast.error(
+            locked ? t.inspector.lockedHint : err instanceof Error ? err.message : String(err),
+          );
+          return null;
         } finally {
           if (revisions.length > 0) recordSavedRevision(revisions, null);
           setBusy(false);
         }
       });
     },
-    [commitEdits, enqueueWrite, expectSync, applyStructure, applyEdits, recordSavedRevision],
+    [commitEdits, enqueueWrite, expectSync, applyStructure, applyEdits, recordSavedRevision, t],
   );
 
   const objects = useObjectCommands({
@@ -1378,6 +1396,7 @@ export function InspectorProvider({
     setSelection,
     runStructure,
     copyElements,
+    applyEdit: applyEditNow,
   });
 
   // Auto-flush on inspector close and on route unmount so toggling

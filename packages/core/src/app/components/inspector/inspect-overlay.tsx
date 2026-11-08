@@ -27,6 +27,7 @@ import {
   marqueeTargets,
   moveOps,
   previewOps,
+  promoteToGroup,
   readCanvas,
   readFrame,
   restoreTransform,
@@ -188,7 +189,9 @@ export function InspectOverlay() {
     };
     const targetAt = (event: PointerEvent): SelectedTarget | null => {
       const element = pickInspectorTarget(pickElement(event.clientX, event.clientY));
-      return element ? findSlideSource(element, slideId, { hostOnly: true }) : null;
+      const hit = element ? findSlideSource(element, slideId, { hostOnly: true }) : null;
+      if (!hit || event.metaKey || event.ctrlKey) return hit;
+      return promoteToGroup(hit, slideId);
     };
     const point = (event: PointerEvent, canvas: Canvas): Point => ({
       x: (event.clientX - canvas.rect.left) / canvas.scale,
@@ -302,7 +305,9 @@ export function InspectOverlay() {
             frame.height >= gesture.canvas.height - 1;
           return fullCanvas ? [] : [{ target, frame }];
         });
-        const targets = marqueeTargets(rect, candidates);
+        const targets = marqueeTargets(rect, candidates).map((target) =>
+          promoteToGroup(target, slideId),
+        );
         gesture.targets = independentTargets(
           [...(gesture.additive ? gesture.previousSelection : []), ...targets].filter(
             (target, index, all) =>

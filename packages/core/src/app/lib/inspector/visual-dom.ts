@@ -96,10 +96,31 @@ export function marqueeTargets(
     .map(({ target }) => target);
 }
 
+export function isLocked(anchor: HTMLElement): boolean {
+  return !!anchor.closest('[data-locked]');
+}
+
+// Groups select as a unit: a hit inside one resolves to its outermost group
+// unless the user drills in with ⌘/Ctrl.
+export function promoteToGroup(target: SelectedTarget, slideId: string): SelectedTarget {
+  let group: HTMLElement | null = null;
+  const canvasRoot = target.anchor.closest('[data-osd-canvas]');
+  for (
+    let node = target.anchor.parentElement?.closest<HTMLElement>('[data-slide-group]') ?? null;
+    node && canvasRoot?.contains(node);
+    node = node.parentElement?.closest<HTMLElement>('[data-slide-group]') ?? null
+  ) {
+    group = node;
+  }
+  if (!group) return target;
+  return findSlideSource(group, slideId, { hostOnly: true }) ?? target;
+}
+
 export function canTransform(target: SelectedTarget, canvas: Canvas): boolean {
   const style = getComputedStyle(target.anchor);
   const rect = target.anchor.getBoundingClientRect();
   return (
+    !isLocked(target.anchor) &&
     target.anchor.isConnected &&
     canvas.root.contains(target.anchor) &&
     style.display !== 'contents' &&

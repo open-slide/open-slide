@@ -314,6 +314,13 @@ export type Locale = {
     /** Prefix for the toast shown when one or more buffered edits fail to write to disk. */
     saveFailed: string;
     undoFailed: string;
+    groupSection: string;
+    groupAction: string;
+    ungroupAction: string;
+    lockAction: string;
+    unlockAction: string;
+    groupLayoutHint: string;
+    lockedHint: string;
     appearanceSection: string;
     opacityLabel: string;
     radiusLabel: string;

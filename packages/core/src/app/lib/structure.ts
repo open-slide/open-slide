@@ -37,3 +37,6 @@ export type StructureOp =
   | { kind: 'duplicate'; targets: ElementLoc[]; style?: StyleMap }
   | { kind: 'group'; targets: ElementLoc[]; style: StyleMap; childStyles?: StyleMap[] }
   | { kind: 'ungroup'; target: ElementLoc; childStyles?: StyleMap[] };
+
+// HTTP status the edit API answers with when a change targets a locked element.
+export const LOCKED_STATUS = 423;

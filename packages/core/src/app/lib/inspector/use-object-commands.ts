@@ -5,11 +5,14 @@ import { uploadWithAutoRename } from '@/lib/assets';
 import { isTypingTarget } from '@/lib/keys';
 import type { ElementLoc, ElementSpec, StructureOp } from '@/lib/structure';
 import { useLocale } from '@/lib/use-locale';
-import type { Rect } from './geometry';
+import { findSlideSource } from './fiber';
+import { type Rect, unionRects } from './geometry';
+import type { EditOp } from './use-editor';
 import {
   type Canvas,
   captureTransform,
   independentTargets,
+  isLocked,
   moveOps,
   readCanvas,
   readFrame,
@@ -32,8 +35,9 @@ type Options = {
   pageIndex: number;
   selection: SelectedTarget[];
   setSelection: (targets: SelectedTarget[]) => void;
-  runStructure: (op: StructureOp, options?: StructureOptions) => Promise<SelectedTarget[]>;
+  runStructure: (op: StructureOp, options?: StructureOptions) => Promise<SelectedTarget[] | null>;
   copyElements: (targets: ElementLoc[]) => Promise<string[]>;
+  applyEdit: (line: number, column: number, ops: EditOp[]) => Promise<void>;
 };
 
 export type InsertKind = 'text' | 'image' | Extract<ElementSpec, { type: 'shape' }>['kind'];
@@ -66,6 +70,13 @@ export function placeAt(frames: Array<Rect | null>): StructureOptions['place'] {
       return [{ ...target, ops: moveOps(captureTransform(target, canvas), delta, canvas) }];
     });
   };
+}
+
+// Menus hand focus back to their trigger on close; leaving it there would
+// route arrow keys and Delete to the toolbar instead of the new element.
+function releaseToolbarFocus() {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active.closest('[data-inspector-ui]')) active.blur();
 }
 
 function readImageSize(url: string): Promise<{ width: number; height: number }> {
@@ -153,6 +164,7 @@ export function useObjectCommands({
   setSelection,
   runStructure,
   copyElements,
+  applyEdit,
 }: Options) {
   const t = useLocale();
   const pasteCountRef = useRef(0);
@@ -160,8 +172,20 @@ export function useObjectCommands({
   const restructurable = useCallback(
     (targets: SelectedTarget[]): SelectedTarget[] | null => {
       const canvas = readCanvas();
-      const independent = independentTargets(targets);
+      // A write may have remounted the canvas since the selection was made.
+      const live = targets.flatMap((target) => {
+        if (target.anchor.isConnected) return [target];
+        const anchor = canvas?.root.querySelector<HTMLElement>(
+          `[data-slide-loc="${target.line}:${target.column}"]`,
+        );
+        return anchor ? [{ ...target, anchor }] : [];
+      });
+      const independent = independentTargets(live);
       if (!canvas || independent.length === 0) return null;
+      if (independent.some((target) => isLocked(target.anchor))) {
+        toast.error(t.inspector.lockedHint);
+        return null;
+      }
       if (!independent.every((target) => canRestructure(target, canvas))) {
         toast.error(t.inspector.sharedStructureHint);
         return null;
@@ -174,8 +198,7 @@ export function useObjectCommands({
   const remove = useCallback(async () => {
     const targets = restructurable(selection);
     if (!targets) return;
-    setSelection([]);
-    await runStructure({ kind: 'delete', targets: targets.map(loc) });
+    if (await runStructure({ kind: 'delete', targets: targets.map(loc) })) setSelection([]);
   }, [selection, restructurable, setSelection, runStructure]);
 
   const duplicate = useCallback(async () => {
@@ -190,7 +213,7 @@ export function useObjectCommands({
       { kind: 'duplicate', targets: targets.map(loc) },
       { place: placeAt(frames) },
     );
-    if (created.length) setSelection(created);
+    if (created?.length) setSelection(created);
   }, [selection, restructurable, runStructure, setSelection]);
 
   const copy = useCallback(async (): Promise<boolean> => {
@@ -224,8 +247,11 @@ export function useObjectCommands({
         { kind: 'insert', pageIndex, element: spec },
         { place: placeAt([frame]) },
       );
-      if (created.length) setSelection(created);
-      return created;
+      if (created?.length) {
+        setSelection(created);
+        releaseToolbarFocus();
+      }
+      return created ?? [];
     },
     [runStructure, pageIndex, setSelection],
   );
@@ -240,7 +266,7 @@ export function useObjectCommands({
       const frame = { ...item.frame, x: item.frame.x + step, y: item.frame.y + step };
       created.push(...(await insert({ type: 'jsx', code: item.snippet }, frame)));
     }
-    if (created.length) setSelection(created);
+    if (created?.length) setSelection(created);
   }, [slideId, pageIndex, insert, setSelection]);
 
   const insertImage = useCallback(
@@ -307,8 +333,113 @@ export function useObjectCommands({
     [pasteInternal, insert],
   );
 
-  const actionsRef = useRef({ remove, duplicate, copy, cut, pasteText, insertImageFile });
-  actionsRef.current = { remove, duplicate, copy, cut, pasteText, insertImageFile };
+  const group = useCallback(async () => {
+    const canvas = readCanvas();
+    const targets = restructurable(selection);
+    if (!canvas || !targets) return;
+    if (targets.length < 2) return;
+    if (targets.some((target) => getComputedStyle(target.anchor).position !== 'absolute')) {
+      toast.error(t.inspector.groupLayoutHint);
+      return;
+    }
+    // Source order matches DOM order among siblings, which is how the server
+    // lays the children out inside the new group.
+    const ordered = [...targets].sort((a, b) =>
+      a.anchor.compareDocumentPosition(b.anchor) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+    );
+    const frames = ordered.map((target) => readFrame(target.anchor, canvas));
+    const bounds = unionRects(frames);
+    if (!bounds) return;
+    const created = await runStructure(
+      {
+        kind: 'group',
+        targets: ordered.map(loc),
+        style: {
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: Math.round(bounds.width),
+          height: Math.round(bounds.height),
+        },
+      },
+      {
+        place: ([groupTarget]) => {
+          const live = readCanvas();
+          if (!live || !groupTarget) return [];
+          const current = readFrame(groupTarget.anchor, live);
+          const shift = { x: bounds.x - current.x, y: bounds.y - current.y };
+          const children = Array.from(groupTarget.anchor.children).flatMap((child) => {
+            const hit =
+              child instanceof HTMLElement
+                ? findSlideSource(child, slideId, { hostOnly: true })
+                : null;
+            return hit && hit.anchor === child ? [hit] : [];
+          });
+          const edits = [
+            { ...groupTarget, ops: moveOps(captureTransform(groupTarget, live), shift, live) },
+          ];
+          children.forEach((child, index) => {
+            const frame = frames[index];
+            if (!frame) return;
+            const now = readFrame(child.anchor, live);
+            const delta = { x: frame.x - now.x - shift.x, y: frame.y - now.y - shift.y };
+            if (Math.abs(delta.x) < 0.5 && Math.abs(delta.y) < 0.5) return;
+            edits.push({ ...child, ops: moveOps(captureTransform(child, live), delta, live) });
+          });
+          return edits;
+        },
+      },
+    );
+    if (created?.length) setSelection(created);
+  }, [selection, restructurable, runStructure, setSelection, slideId, t]);
+
+  const ungroup = useCallback(async () => {
+    const canvas = readCanvas();
+    const [target] = restructurable(selection) ?? [];
+    if (!canvas || !target || target.anchor.dataset.slideGroup === undefined) return;
+    const frames = Array.from(target.anchor.children).map((child) =>
+      child instanceof HTMLElement ? readFrame(child, canvas) : null,
+    );
+    const created = await runStructure(
+      { kind: 'ungroup', target: loc(target) },
+      { place: placeAt(frames) },
+    );
+    if (created?.length) setSelection(created);
+  }, [selection, restructurable, runStructure, setSelection]);
+
+  const toggleLock = useCallback(async () => {
+    const targets = independentTargets(selection);
+    if (targets.length === 0) return;
+    const lock = !targets.every((target) => target.anchor.hasAttribute('data-locked'));
+    for (const target of targets) {
+      await applyEdit(target.line, target.column, [
+        { kind: 'set-prop', name: 'data-locked', value: lock },
+      ]).catch((err) => toast.error(err instanceof Error ? err.message : String(err)));
+    }
+  }, [selection, applyEdit]);
+
+  const actionsRef = useRef({
+    remove,
+    duplicate,
+    copy,
+    cut,
+    pasteText,
+    insertImageFile,
+    group,
+    ungroup,
+    toggleLock,
+  });
+  actionsRef.current = {
+    remove,
+    duplicate,
+    copy,
+    cut,
+    pasteText,
+    insertImageFile,
+    group,
+    ungroup,
+    toggleLock,
+  };
 
   useEffect(() => {
     if (!active || inlineEditing || busy) return;
@@ -340,6 +471,16 @@ export function useObjectCommands({
         event.preventDefault();
         event.stopImmediatePropagation();
         void actionsRef.current.duplicate();
+      } else if (mod && event.altKey && event.code === 'KeyG') {
+        if (selection.length === 0) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void (event.shiftKey ? actionsRef.current.ungroup() : actionsRef.current.group());
+      } else if (mod && !event.shiftKey && !event.altKey && key === 'l') {
+        if (selection.length === 0) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void actionsRef.current.toggleLock();
       }
     };
     const onCopy = (event: ClipboardEvent) => {
@@ -375,7 +516,31 @@ export function useObjectCommands({
   }, [active, inlineEditing, busy, selection.length]);
 
   return useMemo(
-    () => ({ remove, duplicate, copy, cut, insert, insertImage, insertImageFile, pasteText }),
-    [remove, duplicate, copy, cut, insert, insertImage, insertImageFile, pasteText],
+    () => ({
+      remove,
+      duplicate,
+      copy,
+      cut,
+      insert,
+      insertImage,
+      insertImageFile,
+      pasteText,
+      group,
+      ungroup,
+      toggleLock,
+    }),
+    [
+      remove,
+      duplicate,
+      copy,
+      cut,
+      insert,
+      insertImage,
+      insertImageFile,
+      pasteText,
+      group,
+      ungroup,
+      toggleLock,
+    ],
   );
 }

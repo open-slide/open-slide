@@ -1182,3 +1182,18 @@ describe('applyEdit / set-prop', () => {
     expect(r.ok).toBe(false);
   });
 });
+
+describe('applyEdit / set-prop booleans', () => {
+  const src = ['export default [() => (', '<div style={{ left: 0 }}>x</div>', ')];', ''].join('\n');
+
+  it('writes and removes a bare data attribute', () => {
+    const on = applyEdit(src, 2, 0, [{ kind: 'set-prop', name: 'data-locked', value: true }]);
+    if (!on.ok) throw new Error(on.error);
+    expect(on.source).toContain('<div data-locked style={{ left: 0 }}>x</div>');
+    const off = applyEdit(on.source, 2, 0, [
+      { kind: 'set-prop', name: 'data-locked', value: false },
+    ]);
+    if (!off.ok) throw new Error(off.error);
+    expect(off.source).toContain('<div style={{ left: 0 }}>x</div>');
+  });
+});

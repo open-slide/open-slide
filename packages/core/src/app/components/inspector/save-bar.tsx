@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useHistory } from '@/components/history-provider';
 import { SaveCard } from '@/components/panel/save-card';
 import { useDesignPanelState } from '@/components/style-panel/design-provider';
@@ -20,8 +20,20 @@ export function SaveBar() {
     await Promise.resolve(design.commit()).catch(() => {});
   };
 
+  // An undo pressed while a structural write is landing would hit whatever
+  // entry sits on top right now, not the write in flight. Hold it until the
+  // write has recorded its own entry.
+  const heldRef = useRef<'undo' | 'redo' | null>(null);
   useEffect(() => {
-    if (!insp.active || committing) return;
+    if (committing || !heldRef.current) return;
+    const held = heldRef.current;
+    heldRef.current = null;
+    if (held === 'undo') history.undo();
+    else history.redo();
+  }, [committing, history]);
+
+  useEffect(() => {
+    if (!insp.active) return;
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
       if (isTypingTarget(event.target) && event.key.toLowerCase() !== 's') return;
@@ -35,9 +47,12 @@ export function SaveBar() {
       if (key === 'z' || (key === 'y' && event.ctrlKey)) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (event.shiftKey || key === 'y') history.redo();
+        const action = event.shiftKey || key === 'y' ? 'redo' : 'undo';
+        if (committing) heldRef.current = action;
+        else if (action === 'redo') history.redo();
         else history.undo();
       } else if (key === 's') {
+        if (committing) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         if (

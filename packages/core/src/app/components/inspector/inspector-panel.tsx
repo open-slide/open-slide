@@ -179,13 +179,16 @@ export function InspectorPanel({
   const allShapes = selection.every((target) => target.anchor.dataset.osShape !== undefined);
   const textSelected = selected && snapshot?.text !== null && snapshot?.text !== undefined;
   const imageSelected = Boolean(snapshot?.imageSrc || snapshot?.placeholder);
+  const groupSelected = !multiple && selected?.anchor.dataset.slideGroup !== undefined;
   const elementLabel = multiple
     ? format(t.inspector.selectionCount, { count: selection.length })
-    : textSelected
-      ? t.inspector.elementText
-      : imageSelected
-        ? t.inspector.elementImage
-        : t.inspector.elementShape;
+    : groupSelected
+      ? t.inspector.groupSection
+      : textSelected
+        ? t.inspector.elementText
+        : imageSelected
+          ? t.inspector.elementImage
+          : t.inspector.elementShape;
   const ElementIcon = textSelected ? Type : imageSelected ? ImageIcon : Shapes;
   const FormatIcon = textSelected ? Type : imageSelected ? ImageIcon : Paintbrush;
   const formatLabel = textSelected

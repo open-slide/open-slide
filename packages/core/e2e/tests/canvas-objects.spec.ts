@@ -150,4 +150,73 @@ test.describe('canvas objects', () => {
     const src = await readSlideSource('obj-multi-format');
     expect(src.split('drop-shadow(').length).toBe(3);
   });
+
+  test('groups, ungroups and locks shapes without moving them', async ({ page, request }) => {
+    await openEditable(page, request, 'obj-group');
+    const canvas = editorCanvas(page);
+    const insert = async (name: string, count: number) => {
+      await page.getByRole('button', { name: 'Shape', exact: true }).click();
+      await page.getByRole('menuitem', { name, exact: true }).click();
+      await expect
+        .poll(async () => (await readSlideSource('obj-group')).split('<Shape ').length)
+        .toBe(count + 1);
+      await expect(canvas.locator('[data-os-shape]')).toHaveCount(count);
+      await expect(
+        page.locator('aside[data-inspector-ui]').getByRole('combobox', { name: 'Type' }),
+      ).toContainText(name);
+    };
+    await insert('Rectangle', 1);
+    for (let i = 0; i < 20; i++) await page.keyboard.press('Shift+ArrowLeft');
+    await expect.poll(() => readSlideSource('obj-group')).toContain("left: '580px'");
+    await insert('Ellipse', 2);
+
+    const frames = () =>
+      canvas
+        .locator('[data-os-shape]')
+        .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()));
+    const before = await frames();
+
+    const rect = canvas.locator('[data-os-shape="rect"]');
+    const box = await rect.boundingBox();
+    if (!box) throw new Error('rect not visible');
+    await page.keyboard.down('Shift');
+    await page.mouse.click(box.x + 8, box.y + box.height / 2);
+    await page.keyboard.up('Shift');
+    await expect(page.getByText('2 elements selected', { exact: true })).toBeVisible();
+    await page.keyboard.press('ControlOrMeta+Alt+g');
+
+    await expect.poll(() => readSlideSource('obj-group')).toContain('<div data-slide-group');
+    await expect(canvas.locator('[data-slide-group] [data-os-shape]')).toHaveCount(2);
+    await expect
+      .poll(async () => {
+        const after = await frames();
+        return after.every(
+          (frame, i) =>
+            Math.abs(frame.x - before[i].x) < 1.5 && Math.abs(frame.y - before[i].y) < 1.5,
+        );
+      })
+      .toBe(true);
+
+    await expect(page.getByText('2 elements selected', { exact: true })).toHaveCount(0);
+    await page.keyboard.press('ControlOrMeta+l');
+    await expect.poll(() => readSlideSource('obj-group')).toContain('data-locked');
+    await expect(canvas.locator('[data-slide-group][data-locked]')).toBeVisible();
+    await page.keyboard.press('Backspace');
+    await expect(page.getByText('Unlock this element to move, delete or group it.')).toBeVisible();
+    await page.keyboard.press('ControlOrMeta+l');
+    await expect.poll(() => readSlideSource('obj-group')).not.toContain('data-locked');
+    await expect(canvas.locator('[data-slide-group][data-locked]')).toHaveCount(0);
+
+    await page.keyboard.press('ControlOrMeta+Alt+Shift+g');
+    await expect.poll(() => readSlideSource('obj-group')).not.toContain('data-slide-group');
+    await expect
+      .poll(async () => {
+        const after = await frames();
+        return after.every(
+          (frame, i) =>
+            Math.abs(frame.x - before[i].x) < 1.5 && Math.abs(frame.y - before[i].y) < 1.5,
+        );
+      })
+      .toBe(true);
+  });
 });

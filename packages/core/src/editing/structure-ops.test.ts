@@ -345,6 +345,21 @@ describe('delete', () => {
   });
 });
 
+describe('locked elements', () => {
+  const locked = deck.replace('<p>World</p>', '<p data-locked>World</p>');
+
+  it('refuses to delete them', () => {
+    const r = applyStructureOp(locked, { kind: 'delete', targets: [{ line: 6, column: 4 }] });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe('element is locked');
+  });
+
+  it('still duplicates them', () => {
+    const r = applyStructureOp(locked, { kind: 'duplicate', targets: [{ line: 6, column: 4 }] });
+    expect(r.ok).toBe(true);
+  });
+});
+
 describe('duplicate', () => {
   it('inserts a copy after the original with a style override', () => {
     const r = ok(
@@ -402,7 +417,7 @@ describe('group and ungroup', () => {
     expect(r.source).toContain(
       [
         "  <div style={{ width: '100%', height: '100%' }}>",
-        "    <div style={{ position: 'absolute', left: 10, top: 20, width: 300, height: 200 }}>",
+        "    <div data-slide-group style={{ position: 'absolute', left: 10, top: 20, width: 300, height: 200 }}>",
         "      <h1 style={{ left: '5px' }}>Hello</h1>",
         "      <p style={{ left: '0px' }}>World</p>",
         '    </div>',

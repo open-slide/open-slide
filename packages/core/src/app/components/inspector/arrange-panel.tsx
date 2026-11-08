@@ -12,10 +12,14 @@ import {
   BringToFront,
   CircleHelp,
   CornerLeftUp,
+  Group,
+  Lock,
+  LockOpen,
   type LucideIcon,
   Magnet,
   RotateCw,
   SendToBack,
+  Ungroup,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NumberInput, NumberShell, Section } from '@/components/panel/panel-fields';
@@ -23,7 +27,14 @@ import { Button } from '@/components/ui/button';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { canTransform, readCanvas, readFrame, readRotation } from '@/lib/inspector/visual-dom';
+import {
+  canTransform,
+  isLocked,
+  readCanvas,
+  readFrame,
+  readRotation,
+} from '@/lib/inspector/visual-dom';
+import { IS_APPLE } from '@/lib/keys';
 import { useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
 import { useInspector } from './inspector-provider';
@@ -36,10 +47,16 @@ type Frame = {
   rotation: number;
   editable: boolean;
   shared: boolean;
+  group: boolean;
+  locked: boolean;
 };
 
+const GROUP_SHORTCUT = IS_APPLE ? '⌥⌘G' : 'Ctrl Alt G';
+const UNGROUP_SHORTCUT = IS_APPLE ? '⇧⌥⌘G' : 'Ctrl Shift Alt G';
+const LOCK_SHORTCUT = IS_APPLE ? '⌘L' : 'Ctrl L';
+
 export function ArrangePanel() {
-  const { selection, opsVersion, visual, committing } = useInspector();
+  const { selection, opsVersion, visual, committing, objects } = useInspector();
   const { inspector: t } = useLocale();
   const [frame, setFrame] = useState<Frame | null>(null);
   const [toSlide, setToSlide] = useState(false);
@@ -72,6 +89,8 @@ export function ArrangePanel() {
             canvas.root.querySelectorAll(`[data-slide-loc="${target.line}:${target.column}"]`)
               .length > 1,
         ),
+        group: anchors.length === 1 && anchors[0].dataset.slideGroup !== undefined,
+        locked: anchors.every((anchor) => isLocked(anchor)),
       });
     };
     update();
@@ -297,6 +316,31 @@ export function ArrangePanel() {
             onClick={() => visual.arrange('back')}
           />
         </ButtonGroup>
+      </Section>
+
+      <Section title={t.groupSection}>
+        <div className="flex items-center gap-1.5">
+          <ButtonGroup label={t.groupSection}>
+            <ArrangeButton
+              label={`${t.groupAction} (${GROUP_SHORTCUT})`}
+              icon={Group}
+              disabled={blocked || !multiple}
+              onClick={() => void objects.group()}
+            />
+            <ArrangeButton
+              label={`${t.ungroupAction} (${UNGROUP_SHORTCUT})`}
+              icon={Ungroup}
+              disabled={blocked || multiple || !frame.group}
+              onClick={() => void objects.ungroup()}
+            />
+          </ButtonGroup>
+          <ArrangeButton
+            label={`${frame.locked ? t.unlockAction : t.lockAction} (${LOCK_SHORTCUT})`}
+            icon={frame.locked ? LockOpen : Lock}
+            disabled={committing}
+            onClick={() => void objects.toggleLock()}
+          />
+        </div>
       </Section>
     </TooltipProvider>
   );
