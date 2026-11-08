@@ -1,7 +1,9 @@
 import fs from 'node:fs/promises';
 import type { ViteDevServer } from 'vite';
+import type { PageLayout, PageLayoutText } from '../../app/lib/structure.ts';
 import { applyEditBatch, type BatchEdit } from '../../editing/batch-edit.ts';
 import { applyEdit, type EditOp } from '../../editing/edit-ops.ts';
+import { insertPageInSource } from '../../editing/page-layouts.ts';
 import { applyRevertAsset } from '../../editing/revert-asset.ts';
 import { RevisionJournal } from '../../editing/revisions.ts';
 import {
@@ -25,6 +27,7 @@ import {
 // POST /__edit/structure      applyStructureOp({ slideId, op }) → { created }
 // POST /__edit/copy           copyElements({ slideId, targets }) → { snippets }
 // POST /__edit/history        undo/redo a recorded write { slideId, revision, direction }
+// POST /__edit/insert-page    insertPageInSource({ slideId, after, layout, copy }) → { index }
 //
 // Every write answers with a `revision` id the client can hand back to
 // /history, so undo keeps working after an edit has been saved.
@@ -44,6 +47,21 @@ type EditBatchBody = {
 type StructureBody = { slideId?: string; op?: StructureOp };
 type CopyBody = { slideId?: string; targets?: ElementLoc[] };
 type HistoryBody = { slideId?: string; revision?: string; direction?: string };
+type InsertPageBody = {
+  slideId?: string;
+  after?: number;
+  layout?: PageLayout;
+  copy?: Partial<PageLayoutText>;
+};
+
+const DEFAULT_COPY: PageLayoutText = {
+  title: 'Title',
+  subtitle: 'Subtitle',
+  body: 'Body text',
+  quote: 'Quote',
+  attribution: 'Attribution',
+  imageHint: 'Image',
+};
 
 export const editRevisions = new RevisionJournal();
 
@@ -165,6 +183,29 @@ export function registerEditRoutes(server: ViteDevServer, ctx: ApiContext): void
         const result = copyElements(source, body.targets);
         if (!result.ok) return json(res, result.status, { error: result.error });
         return json(res, 200, { ok: true, snippets: result.snippets });
+      }
+
+      if (url.pathname === '/insert-page') {
+        const body = (await readBody(req)) as InsertPageBody;
+        const slideId = body.slideId ?? '';
+        const file = resolveSlideEntryPath(ctx, slideId);
+        if (!file) return json(res, 400, { error: 'invalid slideId' });
+        if (typeof body.after !== 'number' || typeof body.layout !== 'string') {
+          return json(res, 400, { error: 'missing after or layout' });
+        }
+
+        const source = await readSlideSource(file);
+        if (source === null) return json(res, 404, { error: 'slide not found' });
+
+        const copy = { ...DEFAULT_COPY };
+        for (const key of Object.keys(DEFAULT_COPY) as Array<keyof PageLayoutText>) {
+          const value = body.copy?.[key];
+          if (typeof value === 'string' && value.trim()) copy[key] = value;
+        }
+        const result = insertPageInSource(source, body.after, body.layout, copy);
+        if (!result.ok) return json(res, result.status, { error: result.error });
+        const revision = await writeRevision(file, slideId, source, result.source);
+        return json(res, 200, { ok: true, index: result.index, revision });
       }
 
       if (url.pathname === '/history') {

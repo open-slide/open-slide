@@ -355,7 +355,7 @@ export function updateMetaTitleInSource(source: string, title: string): string |
 
 type ArrayElementRange = { start: number; end: number };
 
-function findDefaultExportArray(
+export function findDefaultExportArray(
   source: string,
 ): { elements: ArrayElementRange[]; arrayStart: number; arrayEnd: number } | null {
   let ast: unknown;
@@ -538,6 +538,25 @@ export function removeNotesElementInSource(source: string, index: number): strin
   if (index >= elementTexts.length) return source;
   const next = elementTexts.slice();
   next.splice(index, 1);
+  return rebuildNotesArray(source, arrayStart, arrayEnd, next);
+}
+
+/**
+ * Insert an empty note slot at `index` so the `notes` export stays
+ * index-aligned after a page is inserted there. Returns the original source
+ * when there is no `notes` export or it ends before `index`, and `null` if its
+ * shape is too surprising to touch safely.
+ */
+export function insertNotesElementInSource(source: string, index: number): string | null {
+  if (!Number.isInteger(index) || index < 0) return null;
+  const found = findNotesArray(source);
+  if (found === 'invalid') return null;
+  if (found === null) return source;
+
+  const { arrayStart, arrayEnd, elementTexts } = found;
+  if (index >= elementTexts.length) return source;
+  const next = elementTexts.slice();
+  next.splice(index, 0, 'undefined');
   return rebuildNotesArray(source, arrayStart, arrayEnd, next);
 }
 

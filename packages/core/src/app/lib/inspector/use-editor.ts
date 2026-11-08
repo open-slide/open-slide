@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { ElementLoc, StructureOp } from '../structure';
+import type { ElementLoc, PageLayout, PageLayoutText, StructureOp } from '../structure';
 
 export type EditOp =
   | { kind: 'set-style'; key: string; value: string | null; prevText?: string }
@@ -103,5 +103,18 @@ export function useEditor(slideId: string) {
     [slideId],
   );
 
-  return { applyEdit, applyEdits, applyStructure, copyElements, restoreRevision };
+  const insertPage = useCallback(
+    async (after: number, layout: PageLayout, copy: PageLayoutText) => {
+      const body = await postJson<{ index?: number; revision?: string }>('/__edit/insert-page', {
+        slideId,
+        after,
+        layout,
+        copy,
+      });
+      return { index: body.index ?? after + 1, revision: body.revision };
+    },
+    [slideId],
+  );
+
+  return { applyEdit, applyEdits, applyStructure, copyElements, restoreRevision, insertPage };
 }

@@ -219,4 +219,28 @@ test.describe('canvas objects', () => {
       })
       .toBe(true);
   });
+
+  test('adds a new slide from a layout and sets its background', async ({ page, request }) => {
+    await openEditable(page, request, 'obj-new-slide');
+    await page.getByRole('button', { name: 'New slide', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Title & body', exact: true }).click();
+
+    await expect.poll(() => readSlideSource('obj-new-slide')).toContain('const Slide2: Page');
+    const src = await readSlideSource('obj-new-slide');
+    expect(src).toContain('export default [Only, Slide2] satisfies Page[];');
+    await expect(page).toHaveURL(/[?&]p=2/);
+    await expect(editorCanvas(page).getByText('Body text', { exact: true })).toBeVisible();
+
+    await page
+      .locator('aside[data-inspector-ui]')
+      .locator('input[type="text"][aria-label="Background"]')
+      .fill('#112233');
+    await expect.poll(() => readSlideSource('obj-new-slide')).toContain("background: '#112233'");
+
+    await page.locator('body').click({ position: { x: 4, y: 4 } });
+    await page.keyboard.press('ControlOrMeta+z');
+    await expect.poll(() => readSlideSource('obj-new-slide')).not.toContain("'#112233'");
+    await page.keyboard.press('ControlOrMeta+z');
+    await expect.poll(() => readSlideSource('obj-new-slide')).not.toContain('Slide2');
+  });
 });

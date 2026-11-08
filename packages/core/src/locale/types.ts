@@ -1,5 +1,5 @@
 import type { AgentEffort } from '../agent/types.ts';
-import type { ShapeKind } from '../app/lib/structure.ts';
+import type { PageLayout, ShapeKind } from '../app/lib/structure.ts';
 
 export type Plural = { one: string; other: string };
 
@@ -314,6 +314,14 @@ export type Locale = {
     /** Prefix for the toast shown when one or more buffered edits fail to write to disk. */
     saveFailed: string;
     undoFailed: string;
+    newSlide: string;
+    pageLayouts: Record<PageLayout, string>;
+    slideSection: string;
+    pageCopyTitle: string;
+    pageCopySubtitle: string;
+    pageCopyBody: string;
+    pageCopyQuote: string;
+    pageCopyAttribution: string;
     groupSection: string;
     groupAction: string;
     ungroupAction: string;

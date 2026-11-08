@@ -61,6 +61,7 @@ import {
 import { ArrangePanel } from './arrange-panel';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { type SelectedTarget, useInspector } from './inspector-provider';
+import { SlideBackgroundSection } from './new-slide-menu';
 
 type ElementSnapshot = {
   fontSize: number;
@@ -497,15 +498,18 @@ export function InspectorPanel({
             </TabsContent>
           </>
         ) : (
-          <div className="flex flex-col items-center gap-3 px-7 py-16 text-center">
-            <MousePointer2 aria-hidden className="size-8 text-muted-foreground/50" />
-            <div className="flex flex-col gap-1.5">
-              <h2 className="text-[13px] font-medium">{t.inspector.emptySelectionTitle}</h2>
-              <p className="text-[12px] leading-relaxed text-muted-foreground">
-                {t.inspector.emptySelectionHint}
-              </p>
+          <>
+            <SlideBackgroundSection />
+            <div className="flex flex-col items-center gap-3 px-7 py-16 text-center">
+              <MousePointer2 aria-hidden className="size-8 text-muted-foreground/50" />
+              <div className="flex flex-col gap-1.5">
+                <h2 className="text-[13px] font-medium">{t.inspector.emptySelectionTitle}</h2>
+                <p className="text-[12px] leading-relaxed text-muted-foreground">
+                  {t.inspector.emptySelectionHint}
+                </p>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </PanelShell>
     </Tabs>

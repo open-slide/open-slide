@@ -28,7 +28,13 @@ import { type Edit, type EditOp, EditRequestError, useEditor } from '@/lib/inspe
 import { useObjectCommands } from '@/lib/inspector/use-object-commands';
 import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-editor';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
-import { type ElementLoc, LOCKED_STATUS, type StructureOp } from '@/lib/structure';
+import {
+  type ElementLoc,
+  LOCKED_STATUS,
+  type PageLayout,
+  type PageLayoutText,
+  type StructureOp,
+} from '@/lib/structure';
 import { textDiff } from '@/lib/text-diff';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
@@ -496,6 +502,8 @@ type InspectorCtx = {
   // Resolves to null when the change was refused.
   runStructure: (op: StructureOp, options?: StructureOptions) => Promise<SelectedTarget[] | null>;
   objects: ReturnType<typeof useObjectCommands>;
+  // Inserts a page built from `layout` after page `after`; resolves to its index.
+  addPage: (after: number, layout: PageLayout, copy: PageLayoutText) => Promise<number | null>;
   copyElements: (targets: ElementLoc[]) => Promise<string[]>;
   openCrop: (anchor: HTMLImageElement) => void;
   openReplace: (anchor: HTMLElement) => void;
@@ -580,7 +588,7 @@ export function InspectorProvider({
   );
   const [opsVersion, setOpsVersion] = useState(0);
   const { comments, error, add, update, remove } = useComments(slideId);
-  const { applyEdit, applyEdits, applyStructure, copyElements, restoreRevision } =
+  const { applyEdit, applyEdits, applyStructure, copyElements, restoreRevision, insertPage } =
     useEditor(slideId);
   const history = useHistory();
 
@@ -1331,6 +1339,38 @@ export function InspectorProvider({
     [commitEdits, enqueueWrite, expectSync, applyEdit, recordSavedRevision],
   );
 
+  const addPage = useCallback(
+    async (after: number, layout: PageLayout, copy: PageLayoutText): Promise<number | null> => {
+      await commitEdits().catch(() => {});
+      return enqueueWrite(async () => {
+        setBusy(true);
+        try {
+          await pendingSyncRef.current;
+          const sync = expectSync();
+          const { index, revision: written } = await insertPage(after, layout, copy).catch(
+            (err) => {
+              sync.release();
+              throw err;
+            },
+          );
+          if (!written) {
+            sync.release();
+            return null;
+          }
+          recordSavedRevision(written, null);
+          await sync.synced;
+          return index;
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : String(err));
+          return null;
+        } finally {
+          setBusy(false);
+        }
+      });
+    },
+    [commitEdits, enqueueWrite, expectSync, insertPage, recordSavedRevision],
+  );
+
   const runStructure = useCallback(
     async (op: StructureOp, options?: StructureOptions): Promise<SelectedTarget[] | null> => {
       await commitEdits().catch(() => {});
@@ -1735,6 +1775,7 @@ export function InspectorProvider({
       committing: busy,
       runStructure,
       objects,
+      addPage,
       copyElements,
       openCrop,
       openReplace,
@@ -1778,6 +1819,7 @@ export function InspectorProvider({
       busy,
       runStructure,
       objects,
+      addPage,
       copyElements,
       openCrop,
       openReplace,

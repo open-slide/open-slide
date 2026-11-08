@@ -293,7 +293,7 @@ function wrapInFragmentSplice(
   };
 }
 
-function coreImportSplice(
+export function coreImportSplice(
   ast: t.File,
   source: string,
   name: string,
@@ -766,6 +766,24 @@ function planUngroup(
   return finish(source, [splice], created);
 }
 
+// Styles the element a page returns, which is what paints its background.
+function planPageStyle(
+  source: string,
+  ast: t.File,
+  op: Extract<StructureOp, { kind: 'page-style' }>,
+): StructureResult {
+  const root = findPageRoot(ast, op.pageIndex);
+  const name = t.isJSXElement(root) ? root.openingElement.name : null;
+  if (!root || !t.isJSXElement(root) || !t.isJSXIdentifier(name) || !/^[a-z]/.test(name.name)) {
+    return fail("this page's background comes from a shared component; change it in code");
+  }
+  const loc = root.loc?.start;
+  if (!loc) return fail('could not locate the page root');
+  const result = applyEdit(source, loc.line, loc.column, styleOps(op.style));
+  if (!result.ok) return result;
+  return { ok: true, source: result.source, created: [] };
+}
+
 export function applyStructureOp(source: string, op: StructureOp): StructureResult {
   const ast = parseSource(source);
   if (!ast) return fail('could not parse source');
@@ -780,6 +798,8 @@ export function applyStructureOp(source: string, op: StructureOp): StructureResu
       return planGroup(source, ast, op);
     case 'ungroup':
       return planUngroup(source, ast, op);
+    case 'page-style':
+      return planPageStyle(source, ast, op);
     default:
       return fail('unknown structure op', 400);
   }

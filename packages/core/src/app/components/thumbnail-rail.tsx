@@ -27,7 +27,15 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useOptionalInspector } from '@/components/inspector/inspector-provider';
 import { Button } from '@/components/ui/button';
 import {
@@ -76,6 +84,8 @@ type Props = {
   moduleTransition?: SlideTransition;
   /** When provided, the vertical rail header renders a button that opens the overview grid. */
   onOverview?: () => void;
+  /** Extra control rendered at the end of the vertical rail header. */
+  headerAction?: ReactNode;
 };
 
 // Per-page pending comment counts, shown on the rail only while the
@@ -132,6 +142,7 @@ export function ThumbnailRail({
   width,
   moduleTransition,
   onOverview,
+  headerAction,
 }: Props) {
   const activeRef = useRef<HTMLButtonElement | null>(null);
   const virtualListRef = useRef<HTMLDivElement | null>(null);
@@ -358,6 +369,7 @@ export function ThumbnailRail({
               </TooltipContent>
             </Tooltip>
           )}
+          {headerAction}
         </div>
       </div>
     </div>

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import {
   type ReactElement,
+  type ReactNode,
   type RefObject,
   useCallback,
   useEffect,
@@ -44,6 +45,7 @@ import {
   InspectPanelButton,
   useInspector,
 } from '@/components/inspector/inspector-provider';
+import { NewSlideMenu } from '@/components/inspector/new-slide-menu';
 import { SaveBar } from '@/components/inspector/save-bar';
 import { EditorSidebar } from '@/components/panel/editor-sidebar';
 import { ResizeHandle, useStoredWidth } from '@/components/panel/resize-handle';
@@ -277,6 +279,15 @@ export function Slide() {
     if (agentWriting && pageCount > seenPageCount.current) goTo(pageCount - 1);
     seenPageCount.current = pageCount;
   }, [agentWriting, pageCount, goTo]);
+
+  // A page inserted by the editor reaches `pages` a render after the write
+  // lands, so hold the target until the deck has grown enough to show it.
+  const [pendingPage, setPendingPage] = useState<number | null>(null);
+  useEffect(() => {
+    if (pendingPage === null || pendingPage >= pageCount) return;
+    goTo(pendingPage);
+    setPendingPage(null);
+  }, [pendingPage, pageCount, goTo]);
 
   const reorderPage = useCallback(
     async (from: number, to: number) => {
@@ -927,6 +938,7 @@ export function Slide() {
                     actions={thumbnailActions}
                     moduleTransition={slide.transition}
                     onOverview={() => setOverviewOpen(true)}
+                    headerAction={<NewSlideMenu current={index} onInserted={setPendingPage} />}
                   />
                   <main
                     ref={slideViewportRef}
@@ -1057,6 +1069,7 @@ function ResizableRail(props: {
   actions?: ThumbnailActions;
   moduleTransition?: SlideModule['transition'];
   onOverview?: () => void;
+  headerAction?: ReactNode;
 }) {
   const t = useLocale();
   const [width, setWidth] = useStoredWidth(
