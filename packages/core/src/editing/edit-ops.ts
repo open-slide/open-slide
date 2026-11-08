@@ -102,7 +102,7 @@ export function findImports(ast: t.File): ImportInfo[] {
   return out;
 }
 
-function collectTopLevelIdentifiers(ast: t.File): Set<string> {
+export function collectTopLevelIdentifiers(ast: t.File): Set<string> {
   // Only need to avoid colliding with anything resolvable by JSX —
   // import bindings cover the common case. Local consts/lets are
   // handled by source-level identifier scanning below.
@@ -142,7 +142,7 @@ export function safeAssetIdentifier(filename: string, taken: Set<string>): strin
   return candidate;
 }
 
-function findJsxByStart(ast: t.Node, line: number, column: number): t.JSXElement | null {
+export function findJsxByStart(ast: t.Node, line: number, column: number): t.JSXElement | null {
   let hit: t.JSXElement | null = null;
   walkJsx(ast, (n) => {
     if (!t.isJSXElement(n) || !n.loc) return;
@@ -1049,7 +1049,7 @@ type AssetEditPlan = {
   attrSplice: Splice;
 };
 
-function planAssetImport(
+export function planAssetImport(
   ast: t.File,
   assetPath: string,
 ): { identifier: string; importSplice: Splice | null } {
