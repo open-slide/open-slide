@@ -1,4 +1,5 @@
 import type { AgentEffort } from '../agent/types.ts';
+import type { ShapeKind } from '../app/lib/structure.ts';
 
 export type Plural = { one: string; other: string };
 
@@ -313,6 +314,11 @@ export type Locale = {
     /** Prefix for the toast shown when one or more buffered edits fail to write to disk. */
     saveFailed: string;
     undoFailed: string;
+    insertText: string;
+    insertShape: string;
+    insertImage: string;
+    newText: string;
+    shapeNames: Record<ShapeKind, string>;
     sharedStructureHint: string;
     decreaseFontSize: string;
     increaseFontSize: string;

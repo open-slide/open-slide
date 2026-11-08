@@ -128,7 +128,7 @@ export function insertSpec(
         fontFamily: 'var(--osd-font-body, inherit)',
         fontSize: 48,
         lineHeight: 1.25,
-        color: 'var(--osd-text, #111111)',
+        color: 'var(--osd-text, inherit)',
       },
     };
   }
@@ -137,7 +137,7 @@ export function insertSpec(
     type: 'shape',
     kind,
     ...(isLine
-      ? { stroke: 'var(--osd-text, #111111)', strokeWidth: 4 }
+      ? { stroke: 'var(--osd-text, currentColor)', strokeWidth: 4 }
       : { fill: 'var(--osd-accent, #3b82f6)' }),
     style: { ...box, height: Math.round(frame.height) },
   };
@@ -243,20 +243,20 @@ export function useObjectCommands({
     if (created.length) setSelection(created);
   }, [slideId, pageIndex, insert, setSelection]);
 
-  const insertImageFile = useCallback(
-    async (file: File, frame?: Rect | null) => {
+  const insertImage = useCallback(
+    async (assetPath: string, url: string, frame?: Rect | null) => {
       const canvas = readCanvas();
       if (!canvas) return;
-      const { ok, entry } = await uploadWithAutoRename(slideId, file);
-      if (!ok || !entry) {
-        toast.error(t.imagePlaceholder.uploadFailed);
-        return;
-      }
-      const target = frame ?? fitInside(await readImageSize(entry.url), canvas);
+      const size = await readImageSize(url);
+      const fitted = fitInside(size, canvas);
+      // A drop point centers the image there instead of on the slide.
+      const target = frame
+        ? { ...fitted, x: frame.x - fitted.width / 2, y: frame.y - fitted.height / 2 }
+        : fitted;
       await insert(
         {
           type: 'image',
-          assetPath: `./assets/${entry.name}`,
+          assetPath,
           alt: '',
           style: {
             position: 'absolute',
@@ -270,7 +270,23 @@ export function useObjectCommands({
         target,
       );
     },
-    [slideId, insert, t],
+    [insert],
+  );
+
+  const insertImageFile = useCallback(
+    async (file: File, point?: { x: number; y: number } | null) => {
+      const { ok, entry } = await uploadWithAutoRename(slideId, file);
+      if (!ok || !entry) {
+        toast.error(t.imagePlaceholder.uploadFailed);
+        return;
+      }
+      await insertImage(
+        `./assets/${entry.name}`,
+        entry.url,
+        point ? { ...point, width: 0, height: 0 } : null,
+      );
+    },
+    [slideId, insertImage, t],
   );
 
   const pasteText = useCallback(
@@ -359,7 +375,7 @@ export function useObjectCommands({
   }, [active, inlineEditing, busy, selection.length]);
 
   return useMemo(
-    () => ({ remove, duplicate, copy, cut, insert, insertImageFile, pasteText }),
-    [remove, duplicate, copy, cut, insert, insertImageFile, pasteText],
+    () => ({ remove, duplicate, copy, cut, insert, insertImage, insertImageFile, pasteText }),
+    [remove, duplicate, copy, cut, insert, insertImage, insertImageFile, pasteText],
   );
 }

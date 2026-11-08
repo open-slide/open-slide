@@ -218,7 +218,7 @@ export function Shape({
     >
       {path && width > 0 && height > 0 && (
         <svg
-          aria-hidden
+          aria-hidden="true"
           width={width}
           height={height}
           viewBox={`0 0 ${width} ${height}`}

@@ -36,6 +36,7 @@ import { AssetView } from '@/components/asset-view';
 import { HistoryProvider } from '@/components/history-provider';
 import { CommentLayer } from '@/components/inspector/comment-layer';
 import { InlineEditLayer } from '@/components/inspector/inline-text-editor';
+import { InsertToolbar } from '@/components/inspector/insert-toolbar';
 import { InspectOverlay } from '@/components/inspector/inspect-overlay';
 import {
   InspectModeSwitcher,
@@ -758,6 +759,7 @@ export function Slide() {
             </div>
 
             <div className="col-start-3 row-start-1 flex items-center justify-end gap-1">
+              {view === 'slides' && !compactToolbar && <InsertToolbar />}
               {view === 'slides' && !narrowToolbar && <InspectModeSwitcher />}
               {import.meta.env.DEV && view === 'slides' && !compactToolbar && (
                 <span aria-hidden className="mx-0.5 hidden h-5 w-px bg-hairline md:block" />
