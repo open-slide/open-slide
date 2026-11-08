@@ -40,14 +40,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { isTransparent, rgbToHex } from '@/lib/inspector/color';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import { hasOnlyInlineTextChildren } from '@/lib/inspector/inline-text';
 import { styleContext } from '@/lib/inspector/text-selection';
 import type { EditOp } from '@/lib/inspector/use-editor';
+import { independentTargets } from '@/lib/inspector/visual-dom';
+import type { ShapeKind } from '@/lib/structure';
 import { useAgentSocketConnected } from '@/lib/use-agent-socket';
 import { format, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
 import type { Locale } from '../../../locale/types';
+import {
+  type Appearance,
+  AppearanceSection,
+  FontFamilyField,
+  readAppearance,
+  ShapeSection,
+} from './appearance-fields';
 import { ArrangePanel } from './arrange-panel';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { type SelectedTarget, useInspector } from './inspector-provider';
@@ -64,6 +74,7 @@ type ElementSnapshot = {
   text: string | null;
   imageSrc: string | null;
   placeholder: { hint: string; width?: number; height?: number } | null;
+  appearance: Appearance;
 };
 
 type ContentSelection = { start: number; end: number };
@@ -105,6 +116,7 @@ export function InspectorPanel({
     selection,
     setSelected,
     bufferOps,
+    bufferBatch,
     pendingCount,
     opsVersion,
     applyEdit,
@@ -146,7 +158,25 @@ export function InspectorPanel({
   );
 
   const multiple = selection.length > 1;
-  const tab = multiple ? 'arrange' : inlineEdit ? 'format' : preferredTab;
+  const tab = inlineEdit ? 'format' : preferredTab;
+
+  // Formatting a multi-selection writes the same ops to every element.
+  const applyAll = (ops: EditOp[]) => {
+    if (!multiple) {
+      apply(ops);
+      return;
+    }
+    bufferBatch(independentTargets(selection).map((target) => ({ ...target, ops })));
+    if (selected?.anchor.isConnected) setSnapshot(readSnapshot(selected.anchor));
+  };
+  const setShapeKind = (kind: ShapeKind) => {
+    const targets = multiple ? independentTargets(selection) : selected ? [selected] : [];
+    for (const target of targets) {
+      if (!target.anchor.dataset.osShape) continue;
+      void applyEdit(target.line, target.column, [{ kind: 'set-prop', name: 'kind', value: kind }]);
+    }
+  };
+  const allShapes = selection.every((target) => target.anchor.dataset.osShape !== undefined);
   const textSelected = selected && snapshot?.text !== null && snapshot?.text !== undefined;
   const imageSelected = Boolean(snapshot?.imageSrc || snapshot?.placeholder);
   const elementLabel = multiple
@@ -313,7 +343,6 @@ export function InspectorPanel({
                 <IconSwitcherIndicator index={tab === 'arrange' ? 1 : 0} />
                 <TabsTrigger
                   value="format"
-                  disabled={multiple}
                   title={formatLabel}
                   className="z-10 h-full w-8 flex-none rounded-md px-0 data-active:bg-transparent data-active:shadow-none dark:data-active:bg-transparent"
                 >
@@ -337,13 +366,45 @@ export function InspectorPanel({
         {selected && snapshot && typographySnapshot ? (
           <>
             <TabsContent value="format">
-              {textSelected && (
+              {multiple && (
+                <>
+                  {allShapes && snapshot.appearance.shape && (
+                    <ShapeSection
+                      shape={snapshot.appearance.shape}
+                      apply={applyAll}
+                      setKind={setShapeKind}
+                    />
+                  )}
+                  {!allShapes && (
+                    <Section title={t.inspector.colorSection}>
+                      <ColorField
+                        label={t.inspector.backgroundColor}
+                        value={snapshot.backgroundColor ?? '#ffffff'}
+                        dim={!snapshot.backgroundColor}
+                        onChange={(value) =>
+                          applyAll([{ kind: 'set-style', key: 'backgroundColor', value }])
+                        }
+                      />
+                    </Section>
+                  )}
+                  <AppearanceSection appearance={snapshot.appearance} apply={applyAll} />
+                </>
+              )}
+              {!multiple && snapshot.appearance.shape && (
+                <ShapeSection
+                  shape={snapshot.appearance.shape}
+                  apply={apply}
+                  setKind={setShapeKind}
+                />
+              )}
+              {!multiple && textSelected && (
                 <Section title={t.inspector.typographySection}>
                   {rangeSelected && (
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
                       {t.inspector.textSelectionHint}
                     </p>
                   )}
+                  <FontFamilyField anchor={selected.anchor} apply={applyTextStyle} />
                   <div className="flex items-center gap-1.5">
                     <FontWeightField snapshot={typographySnapshot} apply={applyTextStyle} />
                     <FontSizeField snapshot={typographySnapshot} apply={applyTextStyle} />
@@ -358,12 +419,12 @@ export function InspectorPanel({
                   </div>
                 </Section>
               )}
-              {snapshot.imageSrc !== null && (
+              {!multiple && snapshot.imageSrc !== null && (
                 <Section title={t.inspector.imageSection}>
                   <ImageField src={snapshot.imageSrc} anchor={selected.anchor} />
                 </Section>
               )}
-              {snapshot.placeholder && (
+              {!multiple && snapshot.placeholder && (
                 <Section title={t.inspector.imagePlaceholderSection}>
                   <PlaceholderField
                     slideId={slideId}
@@ -374,31 +435,37 @@ export function InspectorPanel({
                   />
                 </Section>
               )}
-              <Section title={t.inspector.colorSection}>
-                {textSelected && (
-                  <ColorField
-                    label={t.inspector.textColor}
-                    value={typographySnapshot.color}
-                    onChange={(value) =>
-                      applyTextStyle([{ kind: 'set-style', key: 'color', value }])
-                    }
-                  />
-                )}
-                <ColorField
-                  label={t.inspector.backgroundColor}
-                  value={snapshot.backgroundColor ?? '#ffffff'}
-                  dim={!snapshot.backgroundColor}
-                  onChange={(value) =>
-                    apply([{ kind: 'set-style', key: 'backgroundColor', value }])
-                  }
-                  onClear={
-                    snapshot.backgroundColor
-                      ? () => apply([{ kind: 'set-style', key: 'backgroundColor', value: null }])
-                      : undefined
-                  }
-                />
-              </Section>
-              {textSelected && (
+              {!multiple && (textSelected || !snapshot.appearance.shape) && (
+                <Section title={t.inspector.colorSection}>
+                  {textSelected && (
+                    <ColorField
+                      label={t.inspector.textColor}
+                      value={typographySnapshot.color}
+                      onChange={(value) =>
+                        applyTextStyle([{ kind: 'set-style', key: 'color', value }])
+                      }
+                    />
+                  )}
+                  {!snapshot.appearance.shape && (
+                    <ColorField
+                      label={t.inspector.backgroundColor}
+                      value={snapshot.backgroundColor ?? '#ffffff'}
+                      dim={!snapshot.backgroundColor}
+                      onChange={(value) =>
+                        apply([{ kind: 'set-style', key: 'backgroundColor', value }])
+                      }
+                      onClear={
+                        snapshot.backgroundColor
+                          ? () =>
+                              apply([{ kind: 'set-style', key: 'backgroundColor', value: null }])
+                          : undefined
+                      }
+                    />
+                  )}
+                </Section>
+              )}
+              {!multiple && <AppearanceSection appearance={snapshot.appearance} apply={apply} />}
+              {!multiple && textSelected && (
                 <Section
                   title={t.inspector.contentSection}
                   action={
@@ -920,6 +987,7 @@ function readSnapshot(el: HTMLElement): ElementSnapshot {
     text,
     imageSrc,
     placeholder,
+    appearance: readAppearance(el),
   };
 }
 
@@ -966,28 +1034,6 @@ function renderedTextNodeValue(node: Text): string {
     return value;
   }
   return value.replace(/\s+/g, ' ');
-}
-
-function rgbToHex(value: string): string | null {
-  const m = value.match(/^rgba?\(([^)]+)\)$/);
-  if (!m) return null;
-  const parts = m[1].split(',').map((s) => s.trim());
-  if (parts.length < 3) return null;
-  const r = clampByte(Number(parts[0]));
-  const g = clampByte(Number(parts[1]));
-  const b = clampByte(Number(parts[2]));
-  return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
-}
-
-function clampByte(n: number): number {
-  return Math.max(0, Math.min(255, Math.round(Number.isFinite(n) ? n : 0)));
-}
-
-function isTransparent(value: string): boolean {
-  if (!value) return true;
-  if (value === 'transparent' || value === 'rgba(0, 0, 0, 0)') return true;
-  const m = value.match(/^rgba\([^)]*,\s*0\)$/);
-  return Boolean(m);
 }
 
 function normalizeTextAlign(v: string): ElementSnapshot['textAlign'] {

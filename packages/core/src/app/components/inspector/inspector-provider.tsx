@@ -1297,19 +1297,22 @@ export function InspectorProvider({
   );
 
   const applyEditNow = useCallback(
-    (line: number, column: number, ops: EditOp[]) =>
-      enqueueWrite(async () => {
+    async (line: number, column: number, ops: EditOp[]) => {
+      await commitEdits().catch(() => {});
+      return enqueueWrite(async () => {
         await pendingSyncRef.current;
         const sync = expectSync();
         try {
           const written = await applyEdit(line, column, ops);
           recordSavedRevision(written, null);
+          await sync.synced;
         } catch (err) {
           sync.release();
           throw err;
         }
-      }),
-    [enqueueWrite, expectSync, applyEdit, recordSavedRevision],
+      });
+    },
+    [commitEdits, enqueueWrite, expectSync, applyEdit, recordSavedRevision],
   );
 
   const runStructure = useCallback(

@@ -115,4 +115,39 @@ test.describe('canvas objects', () => {
       .poll(async () => (await readSlideSource('obj-paste')).split('Editable headline').length)
       .toBe(3);
   });
+
+  test('edits a shape fill and type, saving them as props', async ({ page, request }) => {
+    await openEditable(page, request, 'obj-shape-format');
+    await page.getByRole('button', { name: 'Shape', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Rectangle', exact: true }).click();
+    await expect.poll(() => readSlideSource('obj-shape-format')).toContain('<Shape kind="rect"');
+
+    const panel = page.locator('aside[data-inspector-ui]');
+    await panel.locator('input[type="text"][aria-label="Fill"]').fill('#ff5a1f');
+    await expect.poll(() => readSlideSource('obj-shape-format')).toContain('fill="#ff5a1f"');
+
+    await panel.getByRole('combobox', { name: 'Type' }).click();
+    await page.getByRole('option', { name: 'Star', exact: true }).click();
+    await expect.poll(() => readSlideSource('obj-shape-format')).toContain('kind="star"');
+    await expect(editorCanvas(page).locator('[data-os-shape="star"]')).toBeVisible();
+  });
+
+  test('sets opacity and a shadow on every selected element', async ({ page, request }) => {
+    await openEditable(page, request, 'obj-multi-format');
+    const canvas = editorCanvas(page);
+    await canvas.getByText('Editable headline').click();
+    await canvas.getByText('Editable body copy').click({ modifiers: ['Shift'] });
+
+    const panel = page.locator('aside[data-inspector-ui]');
+    await panel.getByRole('tab').first().click();
+    await panel.getByRole('spinbutton', { name: 'Opacity' }).fill('50');
+    await panel.getByRole('combobox', { name: 'Shadow' }).click();
+    await page.getByRole('option', { name: 'Soft', exact: true }).click();
+
+    await expect
+      .poll(async () => (await readSlideSource('obj-multi-format')).split("opacity: '0.5'").length)
+      .toBe(3);
+    const src = await readSlideSource('obj-multi-format');
+    expect(src.split('drop-shadow(').length).toBe(3);
+  });
 });

@@ -314,6 +314,27 @@ export type Locale = {
     /** Prefix for the toast shown when one or more buffered edits fail to write to disk. */
     saveFailed: string;
     undoFailed: string;
+    appearanceSection: string;
+    opacityLabel: string;
+    radiusLabel: string;
+    borderLabel: string;
+    borderColorLabel: string;
+    shadowLabel: string;
+    shadowNone: string;
+    shadowSoft: string;
+    shadowMedium: string;
+    shadowStrong: string;
+    shadowCustom: string;
+    shapeKindLabel: string;
+    fillLabel: string;
+    strokeLabel: string;
+    strokeWidthLabel: string;
+    fontLabel: string;
+    fontDisplay: string;
+    fontBody: string;
+    fontSans: string;
+    fontSerif: string;
+    fontMono: string;
     insertText: string;
     insertShape: string;
     insertImage: string;
