@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { useHistory } from '@/components/history-provider';
 import { IconSwitcherIndicator } from '@/components/icon-switcher-indicator';
 import { IconTooltip } from '@/components/icon-tooltip';
+import { SHAPE_VARS } from '@/components/shape';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { TooltipTrigger } from '@/components/ui/tooltip';
@@ -113,6 +114,40 @@ function locateRevealTarget(layer: Element, target: RevealTarget): HTMLElement |
   const byPath = target.pagePath && elementAtPath(layer, target.pagePath);
   if (byPath?.tagName === target.tagName) return byPath;
   return layer.querySelector<HTMLElement>(`[data-slide-loc="${target.line}:${target.column}"]`);
+}
+
+// Custom properties need the CSSOM methods; plain keys index the style object.
+export function readStyle(el: HTMLElement, key: string): string {
+  if (key.startsWith('--')) return el.style.getPropertyValue(key);
+  return (el.style as unknown as Record<string, string>)[key] ?? '';
+}
+
+export function writeStyle(el: HTMLElement, key: string, value: string) {
+  if (key.startsWith('--')) {
+    if (value) el.style.setProperty(key, value);
+    else el.style.removeProperty(key);
+  } else {
+    (el.style as unknown as Record<string, string>)[key] = value;
+  }
+}
+
+const SHAPE_PROP_BY_VAR: Record<string, { name: string; numeric: boolean }> = {
+  [SHAPE_VARS.fill]: { name: 'fill', numeric: false },
+  [SHAPE_VARS.stroke]: { name: 'stroke', numeric: false },
+  [SHAPE_VARS.strokeWidth]: { name: 'strokeWidth', numeric: true },
+};
+
+// Shape fill/stroke edits are previewed through the Shape's CSS variables but
+// saved as the props that feed them.
+function styleKeyToOp(key: string, value: string | null, prevText?: string): EditOp {
+  const prop = SHAPE_PROP_BY_VAR[key];
+  if (!prop) return { kind: 'set-style', key, value, prevText };
+  if (value === null || value === '') return { kind: 'set-prop', name: prop.name, value: null };
+  return {
+    kind: 'set-prop',
+    name: prop.name,
+    value: prop.numeric ? Number.parseFloat(value) || 0 : value,
+  };
 }
 
 function sameAnchors(a: SelectedTarget[], b: SelectedTarget[]): boolean {
@@ -660,15 +695,14 @@ export function InspectorProvider({
         bucket = createBucket(line, column);
         pendingRef.current.set(key, bucket);
       }
-      const style = (anchor?.style ?? {}) as unknown as Record<string, string>;
       for (const op of ops) {
         const seq = ++pendingSeqRef.current;
         if (op.kind === 'set-style') {
           if (anchor && !bucket.origStyle.has(op.key)) {
-            bucket.origStyle.set(op.key, style[op.key] ?? '');
+            bucket.origStyle.set(op.key, readStyle(anchor, op.key));
           }
           bucket.styleOps.set(op.key, { value: op.value, prevText: op.prevText, seq });
-          if (anchor?.isConnected) style[op.key] = op.value ?? '';
+          if (anchor?.isConnected) writeStyle(anchor, op.key, op.value ?? '');
         } else if (op.kind === 'set-text-range-style' || op.kind === 'set-text') {
           if (!anchor) continue;
           const instanceId = ensureInstanceId(anchor);
@@ -753,7 +787,6 @@ export function InspectorProvider({
     (line: number, column: number, anchor: HTMLElement, ops: EditOp[]): Snap[] => {
       const key = `${line}:${column}`;
       const bucket = pendingRef.current.get(key);
-      const style = anchor.style as unknown as Record<string, string>;
       const snaps: Snap[] = [];
       for (const op of ops) {
         if (op.kind === 'set-style') {
@@ -769,7 +802,7 @@ export function InspectorProvider({
             snaps.push({
               kind: 'style',
               key: op.key,
-              value: style[op.key] ?? '',
+              value: readStyle(anchor, op.key),
               existed: false,
             });
           }
@@ -825,7 +858,6 @@ export function InspectorProvider({
       // Style/attr snaps share the loc-level anchor (first match);
       // text snaps look up their per-instance node below.
       const sharedAnchor = findAnchor(line, column);
-      const sharedStyle = (sharedAnchor?.style ?? {}) as unknown as Record<string, string>;
       for (const snap of snaps) {
         if (snap.kind === 'style') {
           if (snap.existed) {
@@ -833,11 +865,11 @@ export function InspectorProvider({
             const v = prev.value ?? '';
             // Undo restores the edit's original position in the text timeline.
             bucket.styleOps.set(snap.key, { ...prev });
-            if (sharedAnchor?.isConnected) sharedStyle[snap.key] = v;
+            if (sharedAnchor?.isConnected) writeStyle(sharedAnchor, snap.key, v);
           } else {
             bucket.styleOps.delete(snap.key);
             const orig = bucket.origStyle.get(snap.key);
-            if (sharedAnchor?.isConnected) sharedStyle[snap.key] = orig ?? '';
+            if (sharedAnchor?.isConnected) writeStyle(sharedAnchor, snap.key, orig ?? '');
           }
         } else if (snap.kind === 'text') {
           if (snap.target) bucket.textTargets.set(snap.instanceId, snap.target);
@@ -1107,7 +1139,7 @@ export function InspectorProvider({
               edit: {
                 line,
                 column,
-                ops: [{ kind: 'set-style', key: k, value: op.value, prevText: op.prevText }],
+                ops: [styleKeyToOp(k, op.value, op.prevText)],
               },
               onSuccess: (b) => {
                 if (drop(b)) b.origStyle.delete(k);
@@ -1115,8 +1147,7 @@ export function InspectorProvider({
               onFailure: (b) => {
                 if (!drop(b)) return;
                 const anchor = findAnchor(b.line, b.column);
-                const style = (anchor?.style ?? {}) as unknown as Record<string, string>;
-                if (anchor) style[k] = b.origStyle.get(k) ?? '';
+                if (anchor) writeStyle(anchor, k, b.origStyle.get(k) ?? '');
                 b.origStyle.delete(k);
               },
             });
@@ -1392,10 +1423,9 @@ export function InspectorProvider({
       if (!loc) return;
       const bucket = pendingRef.current.get(loc);
       if (!bucket) return;
-      const style = el.style as unknown as Record<string, string>;
       for (const [key, op] of bucket.styleOps) {
         const v = op.value ?? '';
-        if (style[key] !== v) style[key] = v;
+        if (readStyle(el, key) !== v) writeStyle(el, key, v);
       }
       for (const [attr, op] of bucket.attrOps) {
         if (el.getAttribute(attr) !== op.previewUrl) el.setAttribute(attr, op.previewUrl);

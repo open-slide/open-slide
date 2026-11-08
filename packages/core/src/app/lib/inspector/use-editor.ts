@@ -13,6 +13,7 @@ export type EditOp =
       prevText?: string;
     }
   | { kind: 'set-attr-asset'; attr: string; assetPath: string; previewUrl: string }
+  | { kind: 'set-prop'; name: string; value: string | number | null }
   | { kind: 'replace-placeholder-with-image'; assetPath: string };
 
 export type Edit = { line: number; column: number; ops: EditOp[]; dependsOn?: number };

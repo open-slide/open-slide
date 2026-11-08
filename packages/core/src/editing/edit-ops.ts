@@ -14,6 +14,7 @@ export type EditOp =
       prevText?: string;
     }
   | { kind: 'set-attr-asset'; attr: string; assetPath: string }
+  | { kind: 'set-prop'; name: string; value: string | number | null }
   | { kind: 'replace-placeholder-with-image'; assetPath: string };
 
 export type ApplyEditResult =
@@ -1044,6 +1045,37 @@ function buildTextSplice(
   return matches[0].splice(value);
 }
 
+// Writes a literal JSX prop: numbers as `{n}`, strings quoted, `null` removes it.
+function buildPropSplice(
+  source: string,
+  element: t.JSXElement,
+  name: string,
+  value: string | number | null,
+): Splice | { error: string } {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || name === 'style' || name === 'children') {
+    return { error: `cannot set prop ${name}` };
+  }
+  const opening = element.openingElement;
+  const existing = findJsxAttr(opening, name);
+  if (value === null) {
+    if (!existing) return { from: 0, to: 0, text: '' };
+    let from = existing.start ?? 0;
+    while (from > 0 && /[ \t]/.test(source[from - 1] ?? '')) from -= 1;
+    return { from, to: existing.end ?? 0, text: '' };
+  }
+  const formatted =
+    typeof value === 'number'
+      ? Number.isFinite(value)
+        ? `{${value}}`
+        : null
+      : formatJsxAttrValue(value);
+  if (formatted === null) return { error: `invalid value for ${name}` };
+  const text = `${name}=${formatted}`;
+  if (existing) return { from: existing.start ?? 0, to: existing.end ?? 0, text };
+  const at = opening.name.end ?? 0;
+  return { from: at, to: at, text: ` ${text}` };
+}
+
 type AssetEditPlan = {
   importSplice: Splice | null;
   attrSplice: Splice;
@@ -1199,6 +1231,13 @@ export function planEdit(
     } else {
       splices.push(result);
     }
+  }
+
+  for (const op of ops) {
+    if (op.kind !== 'set-prop') continue;
+    const result = buildPropSplice(source, element, op.name, op.value);
+    if ('error' in result) return { ok: false, status: 422, error: result.error };
+    splices.push(result);
   }
 
   const assetOps = ops.flatMap((op) => (op.kind === 'set-attr-asset' ? [op] : []));

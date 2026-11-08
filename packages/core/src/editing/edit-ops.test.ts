@@ -1144,3 +1144,41 @@ describe('applyEdit / replace-placeholder-with-image', () => {
     expect(r.error).toMatch(/\.\/assets\//);
   });
 });
+
+describe('applyEdit / set-prop', () => {
+  const src = [
+    'export default [() => (',
+    '<Shape kind="rect" fill="#ff0000" style={{ width: 100 }} />',
+    ')];',
+    '',
+  ].join('\n');
+
+  it('replaces an existing string prop', () => {
+    const r = applyEdit(src, 2, 0, [{ kind: 'set-prop', name: 'fill', value: '#00ff00' }]);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.source).toContain('<Shape kind="rect" fill="#00ff00" style={{ width: 100 }} />');
+  });
+
+  it('adds a numeric prop after the tag name', () => {
+    const r = applyEdit(src, 2, 0, [{ kind: 'set-prop', name: 'strokeWidth', value: 4 }]);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.source).toContain('<Shape strokeWidth={4} kind="rect"');
+  });
+
+  it('removes a prop with null', () => {
+    const r = applyEdit(src, 2, 0, [{ kind: 'set-prop', name: 'fill', value: null }]);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.source).toContain('<Shape kind="rect" style={{ width: 100 }} />');
+  });
+
+  it('escapes values that cannot sit in double quotes', () => {
+    const r = applyEdit(src, 2, 0, [{ kind: 'set-prop', name: 'fill', value: 'var(--x, "a")' }]);
+    if (!r.ok) throw new Error(r.error);
+    expect(r.source).toContain(`fill={'var(--x, "a")'}`);
+  });
+
+  it('refuses style and children', () => {
+    const r = applyEdit(src, 2, 0, [{ kind: 'set-prop', name: 'style', value: 'x' }]);
+    expect(r.ok).toBe(false);
+  });
+});

@@ -27,6 +27,7 @@ Each framework primitive has a full reference file under `references/` in this s
 | `<Steps>` / `<Step>` | staging a page's reveal | `references/steps.md` |
 | `SlideTransition` | declaring any enter/exit animation | `references/transitions.md` |
 | `MorphElement` + `morph` | morphing a shared element across pages | `references/morph.md` |
+| `<Shape>` | drawing rectangles, ellipses, arrows, lines and other outlines | `references/shapes.md` |
 
 ## Hard rules
 
