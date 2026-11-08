@@ -23,7 +23,13 @@ function transformWithLocTags(id: string) {
 function expectTaggedTransform(id: string) {
   const out = transformWithLocTags(id);
   if (out === null) throw new Error('expected tagged transform result');
-  expect(out.code).toContain('data-slide-loc');
+  expect(out.code).toContain('data-slide-loc="1:22"');
+}
+
+function expectExternalTransform(id: string) {
+  const out = transformWithLocTags(id);
+  if (out === null) throw new Error('expected tagged transform result');
+  expect(out.code).toContain('data-slide-loc="external"');
 }
 
 describe('injectLocTags', () => {
@@ -137,16 +143,20 @@ describe('locTagsPlugin', () => {
     expectTaggedTransform('/repo/slides/cover/index.tsx');
   });
 
-  it('tags shared slide source files', () => {
-    expectTaggedTransform('/repo/slides/cover/shared.tsx');
+  it('marks shared slide source files as external', () => {
+    expectExternalTransform('/repo/slides/cover/shared.tsx');
   });
 
-  it('tags numbered slide source files', () => {
-    expectTaggedTransform('/repo/slides/cover/01-Cover.tsx');
+  it('marks numbered slide source files as external', () => {
+    expectExternalTransform('/repo/slides/cover/01-Cover.tsx');
   });
 
-  it('tags slide source files in nested folders', () => {
-    expectTaggedTransform('/repo/slides/cover/components/Card.tsx');
+  it('marks slide source files in nested folders as external', () => {
+    expectExternalTransform('/repo/slides/cover/components/Card.tsx');
+  });
+
+  it('marks nested index files as external', () => {
+    expectExternalTransform('/repo/slides/cover/components/index.tsx');
   });
 
   it('skips tsx files directly under the slides directory', () => {

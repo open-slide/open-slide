@@ -44,6 +44,8 @@ export function findSlideSource(
   const tagged = el.closest<HTMLElement>('[data-slide-loc]');
   if (tagged) {
     const loc = tagged.dataset.slideLoc;
+    // Rendered from a slide file other than index.tsx (see loc-tags-plugin).
+    if (loc === 'external' && opts?.hostOnly) return null;
     if (loc) {
       const idx = loc.indexOf(':');
       if (idx > 0) {

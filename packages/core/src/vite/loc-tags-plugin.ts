@@ -23,7 +23,14 @@ function alreadyTagged(opening: t.JSXOpeningElement): boolean {
   );
 }
 
-export function injectLocTags(code: string): string | null {
+// Edits are always written to `slides/<id>/index.tsx`, so a real
+// `line:col` from any other file would splice the wrong spot there. Those
+// files get this sentinel instead: it still claims the element (so
+// `closest('[data-slide-loc]')` doesn't resolve to an unrelated ancestor
+// in index.tsx) but never parses as a location.
+export const EXTERNAL_LOC = 'external';
+
+export function injectLocTags(code: string, opts?: { external?: boolean }): string | null {
   const ast = tryParse(code);
   if (!ast) return null;
 
@@ -35,7 +42,7 @@ export function injectLocTags(code: string): string | null {
     if (!isTaggableJsxName(name) || alreadyTagged(opening)) return;
     insertions.push({
       offset: name.end ?? 0,
-      text: ` data-slide-loc="${node.loc.start.line}:${node.loc.start.column}"`,
+      text: ` data-slide-loc="${opts?.external ? EXTERNAL_LOC : `${node.loc.start.line}:${node.loc.start.column}`}"`,
     });
   });
 
@@ -57,13 +64,14 @@ export type LocTagsPluginOptions = {
 // plugins or virtual modules can pass through Windows-style paths.
 // Compare both sides in POSIX shape so the match doesn't depend on
 // which separator the caller happened to use.
-function isSlideSourceFile(id: string, slidesRootPosix: string): boolean {
+function classifySlideSourceFile(id: string, slidesRootPosix: string): 'entry' | 'external' | null {
   const filePath = id.split(/[?#]/)[0].replace(/\\/g, '/');
-  if (!filePath.startsWith(`${slidesRootPosix}/`)) return false;
-  if (!filePath.endsWith('.tsx')) return false;
-  if (filePath.endsWith('.d.ts') || filePath.endsWith('.test.tsx')) return false;
-  const rel = filePath.slice(slidesRootPosix.length + 1);
-  return rel.includes('/');
+  if (!filePath.startsWith(`${slidesRootPosix}/`)) return null;
+  if (!filePath.endsWith('.tsx')) return null;
+  if (filePath.endsWith('.d.ts') || filePath.endsWith('.test.tsx')) return null;
+  const parts = filePath.slice(slidesRootPosix.length + 1).split('/');
+  if (parts.length < 2) return null;
+  return parts.length === 2 && parts[1] === 'index.tsx' ? 'entry' : 'external';
 }
 
 export function locTagsPlugin(opts: LocTagsPluginOptions): Plugin {
@@ -75,8 +83,9 @@ export function locTagsPlugin(opts: LocTagsPluginOptions): Plugin {
     // sees our injected attributes.
     enforce: 'pre',
     transform(code, id) {
-      if (!isSlideSourceFile(id, slidesRoot)) return null;
-      const next = injectLocTags(code);
+      const kind = classifySlideSourceFile(id, slidesRoot);
+      if (!kind) return null;
+      const next = injectLocTags(code, { external: kind === 'external' });
       if (next === null) return null;
       return { code: next, map: null };
     },
