@@ -36,15 +36,14 @@ html:has(.os-desktop) {
 }
 
 .os-desktop .serif {
-  font-family: var(--font-serif), ui-serif, Georgia, serif;
+  font-family: var(--font-geist-serif), ui-serif, Georgia, serif;
   font-weight: 400;
-  letter-spacing: -0.02em;
-  font-feature-settings: "kern", "liga", "dlig";
+  letter-spacing: -0.035em;
+  font-synthesis: none;
 }
 
 .os-desktop .serif em {
-  font-style: italic;
-  letter-spacing: -0.03em;
+  font-style: normal;
 }
 
 .os-desktop .ember-ink {

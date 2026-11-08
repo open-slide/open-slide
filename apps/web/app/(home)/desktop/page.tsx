@@ -1,5 +1,5 @@
+import { GeistSerif } from 'geist/font/serif';
 import type { Metadata } from 'next';
-import { Instrument_Serif } from 'next/font/google';
 import { Closing } from '@/components/desktop/closing';
 import { Features } from '@/components/desktop/features';
 import { DesktopHero } from '@/components/desktop/hero';
@@ -9,14 +9,6 @@ import { Nav } from '@/components/landing/nav';
 import { ScrollReveal } from '@/components/landing/scroll-reveal';
 import { fetchGitHubStars, formatStarCount } from '@/lib/github';
 import './desktop.css';
-
-const serif = Instrument_Serif({
-  weight: '400',
-  style: ['normal', 'italic'],
-  subsets: ['latin'],
-  variable: '--font-serif',
-  display: 'swap',
-});
 
 const description =
   'open-slide is coming to the desktop: every deck in its own tab, Claude Code and Codex built in, and nothing to install.';
@@ -39,7 +31,7 @@ export default async function DesktopPage() {
   const githubStars = stars !== null ? formatStarCount(stars) : null;
 
   return (
-    <div className={`os-desktop ${serif.variable} relative flex flex-1 flex-col`}>
+    <div className={`os-desktop ${GeistSerif.variable} relative flex flex-1 flex-col`}>
       <Nav githubStars={githubStars} themeToggle={false} />
       <ScrollReveal />
       <main className="relative flex-1">

@@ -49,7 +49,7 @@ export function DesktopHero() {
           <span>open-slide for desktop</span>
         </div>
 
-        <h1 className="serif mt-7 text-balance text-[60px] leading-[0.95] text-[color:var(--color-text)] sm:text-[96px] lg:text-[120px]">
+        <h1 className="serif mt-7 text-balance text-[52px] leading-[0.98] text-[color:var(--color-text)] sm:text-[88px] lg:text-[108px]">
           <span className="block">
             {HEADLINE.map((w, i) => (
               <span

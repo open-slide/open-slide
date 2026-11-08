@@ -16,7 +16,7 @@ export function Statement() {
     <section className="hairline-top mx-auto w-full max-w-[1200px] px-6 py-28 sm:px-8 sm:py-40">
       <p
         ref={ref}
-        className="serif mx-auto max-w-[980px] text-balance text-center text-[32px] leading-[1.18] text-[color:var(--color-text)] sm:text-[48px] lg:text-[56px]"
+        className="serif mx-auto max-w-[980px] text-balance text-center text-[28px] leading-[1.2] text-[color:var(--color-text)] sm:text-[40px] lg:text-[48px]"
       >
         {words.map((w, i) => (
           <Word

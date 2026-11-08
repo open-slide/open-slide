@@ -43,7 +43,7 @@ function Card({
         {children}
       </div>
       <div className="px-7 pt-1 pb-7">
-        <h3 className="serif text-[26px] leading-[1.15] text-[color:var(--color-text)]">{title}</h3>
+        <h3 className="serif text-[24px] leading-[1.2] text-[color:var(--color-text)]">{title}</h3>
         <p className="mt-2 max-w-[44ch] text-pretty text-[14.5px] leading-[1.6] text-[color:var(--color-muted)]">
           {body}
         </p>
@@ -62,7 +62,7 @@ export function Features() {
         <span className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.18em] text-[color:var(--ember-soft)] uppercase">
           What's inside
         </span>
-        <h2 className="serif text-balance text-[44px] leading-[1.02] text-[color:var(--color-text)] sm:text-[64px]">
+        <h2 className="serif text-balance text-[38px] leading-[1.05] text-[color:var(--color-text)] sm:text-[56px]">
           The studio you know,{' '}
           <em className="text-[color:var(--color-text-soft)]">with a place to live.</em>
         </h2>

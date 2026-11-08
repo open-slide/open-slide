@@ -17,7 +17,7 @@ export function Closing() {
         className="hairline-top relative mx-auto flex w-full max-w-[1200px] flex-col items-center px-6 pt-28 pb-32 text-center sm:px-8 sm:pt-36 sm:pb-44"
       >
         <AppIcon size={72} />
-        <h2 className="serif mt-12 text-[72px] leading-[0.95] text-[color:var(--color-text)] sm:text-[120px]">
+        <h2 className="serif mt-12 text-[60px] leading-[0.98] text-[color:var(--color-text)] sm:text-[104px]">
           Coming <em className="ember-ink">soon.</em>
         </h2>
         <p className="mt-6 max-w-[30rem] text-pretty text-[16px] leading-[1.6] text-[color:var(--color-text-soft)] sm:text-[17px]">
