@@ -31,8 +31,9 @@ const hash = (a: number, b: number, c: number) => {
   return s - Math.floor(s);
 };
 
-const easeOut = (t: number) => 1 - (1 - t) ** 2;
-const easeIn = (t: number) => t * t * t;
+// One curve for both directions keeps the radius continuous when the toggle flips mid-reveal;
+// played backwards it eases in, so the retract starts slow and snaps into the logo.
+const ease = (t: number) => 1 - (1 - t) ** 2;
 
 function buildAtlas(dpr: number, family: string) {
   const atlases = {} as Record<Ink, HTMLCanvasElement>;
@@ -193,9 +194,7 @@ export function BlueprintField({
       if (progress <= 0 || !atlas) return;
 
       const revealing = progress < 1;
-      const R = revealing
-        ? (activeRef.current ? easeOut(progress) : easeIn(progress)) * maxR
-        : maxR * 2;
+      const R = revealing ? ease(progress) * maxR : maxR * 2;
 
       ctx.save();
       ctx.beginPath();
@@ -229,10 +228,13 @@ export function BlueprintField({
       const R2 = R * R;
       let ink: Ink | null = null;
 
-      // Only rows on screen are drawn; the canvas runs well past the fold.
+      // Only rows on screen are drawn while animating; the static reduced-motion frame needs them all.
       const top = -canvas.getBoundingClientRect().top;
-      const r0 = Math.max(0, Math.floor((top - PUSH_PX) / CELL_H));
-      const r1 = Math.min(rows, Math.ceil((top + window.innerHeight + PUSH_PX) / CELL_H));
+      const all = motion.matches;
+      const r0 = all ? 0 : Math.max(0, Math.floor((top - PUSH_PX) / CELL_H));
+      const r1 = all
+        ? rows
+        : Math.min(rows, Math.ceil((top + window.innerHeight + PUSH_PX) / CELL_H));
       for (let r = r0; r < r1; r++) {
         const cy = r * CELL_H + CELL_H / 2;
         for (let c = 0; c < cols; c++) {
@@ -381,7 +383,7 @@ export function BlueprintField({
           charged = true;
         } else charge[i] = 0;
       }
-      if (pointer.inside && progress === 1) {
+      if (pointer.inside && activeRef.current) {
         // A still cursor only shimmers; moving it leaves a wake that fades out behind it.
         const gain = 0.45 + Math.min(pointer.speed / 500, 1) * 0.55;
         const c0 = Math.max(0, Math.floor((pointer.x - LENS_R) / CELL_W));
@@ -436,7 +438,7 @@ export function BlueprintField({
     };
     wakeRef.current = wake;
 
-    const interactive = () => activeRef.current && !motion.matches && progress > 0;
+    const interactive = () => activeRef.current && !motion.matches;
 
     const onMove = (e: PointerEvent) => {
       if (!interactive()) return;
