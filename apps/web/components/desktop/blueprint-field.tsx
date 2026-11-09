@@ -424,6 +424,11 @@ export function BlueprintField({
     };
 
     const wake = () => {
+      if (!activeRef.current) {
+        pointer.inside = false;
+        dragging = false;
+        prev = null;
+      }
       if (motion.matches) {
         cancelAnimationFrame(raf);
         raf = 0;
