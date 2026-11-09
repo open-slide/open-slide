@@ -51,7 +51,7 @@ export function SlideCanvas({
     <div ref={containerRef} className={cn('relative h-full w-full', flat && 'overflow-hidden')}>
       <div
         className={cn(
-          'overflow-hidden bg-white text-black',
+          'overflow-hidden bg-white text-start text-black',
           !flat && 'rounded-[6px] shadow-floating',
         )}
         style={
