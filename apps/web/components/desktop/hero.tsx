@@ -1,8 +1,9 @@
 'use client';
 
 import { motion, useScroll, useSpring, useTransform } from 'motion/react';
-import { type CSSProperties, Fragment, useRef } from 'react';
+import { type CSSProperties, Fragment, useEffect, useRef, useState } from 'react';
 import { AppIcon } from './app-icon';
+import { BlueprintField } from './blueprint-field';
 import { CtaRow } from './cta';
 import { EmberField } from './ember-field';
 import { useReducedMotion } from './use-reduced-motion';
@@ -19,6 +20,8 @@ const wordDelay = (i: number) => `${320 + i * 70}ms`;
 
 export function DesktopHero() {
   const stageRef = useRef<HTMLDivElement>(null);
+  const logoRef = useRef<HTMLButtonElement>(null);
+  const [blueprint, setBlueprint] = useState(false);
   const reduced = useReducedMotion();
   const { scrollYProgress } = useScroll({
     target: stageRef,
@@ -29,13 +32,41 @@ export function DesktopHero() {
   const scale = useTransform(progress, [0, 1], reduced ? [1, 1] : [0.9, 1]);
   const y = useTransform(progress, [0, 1], reduced ? [0, 0] : [-40, 0]);
 
+  useEffect(() => {
+    if (!blueprint) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBlueprint(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [blueprint]);
+
   return (
-    <section className="relative overflow-hidden">
-      <EmberField className="inset-x-0 top-0 h-[1200px] sm:h-[1400px]" />
+    <section className="relative overflow-hidden" data-blueprint={blueprint}>
+      <EmberField paused={blueprint} className="inset-x-0 top-0 h-[1200px] sm:h-[1400px]" />
+      <BlueprintField
+        active={blueprint}
+        originRef={logoRef}
+        className="inset-x-0 top-0 h-[1200px] sm:h-[1400px]"
+      />
+      <div aria-hidden className="blueprint-legend">
+        <span>open-slide / desktop</span>
+        <span>sheet 01 · scale 1:1</span>
+        <span className="text-[color:var(--ember-soft)]">drag to draw · esc to exit</span>
+      </div>
 
       <div className="relative mx-auto flex w-full max-w-[1200px] flex-col items-center px-6 pt-16 text-center sm:px-8 sm:pt-24">
         <div className="rise" style={ICON_RISE}>
-          <AppIcon size={96} />
+          <button
+            ref={logoRef}
+            type="button"
+            aria-pressed={blueprint}
+            aria-label={blueprint ? 'Exit blueprint view' : 'Show the blueprint'}
+            onClick={() => setBlueprint((v) => !v)}
+            className="logo-toggle block cursor-pointer rounded-[24px]"
+          >
+            <AppIcon size={96} blueprint={blueprint} />
+          </button>
         </div>
 
         <div

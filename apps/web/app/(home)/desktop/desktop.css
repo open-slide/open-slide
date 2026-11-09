@@ -284,3 +284,162 @@ html:has(.os-desktop) {
     animation: none;
   }
 }
+
+.os-desktop .logo-toggle {
+  transition: transform 220ms var(--ease-swift);
+  -webkit-tap-highlight-color: transparent;
+}
+.os-desktop .logo-toggle:active {
+  transform: scale(0.94);
+}
+.os-desktop .logo-toggle:focus-visible {
+  outline: 2px solid var(--ember-soft);
+  outline-offset: 8px;
+}
+
+.os-desktop .app-icon .icon-glow,
+.os-desktop .app-icon .icon-blueprint-sheet,
+.os-desktop .app-icon .icon-slide {
+  transition:
+    opacity 600ms var(--ease-swift),
+    clip-path 700ms var(--ease-swift);
+}
+.os-desktop .app-icon .icon-glow-blueprint {
+  opacity: 0;
+}
+.os-desktop .app-icon[data-blueprint="true"] .icon-glow {
+  opacity: 0;
+}
+.os-desktop .app-icon[data-blueprint="true"] .icon-glow-blueprint {
+  opacity: 0.75;
+}
+.os-desktop .app-icon .icon-blueprint-sheet {
+  background:
+    linear-gradient(rgb(142 197 255 / 0.18) 1px, transparent 1px) 0 0 / 12.5% 12.5%,
+    linear-gradient(90deg, rgb(142 197 255 / 0.18) 1px, transparent 1px) 0 0 / 12.5% 12.5%,
+    radial-gradient(circle at 50% 30%, #12407a, #0a2449 75%);
+  clip-path: circle(0% at 50% 50%);
+}
+.os-desktop .app-icon[data-blueprint="true"] .icon-blueprint-sheet {
+  clip-path: circle(75% at 50% 50%);
+}
+.os-desktop .app-icon[data-blueprint="true"] .icon-slide {
+  opacity: 0;
+  transition-delay: 120ms;
+}
+
+.os-desktop .app-icon .icon-draft {
+  pointer-events: none;
+}
+.os-desktop .app-icon .draft-line {
+  fill: none;
+  stroke: #eaf4ff;
+  stroke-width: 1.25px;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  transition:
+    stroke-dashoffset 260ms var(--ease-swift),
+    opacity 260ms ease;
+}
+.os-desktop .app-icon .draft-thin {
+  stroke-width: 1px;
+  stroke: rgb(234 244 255 / 0.75);
+}
+.os-desktop .app-icon .draft-construct {
+  stroke-width: 0.75px;
+  stroke: rgb(142 197 255 / 0.35);
+}
+.os-desktop .app-icon .draft-center {
+  stroke-width: 0.75px;
+  stroke: rgb(142 197 255 / 0.5);
+}
+.os-desktop .app-icon .draft-label {
+  fill: rgb(234 244 255 / 0.8);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-anchor: middle;
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+.os-desktop .app-icon .draft-label-start {
+  text-anchor: start;
+}
+.os-desktop .app-icon .draft-label-end {
+  text-anchor: end;
+}
+.os-desktop .logo-toggle:hover .app-icon[data-blueprint="false"] .draft-construct {
+  stroke-dashoffset: 0;
+  opacity: 0.6;
+  transition-duration: 700ms, 300ms;
+}
+.os-desktop .app-icon[data-blueprint="true"] .draft-line {
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transition-duration: 900ms, 300ms;
+  transition-delay: var(--d, 0ms);
+}
+.os-desktop .app-icon[data-blueprint="true"] .draft-label {
+  opacity: 1;
+  transition-duration: 400ms;
+  transition-delay: var(--d, 0ms);
+}
+
+.os-desktop .blueprint-field {
+  position: absolute;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
+}
+.os-desktop .blueprint-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.os-desktop section[data-blueprint="true"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.os-desktop .blueprint-legend {
+  position: absolute;
+  top: 28px;
+  right: 32px;
+  display: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(234 244 255 / 0.7);
+  box-shadow: inset 0 0 0 1px rgb(142 197 255 / 0.3);
+  background: rgb(8 26 51 / 0.6);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 400ms ease,
+    transform 400ms var(--ease-swift);
+  pointer-events: none;
+}
+@media (min-width: 1024px) {
+  .os-desktop .blueprint-legend {
+    display: flex;
+  }
+}
+.os-desktop section[data-blueprint="true"] .blueprint-legend {
+  opacity: 1;
+  transform: none;
+  transition-delay: 900ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os-desktop .app-icon[data-blueprint] [class],
+  .os-desktop section[data-blueprint] .blueprint-legend {
+    transition: none;
+  }
+}
