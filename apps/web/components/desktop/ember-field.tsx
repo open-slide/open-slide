@@ -18,9 +18,22 @@ const POINTER_EASE = 0.035;
 // Starting deep into the noise field avoids the symmetric pattern at t = 0.
 const TIME_OFFSET = 40;
 
-export function EmberField({ className = '' }: { className?: string }) {
+export function EmberField({
+  className = '',
+  paused = false,
+}: {
+  className?: string;
+  paused?: boolean;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [lit, setLit] = useState(false);
+  const pausedRef = useRef(paused);
+  const syncRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    pausedRef.current = paused;
+    syncRef.current();
+  }, [paused]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -109,7 +122,7 @@ export function EmberField({ className = '' }: { className?: string }) {
             still();
             return;
           }
-          if (!inView || document.visibilityState !== 'visible') {
+          if (pausedRef.current || !inView || document.visibilityState !== 'visible') {
             stop();
             return;
           }
@@ -135,6 +148,7 @@ export function EmberField({ className = '' }: { className?: string }) {
             { fps: 60 },
           );
         };
+        syncRef.current = () => sync?.();
         sync();
       } catch {
         sync = undefined;
@@ -155,6 +169,7 @@ export function EmberField({ className = '' }: { className?: string }) {
     return () => {
       disposed = true;
       sync = undefined;
+      syncRef.current = () => {};
       cancelAnimationFrame(resizeRaf);
       observer.disconnect();
       document.removeEventListener('visibilitychange', onChange);
