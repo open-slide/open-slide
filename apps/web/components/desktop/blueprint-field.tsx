@@ -17,7 +17,7 @@ type Ink = keyof typeof INK;
 const EXPAND_S = 1.6;
 const RETRACT_S = 0.7;
 const EDGE_BAND = 56;
-const LENS_R = 90;
+const LENS_R = 110;
 const PUSH_R = 150;
 const PUSH_PX = 20;
 const RIPPLE_SPEED = 560;
@@ -59,7 +59,7 @@ const isInteractive = (el: EventTarget | null) =>
   el instanceof Element && !!el.closest('a, button, input, textarea, select, [role="button"]');
 
 // Renders the hero's ember glow as blueprint-blue ASCII, revealed in a ring that grows out of
-// the logo, and lets the cursor disturb it: a scrambling lens on hover, a drag that shoves
+// the logo, and lets the cursor disturb it: a lens that scrambles and then settles on hover, a drag that shoves
 // cells aside and leaves a directional trail, and ripples on press and release.
 export function BlueprintField({
   active,
@@ -93,6 +93,8 @@ export function BlueprintField({
     let rows = 0;
     let heat = new Float32Array(0);
     let dir = new Uint8Array(0);
+    let charge = new Float32Array(0);
+    let charged = false;
     let atlas: Record<Ink, HTMLCanvasElement> | null = null;
     const index = new Map([...GLYPHS].map((g, i) => [g, i]));
     const origin = { x: 0, y: 0 };
@@ -103,9 +105,9 @@ export function BlueprintField({
     let time = 0;
     let inView = true;
     let sinceDraw = 0;
-    let stirredAt = -10;
 
-    const pointer = { x: -1e4, y: -1e4, inside: false };
+    const pointer = { x: -1e4, y: -1e4, inside: false, speed: 0 };
+    const lastPointer = { x: -1e4, y: -1e4 };
     const lean = { x: 0.5, y: 0.5 };
     let dragging = false;
     let drag = 0;
@@ -140,6 +142,7 @@ export function BlueprintField({
       rows = Math.ceil(h / CELL_H);
       heat = new Float32Array(cols * rows);
       dir = new Uint8Array(cols * rows);
+      charge = new Float32Array(cols * rows);
       atlas = buildAtlas(dpr, family());
       measureOrigin();
     };
@@ -223,7 +226,6 @@ export function BlueprintField({
       const gh = CELL_H * dpr;
       const tick = Math.floor(t * 14);
       const live = ripples.filter((rp) => t - rp.t0 < RIPPLE_LIFE);
-      const lensOn = pointer.inside && !revealing;
       const R2 = R * R;
       let ink: Ink | null = null;
 
@@ -269,7 +271,6 @@ export function BlueprintField({
             oy += (dy / d) * wave * 7;
           }
 
-          let scramble = false;
           if (pointer.inside) {
             const dx = cx - pointer.x;
             const dy = cy - pointer.y;
@@ -280,14 +281,14 @@ export function BlueprintField({
               ox += (dx / d) * f;
               oy += (dy / d) * f;
             }
-            if (lensOn && d2 < LENS_R * LENS_R) {
-              const f = 1 - Math.sqrt(d2) / LENS_R;
-              b += f * 0.35;
-              scramble = hash(c, r, tick) < f * 0.85;
-            }
           }
 
           const i = r * cols + c;
+          const chargeV = charge[i];
+          b += chargeV * 0.5;
+          // A fixed per-cell threshold makes cells settle one by one as the charge fades,
+          // and the flicker slows with it, instead of every cell blinking at random.
+          const scramble = chargeV > 0.04 && hash(c, r, 7) < chargeV * 1.4;
           const heatV = heat[i];
           let glyph: string;
           let alpha: number;
@@ -304,9 +305,10 @@ export function BlueprintField({
             alpha = Math.min(1, heatV);
             want = 'ember';
           } else if (scramble) {
-            glyph = SCRAMBLE[Math.floor(hash(r, c, tick) * SCRAMBLE.length)];
-            alpha = 0.9;
-            want = 'white';
+            const step = Math.floor(t * (2 + chargeV * 8) + hash(c, r, 3) * 9);
+            glyph = SCRAMBLE[Math.floor(hash(r, c, step) * SCRAMBLE.length)];
+            alpha = 0.35 + chargeV * 0.65;
+            want = chargeV > 0.4 ? 'white' : 'blue';
           } else {
             const v = Math.min(1, Math.max(0, b));
             const gi = Math.floor(v * (RAMP.length - 1) + hash(c, r, 0) * 0.6);
@@ -365,16 +367,48 @@ export function BlueprintField({
       lean.x += ((pointer.inside ? pointer.x / w : 0.5) - lean.x) * 0.04;
       lean.y += ((pointer.inside ? pointer.y / h : 0.5) - lean.y) * 0.04;
       drag += ((dragging ? 1 : 0) - drag) * (dragging ? 0.25 : 0.08);
+      if (dt > 0) {
+        const moved = Math.hypot(pointer.x - lastPointer.x, pointer.y - lastPointer.y);
+        pointer.speed += (Math.min(moved / dt, 1500) - pointer.speed) * 0.2;
+      }
+      lastPointer.x = pointer.x;
+      lastPointer.y = pointer.y;
+      const fade = 0.965 ** (dt * 60);
+      charged = false;
+      for (let i = 0; i < charge.length; i++) {
+        if (charge[i] > 0.002) {
+          charge[i] *= fade;
+          charged = true;
+        } else charge[i] = 0;
+      }
+      if (pointer.inside && progress === 1) {
+        // A still cursor only shimmers; moving it leaves a wake that fades out behind it.
+        const gain = 0.45 + Math.min(pointer.speed / 500, 1) * 0.55;
+        const c0 = Math.max(0, Math.floor((pointer.x - LENS_R) / CELL_W));
+        const c1 = Math.min(cols - 1, Math.ceil((pointer.x + LENS_R) / CELL_W));
+        const q0 = Math.max(0, Math.floor((pointer.y - LENS_R) / CELL_H));
+        const q1 = Math.min(rows - 1, Math.ceil((pointer.y + LENS_R) / CELL_H));
+        for (let r = q0; r <= q1; r++) {
+          for (let c = c0; c <= c1; c++) {
+            const d = Math.hypot(
+              c * CELL_W + CELL_W / 2 - pointer.x,
+              r * CELL_H + CELL_H / 2 - pointer.y,
+            );
+            if (d >= LENS_R) continue;
+            const f = (1 - d / LENS_R) ** 1.5 * gain;
+            const i = r * cols + c;
+            if (f > charge[i]) charge[i] += (f - charge[i]) * 0.5;
+            charged = true;
+          }
+        }
+      }
       const decay = 0.965 ** (dt * 60);
       for (let i = 0; i < heat.length; i++) if (heat[i] > 0.001) heat[i] *= decay;
 
       // Left alone, the field drifts slowly enough that 30fps reads the same and costs half.
       sinceDraw += dt;
       const busy =
-        progress < 1 ||
-        dragging ||
-        time - stirredAt < 1.2 ||
-        ripples.some((rp) => time - rp.t0 < RIPPLE_LIFE);
+        progress < 1 || dragging || charged || ripples.some((rp) => time - rp.t0 < RIPPLE_LIFE);
       if (busy || sinceDraw >= 1 / 30 - 0.004) {
         sinceDraw = 0;
         draw();
@@ -410,7 +444,6 @@ export function BlueprintField({
       pointer.inside = p.x >= 0 && p.y >= 0 && p.x <= p.rect.width && p.y <= p.rect.height;
       pointer.x = p.x;
       pointer.y = p.y;
-      if (pointer.inside) stirredAt = time;
       if (dragging && prev) {
         stamp(prev.x, prev.y, p.x, p.y);
         prev = { x: p.x, y: p.y };
