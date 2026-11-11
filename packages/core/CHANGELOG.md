@@ -1,5 +1,59 @@
 # @open-slide/core
 
+## 2.3.2
+
+### Patch Changes
+
+- [#609](https://github.com/open-slide/open-slide/pull/609) [`034b070`](https://github.com/open-slide/open-slide/commit/034b07032f81ec6e9692f2463cdcb88b77a5d893) Thanks [@huntie](https://github.com/huntie)! - Keep slide text left-aligned in the overview grid and every other thumbnail instead of inheriting the host's alignment.
+
+- [#588](https://github.com/open-slide/open-slide/pull/588) [`d12e3e1`](https://github.com/open-slide/open-slide/commit/d12e3e1d8b208d326f3fce370e42bede3fb96b74) Thanks [@1weiho](https://github.com/1weiho)! - Show New deck before an agent is connected, so first-time users can create a deck and install an agent from the panel.
+
+- [#599](https://github.com/open-slide/open-slide/pull/599) [`2f7edd0`](https://github.com/open-slide/open-slide/commit/2f7edd01405e3da1d63d603ce4efe09568da3e97) Thanks [@Ruxiu0409](https://github.com/Ruxiu0409)! - Keep slide text left-aligned in the mobile thumbnail strip instead of inheriting the button's centered alignment.
+
+- [#589](https://github.com/open-slide/open-slide/pull/589) [`557b56e`](https://github.com/open-slide/open-slide/commit/557b56e277277ff16860eb7398fffae962866f0c) Thanks [@1weiho](https://github.com/1weiho)! - Fade to black when entering and leaving present mode, and nudge the slide with a hint when stepping past the last slide.
+
+## 2.3.1
+
+### Patch Changes
+
+- [#574](https://github.com/open-slide/open-slide/pull/574) [`8b67b02`](https://github.com/open-slide/open-slide/commit/8b67b0257d1f23138afcd640aaa0e0a468bd5f7c) Thanks [@1weiho](https://github.com/1weiho)! - Ship the agent modules the app imports so `open-slide dev` no longer fails to resolve `agent/types`, and stop publishing test files.
+
+## 2.3.0
+
+### Minor Changes
+
+- [#567](https://github.com/open-slide/open-slide/pull/567) [`c93ca36`](https://github.com/open-slide/open-slide/commit/c93ca36f2463cdf0fc47dc91fda2bea8c2a3d030) Thanks [@1weiho](https://github.com/1weiho)! - Add an in-app agent panel that uses a locally installed Claude Code or Codex to draft decks, apply comments, and edit pages.
+
+### Patch Changes
+
+- [#559](https://github.com/open-slide/open-slide/pull/559) [`4081bf9`](https://github.com/open-slide/open-slide/commit/4081bf973db1c4b81b2772fafa66f93004c98bde) Thanks [@1weiho](https://github.com/1weiho)! - Keep letterbox bars black in present mode when the screen isn't 16:9.
+
+## 2.2.0
+
+### Minor Changes
+
+- [#556](https://github.com/open-slide/open-slide/pull/556) [`92d58d7`](https://github.com/open-slide/open-slide/commit/92d58d7a3b4a50476689af58240649e99bf83be6) Thanks [@1weiho](https://github.com/1weiho)! - Move comments into a toolbar comment mode: click an element or drag across a region, write the note in a floating composer, and see every pending comment as a numbered pin beside its target.
+
+## 2.1.0
+
+### Minor Changes
+
+- [#546](https://github.com/open-slide/open-slide/pull/546) [`4ed1175`](https://github.com/open-slide/open-slide/commit/4ed11753107aa895eb4b480824194ef15ab5f52c) Thanks [@1weiho](https://github.com/1weiho)! - Add a dev-only `/s/<id>/preview?p=N` route that renders a single page without editor chrome, and teach the built-in skills to screenshot it for a quick visual check.
+
+- [#524](https://github.com/open-slide/open-slide/pull/524) [`65026ea`](https://github.com/open-slide/open-slide/commit/65026ea3c05e656c3ba84792dae474a7479051c2) Thanks [@diegoctal](https://github.com/diegoctal)! - Add a Spanish (Español) translation of the UI to the language switcher.
+
+### Patch Changes
+
+- [#512](https://github.com/open-slide/open-slide/pull/512) [`9195cbe`](https://github.com/open-slide/open-slide/commit/9195cbe15bf8dad17ff84a85c6f547ea4b7e4bae) Thanks [@gonzalovargas](https://github.com/gonzalovargas)! - Navigate between focused slide thumbnails with the arrow keys.
+
+- [#544](https://github.com/open-slide/open-slide/pull/544) [`b2bd016`](https://github.com/open-slide/open-slide/commit/b2bd016efe147d1dd518c2d40989a78b797c4062) Thanks [@1weiho](https://github.com/1weiho)! - Keep slide toolbar titles and actions accessible in narrow windows.
+
+- [#548](https://github.com/open-slide/open-slide/pull/548) [`92b7193`](https://github.com/open-slide/open-slide/commit/92b7193219273e1abce18e0cbd9402208a1e06ea) Thanks [@1weiho](https://github.com/1weiho)! - Refresh the favicon and sidebar logo with the new open-slide mark.
+
+- [#539](https://github.com/open-slide/open-slide/pull/539) [`ad82b89`](https://github.com/open-slide/open-slide/commit/ad82b8966793a90113e7d69988f6dc354bfec421) Thanks [@stantheman0128](https://github.com/stantheman0128)! - Duplicating a slide no longer creates a second folder whose name differs only by letter case.
+
+- [#522](https://github.com/open-slide/open-slide/pull/522) [`abafe9e`](https://github.com/open-slide/open-slide/commit/abafe9ead0807fcd2149a4e70f734eeb41734fa9) Thanks [@1weiho](https://github.com/1weiho)! - Undo and redo now jump back to the page where the edit was made and select the changed element, and the undo/redo buttons show their keyboard shortcuts.
+
 ## 2.0.1
 
 ### Patch Changes

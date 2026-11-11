@@ -1,3 +1,6 @@
+export const IS_APPLE =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+
 export function isTypingTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement && (target.isContentEditable || target.matches('input, textarea'))

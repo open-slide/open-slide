@@ -7,6 +7,7 @@ import { AssetsPage } from './routes/assets';
 import { Home } from './routes/home';
 import { HomeShell } from './routes/home-shell';
 import { Presenter } from './routes/presenter';
+import { Preview } from './routes/preview';
 import { Slide } from './routes/slide';
 import { ThemeDetailPage, ThemesGalleryPage } from './routes/themes';
 
@@ -27,6 +28,7 @@ export function App() {
           )}
           <Route path="/s/:slideId" element={<Slide />} />
           <Route path="/s/:slideId/presenter" element={<Presenter />} />
+          {import.meta.env.DEV && <Route path="/s/:slideId/preview" element={<Preview />} />}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </TooltipProvider>

@@ -12,6 +12,7 @@ export type HistoryEntry = {
   undo: () => void;
   redo: () => void;
   coalesceKey?: string;
+  pageIndex?: number;
   ts: number;
 };
 
@@ -34,7 +35,15 @@ export function useHistory(): HistoryCtx {
   return v;
 }
 
-export function HistoryProvider({ children }: { children: ReactNode }) {
+export function HistoryProvider({
+  pageIndex,
+  onPageChange,
+  children,
+}: {
+  pageIndex?: number;
+  onPageChange?: (pageIndex: number) => void;
+  children: ReactNode;
+}) {
   const stacksRef = useRef<{ past: HistoryEntry[]; future: HistoryEntry[] }>({
     past: [],
     future: [],
@@ -43,6 +52,15 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
   // Set while invoking an entry's undo/redo so providers can skip
   // re-recording the resulting state mutation.
   const suppressedRef = useRef(false);
+  const pageRef = useRef({ pageIndex, onPageChange });
+  pageRef.current = { pageIndex, onPageChange };
+
+  // An entry made on another page changes DOM the user can't see, so bring
+  // its page into view; the page's remount replays the restored buffer.
+  const revealPage = useCallback((entry: HistoryEntry) => {
+    const { pageIndex: current, onPageChange: goTo } = pageRef.current;
+    if (entry.pageIndex !== undefined && entry.pageIndex !== current) goTo?.(entry.pageIndex);
+  }, []);
 
   const syncAvailability = useCallback(() => {
     const canUndo = stacksRef.current.past.length > 0;
@@ -64,12 +82,14 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
         top &&
         entry.coalesceKey !== undefined &&
         top.coalesceKey === entry.coalesceKey &&
+        top.pageIndex === entry.pageIndex &&
         ts - top.ts < COALESCE_WINDOW_MS
       ) {
         const merged: HistoryEntry = {
           undo: top.undo,
           redo: entry.redo,
           coalesceKey: entry.coalesceKey,
+          pageIndex: entry.pageIndex,
           ts,
         };
         stacksRef.current = { past: [...past.slice(0, -1), merged], future: [] };
@@ -98,7 +118,8 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
       suppressedRef.current = false;
       syncAvailability();
     }
-  }, [syncAvailability]);
+    revealPage(top);
+  }, [syncAvailability, revealPage]);
 
   const redo = useCallback(() => {
     if (suppressedRef.current) return;
@@ -117,7 +138,8 @@ export function HistoryProvider({ children }: { children: ReactNode }) {
       suppressedRef.current = false;
       syncAvailability();
     }
-  }, [syncAvailability]);
+    revealPage(top);
+  }, [syncAvailability, revealPage]);
 
   const clear = useCallback(() => {
     stacksRef.current = { past: [], future: [] };

@@ -1,0 +1,445 @@
+html:has(.os-desktop) {
+  background: #070608;
+  color-scheme: dark;
+}
+
+.os-desktop {
+  --color-ink: #070608;
+  --color-panel: #0f0e11;
+  --color-panel-hi: #17161a;
+  --color-rule: oklch(1 0 0 / 0.1);
+  --color-rule-soft: oklch(1 0 0 / 0.06);
+  --color-text: #f4f0ea;
+  --color-text-soft: rgb(244 240 234 / 0.7);
+  --color-muted: rgb(244 240 234 / 0.48);
+  --color-dim: rgb(244 240 234 / 0.26);
+  --color-accent: #fe5226;
+  --color-accent-soft: #ff8a5e;
+
+  --shadow-edge: 0 0 0 0.5px oklch(0 0 0 / 0.2);
+  --shadow-window: 0 0 0 0.5px oklch(1 0 0 / 0.12), 0 12px 32px -12px oklch(0 0 0 / 0.6);
+
+  --ember: #fe5226;
+  --ember-soft: #ff8a5e;
+  --hairline: rgb(255 255 255 / 0.08);
+  --hairline-hi: rgb(255 255 255 / 0.14);
+  --card: rgb(255 255 255 / 0.025);
+  --ease-swift: cubic-bezier(0.22, 1, 0.36, 1);
+
+  background: var(--color-ink);
+  color: var(--color-text);
+}
+
+.os-desktop ::selection {
+  background: rgb(254 82 38 / 0.32);
+  color: #fff;
+}
+
+.os-desktop .serif {
+  font-family: var(--font-geist-serif), ui-serif, Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  font-synthesis: none;
+}
+
+.os-desktop .serif em {
+  font-style: normal;
+}
+
+.os-desktop .ember-ink {
+  background: linear-gradient(180deg, #ffd9c7 0%, #ff8a5e 45%, #fe5226 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* background-clip paints only inside the box; pad it so italic overhangs and descenders survive. */
+  padding: 0 0.08em 0.16em;
+  margin-left: -0.08em;
+  margin-bottom: -0.16em;
+}
+
+.os-desktop .hairline-top {
+  position: relative;
+}
+.os-desktop .hairline-top::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--hairline-hi) 30%,
+    var(--hairline-hi) 70%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+.os-desktop .ember-field {
+  position: absolute;
+  pointer-events: none;
+  background:
+    radial-gradient(420px 260px at 50% 200px, rgb(254 120 80 / 0.26), transparent 70%),
+    radial-gradient(900px 520px at 50% 220px, rgb(254 82 38 / 0.1), transparent 75%), #070608;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
+}
+.os-desktop .ember-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 1200ms var(--ease-swift);
+}
+.os-desktop .ember-canvas[data-lit="true"] {
+  opacity: 1;
+}
+
+@property --badge-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes d-badge-orbit {
+  to {
+    --badge-angle: 360deg;
+  }
+}
+.os-desktop .badge-ring {
+  position: relative;
+  isolation: isolate;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.04);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.os-desktop .badge-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--badge-angle),
+    transparent 0deg,
+    rgb(255 138 94 / 0.9) 40deg,
+    transparent 110deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: d-badge-orbit 5s linear infinite;
+  z-index: -1;
+}
+
+@keyframes d-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+.os-desktop .live-dot {
+  animation: d-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes d-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.08);
+  }
+}
+.os-desktop .icon-glow {
+  animation: d-breathe 6s ease-in-out infinite;
+}
+
+.os-desktop .cta-primary {
+  background: linear-gradient(180deg, #ffffff 0%, #e9e4dd 100%);
+  color: #0b0a0c;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 0 0 1px rgb(255 255 255 / 0.1),
+    0 8px 24px -8px rgb(254 82 38 / 0.45);
+  transition:
+    transform 160ms var(--ease-swift),
+    box-shadow 300ms var(--ease-swift);
+}
+.os-desktop .cta-primary:hover {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 0 0 1px rgb(255 255 255 / 0.16),
+    0 12px 32px -8px rgb(254 82 38 / 0.6);
+}
+.os-desktop .cta-ghost {
+  color: var(--color-text-soft);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  background: rgb(255 255 255 / 0.03);
+  transition:
+    color 200ms ease,
+    background-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 160ms var(--ease-swift);
+}
+.os-desktop .cta-ghost:hover {
+  color: var(--color-text);
+  background: rgb(255 255 255 / 0.06);
+  box-shadow: inset 0 0 0 1px var(--hairline-hi);
+}
+.os-desktop .cta-primary:active,
+.os-desktop .cta-ghost:active {
+  transform: scale(0.97);
+}
+.os-desktop .cta-arrow {
+  transition: transform 260ms var(--ease-swift);
+}
+.os-desktop a:hover .cta-arrow {
+  transform: translateX(3px);
+}
+.os-desktop a:hover .cta-arrow-up {
+  transform: translate(2px, -2px);
+}
+
+.os-desktop .glass {
+  background: rgb(24 21 24 / 0.52);
+  -webkit-backdrop-filter: blur(40px) saturate(1.7);
+  backdrop-filter: blur(40px) saturate(1.7);
+}
+
+.os-desktop .card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.035), rgb(255 255 255 / 0.012));
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  transition: box-shadow 400ms var(--ease-swift);
+}
+.os-desktop .card:hover {
+  box-shadow: inset 0 0 0 1px var(--hairline-hi);
+}
+.os-desktop .card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    420px circle at var(--mx, 50%) var(--my, -20%),
+    rgb(255 138 94 / 0.07),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 400ms var(--ease-swift);
+}
+.os-desktop .card:hover::after {
+  opacity: 1;
+}
+
+.os-desktop .keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-text-soft);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.03));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    inset 0 0 0 1px rgb(255 255 255 / 0.07),
+    0 2px 0 rgb(0 0 0 / 0.5);
+  transition:
+    transform 140ms var(--ease-swift),
+    box-shadow 140ms var(--ease-swift),
+    color 200ms ease;
+}
+.os-desktop .keycap[data-down="true"] {
+  transform: translateY(2px);
+  color: var(--color-text);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    inset 0 0 0 1px rgb(255 138 94 / 0.35),
+    0 0 0 rgb(0 0 0 / 0.5),
+    0 0 18px -4px rgb(254 82 38 / 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os-desktop .badge-ring::before,
+  .os-desktop .live-dot,
+  .os-desktop .icon-glow {
+    animation: none;
+  }
+}
+
+.os-desktop .logo-toggle {
+  transition: transform 220ms var(--ease-swift);
+  -webkit-tap-highlight-color: transparent;
+}
+.os-desktop .logo-toggle:active {
+  transform: scale(0.94);
+}
+.os-desktop .logo-toggle:focus-visible {
+  outline: 2px solid var(--ember-soft);
+  outline-offset: 8px;
+}
+
+.os-desktop .app-icon .icon-glow,
+.os-desktop .app-icon .icon-blueprint-sheet,
+.os-desktop .app-icon .icon-slide {
+  transition:
+    opacity 600ms var(--ease-swift),
+    clip-path 700ms var(--ease-swift);
+}
+.os-desktop .app-icon .icon-glow-blueprint {
+  opacity: 0;
+}
+.os-desktop .app-icon[data-blueprint="true"] .icon-glow {
+  opacity: 0;
+}
+.os-desktop .app-icon[data-blueprint="true"] .icon-glow-blueprint {
+  opacity: 0.75;
+}
+.os-desktop .app-icon .icon-blueprint-sheet {
+  background:
+    linear-gradient(rgb(142 197 255 / 0.18) 1px, transparent 1px) 0 0 / 12.5% 12.5%,
+    linear-gradient(90deg, rgb(142 197 255 / 0.18) 1px, transparent 1px) 0 0 / 12.5% 12.5%,
+    radial-gradient(circle at 50% 30%, #12407a, #0a2449 75%);
+  clip-path: circle(0% at 50% 50%);
+}
+.os-desktop .app-icon[data-blueprint="true"] .icon-blueprint-sheet {
+  clip-path: circle(75% at 50% 50%);
+}
+.os-desktop .app-icon[data-blueprint="true"] .icon-slide {
+  opacity: 0;
+  transition-delay: 120ms;
+}
+
+.os-desktop .app-icon .icon-draft {
+  pointer-events: none;
+}
+.os-desktop .app-icon .draft-line {
+  fill: none;
+  stroke: #eaf4ff;
+  stroke-width: 1.25px;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  transition:
+    stroke-dashoffset 260ms var(--ease-swift),
+    opacity 260ms ease;
+}
+.os-desktop .app-icon .draft-thin {
+  stroke-width: 1px;
+  stroke: rgb(234 244 255 / 0.75);
+}
+.os-desktop .app-icon .draft-construct {
+  stroke-width: 0.75px;
+  stroke: rgb(142 197 255 / 0.35);
+}
+.os-desktop .app-icon .draft-center {
+  stroke-width: 0.75px;
+  stroke: rgb(142 197 255 / 0.5);
+}
+.os-desktop .app-icon .draft-label {
+  fill: rgb(234 244 255 / 0.8);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-anchor: middle;
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+.os-desktop .app-icon .draft-label-start {
+  text-anchor: start;
+}
+.os-desktop .app-icon .draft-label-end {
+  text-anchor: end;
+}
+.os-desktop .logo-toggle:hover .app-icon[data-blueprint="false"] .draft-construct {
+  stroke-dashoffset: 0;
+  opacity: 0.6;
+  transition-duration: 700ms, 300ms;
+}
+.os-desktop .app-icon[data-blueprint="true"] .draft-line {
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transition-duration: 900ms, 300ms;
+  transition-delay: var(--d, 0ms);
+}
+.os-desktop .app-icon[data-blueprint="true"] .draft-label {
+  opacity: 1;
+  transition-duration: 400ms;
+  transition-delay: var(--d, 0ms);
+}
+
+.os-desktop .blueprint-field {
+  position: absolute;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 100%);
+}
+.os-desktop .blueprint-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.os-desktop section[data-blueprint="true"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.os-desktop .blueprint-legend {
+  position: absolute;
+  top: 28px;
+  right: 32px;
+  display: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(234 244 255 / 0.7);
+  box-shadow: inset 0 0 0 1px rgb(142 197 255 / 0.3);
+  background: rgb(8 26 51 / 0.6);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 400ms ease,
+    transform 400ms var(--ease-swift);
+  pointer-events: none;
+}
+@media (min-width: 1024px) {
+  .os-desktop .blueprint-legend {
+    display: flex;
+  }
+}
+.os-desktop section[data-blueprint="true"] .blueprint-legend {
+  opacity: 1;
+  transform: none;
+  transition-delay: 900ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .os-desktop .app-icon[data-blueprint] [class],
+  .os-desktop section[data-blueprint] .blueprint-legend {
+    transition: none;
+  }
+}

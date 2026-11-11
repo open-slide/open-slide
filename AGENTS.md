@@ -14,7 +14,6 @@ pnpm + Turbo monorepo.
 | `packages/cli` | `@open-slide/cli` | `npx @open-slide/cli init` scaffolder + project template. |
 | `apps/demo` | private | Local consumer of `@open-slide/core` via `workspace:*`. Dogfood target — run `pnpm dev` here to exercise the framework. |
 | `apps/web` | private | Marketing site (Next.js). |
-| `apps/marketing` | private | Marketing workspace (`pnpm dev:marketing`): launch films in `films/<id>/`, images (OG cover, README banner, …) in `images/<id>/`; `pnpm marketing render <id>`. New films via the `create-video` skill, new images via `create-image`. |
 
 Shared config: `biome.json`, `turbo.json`, `pnpm-workspace.yaml`, `tsconfig` per package.
 
@@ -46,3 +45,14 @@ Filter to one package: `pnpm core <script>` / `pnpm cli <script>`.
 ## Releasing (reference)
 
 `pnpm release` builds `core` + `cli` and runs `changeset publish`. Triggered by the maintainer, not by agents.
+
+<!-- BEGIN:turborepo-agent-rules -->
+
+# This is NOT the Turborepo you know
+
+Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+
+Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+
+This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
+<!-- END:turborepo-agent-rules -->

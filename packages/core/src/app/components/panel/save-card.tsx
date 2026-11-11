@@ -2,8 +2,12 @@ import { Check, Loader2, Redo2, Save, Undo2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { usePanelMount } from '@/components/panel/panel-shell';
 import { Button } from '@/components/ui/button';
+import { IS_APPLE } from '@/lib/keys';
 import { useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
+
+const UNDO_SHORTCUT = IS_APPLE ? '⌘Z' : 'Ctrl Z';
+const REDO_SHORTCUT = IS_APPLE ? '⇧⌘Z' : 'Ctrl Y';
 
 type SaveCardProps = {
   dirty: boolean;
@@ -79,7 +83,7 @@ export function SaveCard({
               onClick={onUndo}
               disabled={committing || !canUndo}
               aria-label={t.common.undo}
-              title={t.common.undo}
+              title={`${t.common.undo} (${UNDO_SHORTCUT})`}
             >
               <Undo2 className="size-3.5" />
             </Button>
@@ -90,7 +94,7 @@ export function SaveCard({
               onClick={onRedo}
               disabled={committing || !canRedo}
               aria-label={t.common.redo}
-              title={t.common.redo}
+              title={`${t.common.redo} (${REDO_SHORTCUT})`}
             >
               <Redo2 className="size-3.5" />
             </Button>

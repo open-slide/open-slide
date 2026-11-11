@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
 
+export type CommentRect = { x: number; y: number; w: number; h: number };
+
 export type SlideComment = {
   id: string;
   line: number;
   ts: string;
   note: string;
   hint?: string;
+  rect?: CommentRect;
+  page?: number;
+  target?: { line: number; column: number } | null;
+};
+
+export type AddCommentInput = {
+  line: number;
+  column: number;
+  text: string;
+  rect?: CommentRect;
+  page?: number;
 };
 
 type ListResponse = { comments: SlideComment[] };
@@ -31,15 +44,31 @@ export function useComments(slideId: string) {
   }, [slideId]);
 
   const add = useCallback(
-    async (line: number, column: number, text: string) => {
+    async (input: AddCommentInput) => {
       const res = await fetch('/__comments/add', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ slideId, line, column, text }),
+        body: JSON.stringify({ slideId, ...input }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? `POST /__comments/add → ${res.status}`);
+      }
+      await refetch();
+    },
+    [slideId, refetch],
+  );
+
+  const update = useCallback(
+    async (id: string, text: string) => {
+      const res = await fetch(`/__comments/${id}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slideId, text }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `PUT /__comments/${id} → ${res.status}`);
       }
       await refetch();
     },
@@ -70,5 +99,5 @@ export function useComments(slideId: string) {
     };
   }, [refetch]);
 
-  return { comments, error, add, remove };
+  return { comments, error, add, update, remove };
 }

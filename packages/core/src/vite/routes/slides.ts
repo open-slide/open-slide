@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import type { ViteDevServer } from 'vite';
 import {
+  createBlankSlideDir,
   duplicateNotesElementInSource,
   duplicatePageInDefaultExportInSource,
   duplicateSlideDir,
@@ -16,8 +17,11 @@ import {
 } from '../../editing/slide-ops.ts';
 import { readManifest, writeManifest } from '../../files/folders.ts';
 import { validateMutationRequest } from '../../http/request-guard.ts';
+import { invalidateSlidesModule } from '../open-slide-plugin.ts';
+import { recordWrite } from '../recent-writes.ts';
 import { type ApiContext, json, readBody } from './context.ts';
 
+// POST   /__slides                        create a blank slide → { slideId }
 // PUT    /__slides/:id/reorder            reorder pages { order: number[] }
 // DELETE /__slides/:id/pages/:i           remove page
 // POST   /__slides/:id/pages/:i/duplicate duplicate page
@@ -34,6 +38,18 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
     const method = req.method ?? 'GET';
 
     try {
+      if (url.pathname === '/' && method === 'POST') {
+        const requestCheck = validateMutationRequest(req);
+        if (!requestCheck.ok) {
+          return json(res, requestCheck.status, { error: requestCheck.error });
+        }
+        const created = await createBlankSlideDir(ctx.slidesRoot);
+        if (!created.ok) return json(res, created.status, { error: created.error });
+        recordWrite(created.file);
+        invalidateSlidesModule(server);
+        return json(res, 200, { ok: true, slideId: created.slideId });
+      }
+
       const reorderMatch = url.pathname.match(/^\/([^/]+)\/reorder$/);
       if (reorderMatch && method === 'PUT') {
         const requestCheck = validateMutationRequest(req, { requireJsonBody: true });

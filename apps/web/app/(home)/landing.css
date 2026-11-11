@@ -295,3 +295,121 @@ html.dark .os-landing .agent-mono {
     animation: none;
   }
 }
+
+/* Changelog timeline. The rail is drawn per row so it stays continuous
+   across sticky gutters; --rail-x keeps nodes centred on it. */
+.os-landing .cl-rail {
+  --rail-x: 7.5px;
+}
+@media (min-width: 640px) {
+  .os-landing .cl-rail {
+    --rail-x: 11.5px;
+  }
+}
+.os-landing .cl-rail::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--rail-x) - 0.5px);
+  width: 1px;
+  background: var(--color-rule);
+}
+.os-landing .cl-rail-start::before {
+  top: 10px;
+}
+.os-landing .cl-rail-end::before {
+  bottom: auto;
+  height: 160px;
+  background: linear-gradient(var(--color-rule), transparent);
+}
+
+.os-landing .cl-node {
+  --node: 9px;
+  position: absolute;
+  z-index: 1;
+  top: calc(12px - var(--node) / 2);
+  left: calc(var(--rail-x) - var(--node) / 2);
+  width: var(--node);
+  height: var(--node);
+  border-radius: 999px;
+}
+.os-landing .cl-node-hollow {
+  --node: 9px;
+  background: var(--color-ink);
+  box-shadow: inset 0 0 0 1.5px var(--color-dim);
+}
+.os-landing .cl-node-solid {
+  --node: 9px;
+  background: var(--color-text);
+  box-shadow: 0 0 0 4px var(--color-ink);
+}
+.os-landing .cl-node-accent {
+  --node: 11px;
+  background: var(--color-accent);
+  box-shadow:
+    0 0 0 4px var(--color-ink),
+    0 0 0 8px color-mix(in oklab, var(--color-accent) 14%, transparent);
+}
+.os-landing .cl-node-era {
+  --node: 13px;
+  top: 2px;
+  border-radius: 4px;
+  background: var(--color-ink);
+  box-shadow:
+    inset 0 0 0 1.5px var(--color-text),
+    0 0 0 5px var(--color-ink);
+  transform: rotate(45deg);
+}
+
+.os-landing .cl-filter label span {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+.os-landing .cl-filter label:hover span {
+  color: var(--color-text);
+}
+.os-landing .cl-filter input:checked + span {
+  background: color-mix(in oklab, var(--color-text) 7%, transparent);
+  color: var(--color-text);
+}
+.os-landing .cl-filter input:focus-visible + span {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.os-landing .cl-timeline:has(#cl-highlights:checked) .cl-entry[data-highlight="false"] {
+  display: none;
+}
+
+.os-landing .cl-patches summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Entry labels hand over to the sticky ReleaseIndicator once it has reached
+   them, so only one version label shows in the gutter at a time. */
+.os-landing .cl-gutter-label {
+  transition:
+    opacity 240ms var(--ease-out-strong),
+    filter 240ms var(--ease-out-strong),
+    transform 240ms var(--ease-out-strong);
+}
+.os-landing .cl-entry[data-passed] .cl-gutter-label {
+  opacity: 0;
+  filter: blur(4px);
+  transform: translateY(-6px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .os-landing .cl-gutter-label {
+    transition: none;
+  }
+}

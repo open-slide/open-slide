@@ -45,8 +45,8 @@ type PanelShellProps = {
 export function PanelShell({ uiAttr, header, banner, footer, children }: PanelShellProps) {
   const dataAttrs = uiAttr === 'inspector' ? { 'data-inspector-ui': '' } : { 'data-design-ui': '' };
   return (
-    <aside {...dataAttrs} className="flex h-full shrink-0 bg-sidebar" style={{ width: PANEL_W }}>
-      <div style={{ width: PANEL_W }} className="flex h-full shrink-0 flex-col">
+    <aside {...dataAttrs} className="flex h-full w-full min-w-0 bg-sidebar">
+      <div className="flex h-full w-full min-w-0 flex-col">
         <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-hairline px-3">
           {header}
         </header>

@@ -6,6 +6,10 @@ export type OpenSlideBuildConfig = {
   allowHtmlDownload?: boolean;
 };
 
+export type OpenSlideAgentConfig = {
+  enabled?: boolean;
+};
+
 export type OpenSlideConfig = {
   base?: string;
   slidesDir?: string;
@@ -20,4 +24,5 @@ export type OpenSlideConfig = {
    */
   locale?: Locale;
   build?: OpenSlideBuildConfig;
+  agent?: OpenSlideAgentConfig;
 };
