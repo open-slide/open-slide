@@ -42,6 +42,8 @@ type NodeBase = {
   box: Rect;
   rotationDeg: number;
   flipV: boolean;
+  /** Absolute URL from a wrapping / self `<a href>` — emitted as a shape click hyperlink. */
+  href?: string | null;
 };
 
 export type ShapeNode = NodeBase & {

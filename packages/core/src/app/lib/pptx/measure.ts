@@ -83,12 +83,34 @@ type Measured = {
   clip: Rect | null;
 };
 
+/** Only schemes PowerPoint should open from an exported deck. */
+export function isExportableHyperlink(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:';
+  } catch {
+    return false;
+  }
+}
+
+/** Absolute http(s)/mailto URL from the nearest wrapping `<a href>`, else null. */
+function resolveHref(el: Element): string | null {
+  const anchor = el.closest('a[href]');
+  if (!(anchor instanceof HTMLAnchorElement)) return null;
+  const raw = anchor.getAttribute('href')?.trim() ?? '';
+  // Hash-only links resolve to the current page URL + hash — skip those.
+  if (!raw || raw.startsWith('#')) return null;
+  const abs = anchor.href;
+  if (!abs || !isExportableHyperlink(abs)) return null;
+  return abs;
+}
+
 type Ctx = {
   frame: HTMLElement;
   frameRect: DOMRect;
   transforms: Map<Element, Mat>;
   slots: Slot[];
-  rasters: { slot: Slot; request: RasterRequest; svg: Uint8Array | null }[];
+  rasters: { slot: Slot; request: RasterRequest; svg: Uint8Array | null; href: string | null }[];
   pending: Promise<void>[];
   images: ImageStore;
   color: ColorParser;
@@ -155,6 +177,7 @@ export async function measurePage(options: MeasurePageOptions): Promise<SlideSce
         box: result.rect,
         rotationDeg: 0,
         flipV: false,
+        href: entry.href,
         imageId: id,
         crop: null,
         alpha: 1,
@@ -368,7 +391,12 @@ function requestRaster(ctx: Ctx, m: Measured, mode: RasterMode): void {
   }
   if (region.w <= 0 || region.h <= 0) return;
   const slot = pushSlot(ctx, null);
-  ctx.rasters.push({ slot, request: { target: m.el, mode, region, trim: !svg }, svg });
+  ctx.rasters.push({
+    slot,
+    request: { target: m.el, mode, region, trim: !svg },
+    svg,
+    href: resolveHref(m.el),
+  });
 }
 
 const SVG_UNSUPPORTED =
@@ -726,6 +754,7 @@ function paintBoxRect(ctx: Ctx, m: Measured, rect: Rect): void {
 
   const nodes: ShapeNode[] = [];
   const baseName = shapeName(el, geometry);
+  const href = resolveHref(el);
   if (fills.length === 0 && ((anyBorder && uniform) || outer)) {
     nodes.push(
       makeShape(
@@ -736,6 +765,7 @@ function paintBoxRect(ctx: Ctx, m: Measured, rect: Rect): void {
         null,
         uniform ? outline : null,
         outer ? toShadowEffect(outer, opacity) : null,
+        href,
       ),
     );
   }
@@ -754,6 +784,7 @@ function paintBoxRect(ctx: Ctx, m: Measured, rect: Rect): void {
           : last && inner
             ? toShadowEffect(inner, opacity)
             : null,
+        href,
       ),
     );
   });
@@ -781,6 +812,7 @@ function paintBoxRect(ctx: Ctx, m: Measured, rect: Rect): void {
           { kind: 'solid', color: withAlpha(side.color, opacity) },
           null,
           null,
+          href,
         ),
       );
     }
@@ -799,6 +831,7 @@ function makeShape(
   fill: Fill | null,
   outline: Outline | null,
   shadow: ShadowEffect | null,
+  href: string | null = null,
 ): ShapeNode {
   const p = placed(rect, world);
   const scaledOutline =
@@ -813,6 +846,7 @@ function makeShape(
     box: p.box,
     rotationDeg: p.rotationDeg,
     flipV: p.flipV,
+    href,
     geometry: scaledGeometry,
     fill,
     outline: scaledOutline,
@@ -904,6 +938,7 @@ function makePicture(
   geometry: Geometry,
   outline: Outline | null,
   shadow: ShadowEffect | null,
+  href: string | null = null,
 ): PictureNode {
   const p = placed(placement.rect, world);
   return {
@@ -912,6 +947,7 @@ function makePicture(
     box: p.box,
     rotationDeg: p.rotationDeg,
     flipV: p.flipV,
+    href,
     imageId,
     crop: placement.crop,
     alpha,
@@ -951,10 +987,11 @@ function paintImage(ctx: Ctx, m: Measured & { el: HTMLImageElement }): void {
   const alpha = m.opacity;
   const src = el.currentSrc || el.src;
   const name = el.alt ? `Image: ${el.alt}` : 'Image';
+  const href = resolveHref(el);
   ctx.pending.push(
     ctx.images.fromUrl(src).then((loaded: LoadedImage | null) => {
       if (!loaded) return;
-      slot.node = makePicture(name, placement, m.world, loaded.id, alpha, geometry, null, null);
+      slot.node = makePicture(name, placement, m.world, loaded.id, alpha, geometry, null, null, href);
     }),
   );
 }
@@ -978,6 +1015,7 @@ function paintBackgroundImage(
     return;
   }
   const slot = pushSlot(ctx, null);
+  const href = resolveHref(m.el);
   ctx.pending.push(
     ctx.images.fromUrl(url).then((loaded) => {
       if (!loaded) return;
@@ -1018,6 +1056,7 @@ function paintBackgroundImage(
           slot,
           request: { target: m.el, mode: 'self', region: clampToSlide(rect), trim: false },
           svg: null,
+          href,
         });
         return;
       }
@@ -1036,6 +1075,7 @@ function paintBackgroundImage(
             : { kind: 'rect' },
         null,
         null,
+        href,
       );
     }),
   );
@@ -1275,6 +1315,7 @@ function paintText(ctx: Ctx, m: Measured, atoms: Atom[]): void {
     box: p.box,
     rotationDeg: p.rotationDeg,
     flipV: p.flipV,
+    href: resolveHref(m.el),
     paragraphs,
   };
   pushSlot(ctx, node);
