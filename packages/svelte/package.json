@@ -76,11 +76,11 @@
     "commander": "^15.0.0",
     "svelte": "^5.57.0",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.0"
+    "vite": "^8.3.3"
   },
   "devDependencies": {
     "@playwright/test": "~1.62.1",
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.6",
     "svelte-check": "^4.7.6",
     "tsdown": "^0.22.14",
     "typescript": "^6.0.3"

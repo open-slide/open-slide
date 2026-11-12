@@ -1,6 +1,7 @@
 export {
   type ApiContext,
   type ApiPluginOptions,
+  BodyTooLargeError,
   json,
   makeContext,
   readBody,

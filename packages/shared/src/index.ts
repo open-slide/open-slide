@@ -1,4 +1,5 @@
-export type { OpenSlideBuildConfig, OpenSlideConfig } from './config.ts';
+export * from './agent/types.ts';
+export type { OpenSlideAgentConfig, OpenSlideBuildConfig, OpenSlideConfig } from './config.ts';
 export type {
   DesignFonts,
   DesignPalette,

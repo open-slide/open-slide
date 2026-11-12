@@ -1,4 +1,4 @@
-import { Eye, PanelRight, Pencil } from 'lucide-react';
+import { Eye, MessageSquare, PanelRight, Pencil } from 'lucide-react';
 import {
   createContext,
   type ReactNode,
@@ -12,20 +12,22 @@ import {
 import { toast } from 'sonner';
 import { useHistory } from '@/components/history-provider';
 import { IconSwitcherIndicator } from '@/components/icon-switcher-indicator';
+import { IconTooltip } from '@/components/icon-tooltip';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { TooltipTrigger } from '@/components/ui/tooltip';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import {
   appendTextEdit,
   type TextEditOp,
   type TextEditStep,
 } from '@/lib/inspector/text-edit-timeline';
-import { type SlideComment, useComments } from '@/lib/inspector/use-comments';
+import { type AddCommentInput, type SlideComment, useComments } from '@/lib/inspector/use-comments';
 import { type Edit, type EditOp, useEditor } from '@/lib/inspector/use-editor';
 import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-editor';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
-import { useLocale } from '@/lib/use-locale';
+import { format, plural, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { ImageCropDialog, type ImageCropRect } from './image-crop-dialog';
@@ -367,9 +369,17 @@ function replayDomTextEdits(el: HTMLElement, snapshot: TextDomSnapshot, steps: T
   if (el.innerHTML !== next) el.innerHTML = next;
 }
 
+export type InspectorMode = 'preview' | 'edit' | 'comment';
+
 type InspectorCtx = {
   slideId: string;
+  pageIndex: number;
+  mode: InspectorMode;
+  setMode: (mode: InspectorMode) => void;
+  // True while the visual editor owns the canvas (`mode === 'edit'`).
   active: boolean;
+  commentMode: boolean;
+  exitCommentMode: () => void;
   toggle: () => void;
   panelOpen: boolean;
   panelHidden: boolean;
@@ -377,7 +387,8 @@ type InspectorCtx = {
   cancel: () => void;
   comments: SlideComment[];
   error: string | null;
-  add: (line: number, column: number, text: string) => Promise<void>;
+  add: (input: AddCommentInput) => Promise<void>;
+  update: (id: string, text: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
   selection: SelectedTarget[];
   setSelection: (targets: SelectedTarget[]) => void;
@@ -416,6 +427,10 @@ export function useInspector(): InspectorCtx {
   return v;
 }
 
+export function useOptionalInspector(): InspectorCtx | null {
+  return useContext(Ctx);
+}
+
 export function InspectorProvider({
   slideId,
   pageIndex,
@@ -429,7 +444,11 @@ export function InspectorProvider({
   onPanelOpen?: () => void;
   children: ReactNode;
 }) {
-  const [active, setActive] = useState(import.meta.env.DEV);
+  const [mode, setModeState] = useState<InspectorMode>(import.meta.env.DEV ? 'edit' : 'preview');
+  const active = mode === 'edit';
+  const commentMode = mode === 'comment';
+  // Where Esc / toggling the comment tool off returns the user to.
+  const modeBeforeCommentRef = useRef<Exclude<InspectorMode, 'comment'>>('preview');
   const [panelOpen, setPanelOpen] = useState(
     () => typeof window !== 'undefined' && window.innerWidth >= 1024,
   );
@@ -475,7 +494,7 @@ export function InspectorProvider({
     [],
   );
   const [opsVersion, setOpsVersion] = useState(0);
-  const { comments, error, add, remove } = useComments(slideId);
+  const { comments, error, add, update, remove } = useComments(slideId);
   const { applyEdit, applyEdits } = useEditor(slideId);
   const history = useHistory();
 
@@ -1252,19 +1271,32 @@ export function InspectorProvider({
     return () => observer.disconnect();
   }, [selection, setSelection, slideId]);
 
+  const setMode = useCallback(
+    (next: InspectorMode) => {
+      if (next === mode) return;
+      if (next === 'comment' && mode !== 'comment') modeBeforeCommentRef.current = mode;
+      if (mode === 'edit') {
+        setSelected(null);
+        setInlineEdit(null);
+      }
+      setModeState(next);
+    },
+    [mode, setSelected],
+  );
+
   const toggle = useCallback(() => {
-    if (active) {
-      setSelected(null);
-      setInlineEdit(null);
-    }
-    setActive(!active);
-  }, [active, setSelected]);
+    setMode(active ? 'preview' : 'edit');
+  }, [active, setMode]);
+
+  const exitCommentMode = useCallback(() => {
+    if (commentMode) setMode(modeBeforeCommentRef.current);
+  }, [commentMode, setMode]);
 
   const togglePanel = useCallback(() => {
     setPanelOpen(!active || panelHidden || !panelOpen);
-    setActive(true);
+    setMode('edit');
     onPanelOpen?.();
-  }, [active, panelHidden, panelOpen, onPanelOpen]);
+  }, [active, panelHidden, panelOpen, onPanelOpen, setMode]);
 
   const cancel = useCallback(() => {
     setSelected(null);
@@ -1320,13 +1352,24 @@ export function InspectorProvider({
         e.altKey
       )
         return;
-      if (e.key !== 'i' && e.key !== 'I') return;
-      e.preventDefault();
-      togglePanel();
+      if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault();
+        togglePanel();
+      } else if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        if (commentMode) exitCommentMode();
+        else setMode('comment');
+      } else if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        setMode('preview');
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        setMode('edit');
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [togglePanel]);
+  }, [togglePanel, commentMode, exitCommentMode, setMode]);
 
   const openCrop = useCallback((anchor: HTMLImageElement) => {
     const loc = anchor.dataset.slideLoc;
@@ -1352,7 +1395,12 @@ export function InspectorProvider({
   const value = useMemo<InspectorCtx>(
     () => ({
       slideId,
+      pageIndex,
+      mode,
+      setMode,
       active,
+      commentMode,
+      exitCommentMode,
       toggle,
       panelOpen,
       panelHidden,
@@ -1361,6 +1409,7 @@ export function InspectorProvider({
       comments,
       error,
       add,
+      update,
       remove,
       selection,
       setSelection,
@@ -1387,7 +1436,12 @@ export function InspectorProvider({
     }),
     [
       slideId,
+      pageIndex,
+      mode,
+      setMode,
       active,
+      commentMode,
+      exitCommentMode,
       toggle,
       panelOpen,
       panelHidden,
@@ -1396,6 +1450,7 @@ export function InspectorProvider({
       comments,
       error,
       add,
+      update,
       remove,
       selection,
       setSelection,
@@ -1552,44 +1607,63 @@ function parsePercent(s: string, fallback: number): number {
 
 export function InspectModeSwitcher() {
   const t = useLocale();
-  const { active, toggle } = useInspector();
+  const { mode, setMode, comments } = useInspector();
   if (import.meta.env.PROD) return null;
+  const items: { value: InspectorMode; label: string; shortcut: string; icon: ReactNode }[] = [
+    { value: 'preview', label: t.inspector.previewMode, shortcut: 'V', icon: <Eye /> },
+    { value: 'edit', label: t.inspector.editMode, shortcut: 'E', icon: <Pencil /> },
+    { value: 'comment', label: t.inspector.commentMode, shortcut: 'C', icon: <MessageSquare /> },
+  ];
+  const index = Math.max(
+    0,
+    items.findIndex((item) => item.value === mode),
+  );
+  const pending = comments.length;
+  const accessibleName = (item: (typeof items)[number]) =>
+    item.value === 'comment' && pending > 0
+      ? `${item.label} · ${format(plural(pending, t.inspector.commentsCount), { count: pending })}`
+      : item.label;
   return (
     <ToggleGroup
       size="sm"
       spacing={1}
-      value={[active ? 'edit' : 'preview']}
+      value={[mode]}
       onValueChange={(value) => {
-        const next = value[0];
-        if (next && (next === 'edit') !== active) toggle();
+        const next = value[0] as InspectorMode | undefined;
+        if (next && next !== mode) setMode(next);
       }}
-      aria-label={`${t.inspector.previewMode} / ${t.inspector.editMode}`}
+      aria-label={`${t.inspector.previewMode} / ${t.inspector.editMode} / ${t.inspector.commentMode}`}
       data-inspector-ui
       className="relative isolate h-8 gap-0 rounded-lg border border-border/70 bg-muted/70 p-0.5"
     >
-      <IconSwitcherIndicator index={active ? 1 : 0} />
-      <ToggleGroupItem
-        value="preview"
-        title={t.inspector.previewMode}
-        aria-label={t.inspector.previewMode}
-        onClick={(event) => {
-          if (event.detail > 0) event.currentTarget.blur();
-        }}
-        className="relative z-10 h-full w-8 rounded-md px-0 text-muted-foreground hover:bg-transparent data-pressed:bg-transparent data-pressed:text-foreground data-pressed:shadow-none"
-      >
-        <Eye />
-      </ToggleGroupItem>
-      <ToggleGroupItem
-        value="edit"
-        title={t.inspector.editMode}
-        aria-label={t.inspector.editMode}
-        onClick={(event) => {
-          if (event.detail > 0) event.currentTarget.blur();
-        }}
-        className="relative z-10 h-full w-8 rounded-md px-0 text-muted-foreground hover:bg-transparent data-pressed:bg-transparent data-pressed:text-foreground data-pressed:shadow-none"
-      >
-        <Pencil />
-      </ToggleGroupItem>
+      <IconSwitcherIndicator index={index} />
+      {items.map((item) => (
+        <IconTooltip key={item.value} label={item.label} shortcut={item.shortcut}>
+          <TooltipTrigger
+            render={
+              <ToggleGroupItem
+                value={item.value}
+                aria-label={accessibleName(item)}
+                data-inspector-mode={item.value}
+                onClick={(event) => {
+                  if (event.detail > 0) event.currentTarget.blur();
+                }}
+                className="relative z-10 h-full w-8 rounded-md px-0 text-muted-foreground hover:bg-transparent data-pressed:bg-transparent data-pressed:text-foreground data-pressed:shadow-none"
+              />
+            }
+          >
+            {item.icon}
+            {item.value === 'comment' && pending > 0 && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute -top-1.5 -right-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-brand px-1 font-mono text-[9px] font-semibold leading-none text-brand-foreground nums"
+              >
+                {pending > 99 ? '99+' : pending}
+              </span>
+            )}
+          </TooltipTrigger>
+        </IconTooltip>
+      ))}
     </ToggleGroup>
   );
 }
@@ -1610,7 +1684,7 @@ export function InspectPanelButton() {
       data-inspector-ui
     >
       <PanelRight className="size-3.5" />
-      <span className="hidden md:inline">{t.inspector.format}</span>
+      <span className="hidden lg:inline">{t.inspector.format}</span>
     </Button>
   );
 }

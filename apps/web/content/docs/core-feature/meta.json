@@ -1,4 +1,4 @@
 {
   "title": "Core feature",
-  "pages": ["inspector", "assets-manager", "themes", "present-mode", "export"]
+  "pages": ["inspector", "agent", "assets-manager", "themes", "present-mode", "export"]
 }

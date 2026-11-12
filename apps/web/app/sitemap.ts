@@ -33,6 +33,10 @@ function gitMtime(file: string): Date {
 }
 
 const homeLastModified = existsSync(homePath) ? gitMtime(homePath) : buildDate;
+const desktopPath = path.resolve(cwd, 'app/(home)/desktop/page.tsx');
+const desktopLastModified = existsSync(desktopPath) ? gitMtime(desktopPath) : buildDate;
+const changelogPath = path.resolve(cwd, 'lib/changelog.ts');
+const changelogLastModified = existsSync(changelogPath) ? gitMtime(changelogPath) : buildDate;
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const docs: MetadataRoute.Sitemap = source.getPages().map((page) => {
@@ -51,6 +55,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: homeLastModified,
       changeFrequency: 'weekly',
       priority: 1,
+    },
+    {
+      url: `${siteUrl}/desktop`,
+      lastModified: desktopLastModified,
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    },
+    {
+      url: `${siteUrl}/changelog`,
+      lastModified: changelogLastModified,
+      changeFrequency: 'weekly',
+      priority: 0.6,
     },
     ...docs,
   ];

@@ -4,6 +4,7 @@ export type {
   DesignSystem,
   DesignTypeScale,
   Locale,
+  OpenSlideAgentConfig,
   OpenSlideConfig,
   Plural,
 } from '@open-slide/shared';

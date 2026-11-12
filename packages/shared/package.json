@@ -82,10 +82,10 @@
     "fast-glob": "^3.3.2",
     "fflate": "^0.8.3",
     "html-to-image": "^1.11.13",
-    "vite": "^8.3.0"
+    "vite": "^8.3.3"
   },
   "devDependencies": {
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.6",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2"
   }

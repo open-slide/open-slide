@@ -1,6 +1,6 @@
 {
   "name": "@open-slide/core",
-  "version": "2.0.1",
+  "version": "2.3.2",
   "description": "Compatibility package that automatically provides the open-slide React runtime.",
   "type": "module",
   "exports": {
@@ -73,7 +73,7 @@
     "@open-slide/shared": "workspace:^"
   },
   "devDependencies": {
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.6",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2"
   }

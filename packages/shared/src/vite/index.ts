@@ -1,6 +1,7 @@
 export {
   type ApiContext,
   type ApiPluginOptions,
+  BodyTooLargeError,
   json,
   makeContext,
   readBody,
@@ -30,6 +31,7 @@ export {
 } from './notes-plugin.ts';
 export {
   generateSlidesModule,
+  invalidateSlidesModule,
   loadUserConfig,
   type OpenSlideConfig,
   type OpenSlidePluginOptions,

@@ -1,6 +1,7 @@
 import { registerSharedApiRoutes } from '@open-slide/shared/vite';
 import type { Plugin } from 'vite';
 import { findAssetUsages, findReferencedAssets } from '../editing/revert-asset.ts';
+import { registerAgentRoutes } from './routes/agent.ts';
 import { registerCommentRoutes } from './routes/comments.ts';
 import { type ApiPluginOptions, makeContext } from './routes/context.ts';
 import { registerEditRoutes } from './routes/edit.ts';
@@ -21,6 +22,7 @@ export function apiPlugin(opts: ApiPluginOptions): Plugin {
       registerEditRoutes(server, ctx);
       registerCommentRoutes(server, ctx);
       registerUpdateRoutes(server, ctx);
+      registerAgentRoutes(server, ctx);
     },
   };
 }

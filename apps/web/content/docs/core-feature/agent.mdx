@@ -1,0 +1,112 @@
+---
+title: Agent panel
+description: Drive Claude Code or Codex from inside the dev server — create decks, apply comments, and edit the current page without a terminal.
+---
+
+![Open-slide agent panel beside the canvas, with Claude Code editing the open deck and its transcript streaming in](/assets/screenshots/agent-panel.webp)
+
+The dev server ships an in-app agent panel. Connect a locally installed
+coding agent once, and the whole authoring loop — drafting a deck, answering
+the scoping questions, applying inspector comments, tweaking "this element" —
+happens in the browser instead of a terminal.
+
+Nothing changes until you connect: without an agent the UI keeps pointing at
+the `/create-slide` and `/apply-comments` skills for your terminal agent, as
+before.
+
+## Supported agents
+
+| Agent | SDK installed into your workspace | Uses your login from |
+| --- | --- | --- |
+| [Claude Code](https://code.claude.com) | `@anthropic-ai/claude-agent-sdk` | the `claude` CLI |
+| [Codex](https://developers.openai.com/codex) | `@openai/codex-sdk` | the `codex` CLI |
+
+The panel talks to each agent through its official TypeScript SDK. The SDKs
+are not bundled with `@open-slide/core` — they pull in a native binary — so
+they are added to your workspace as a dev dependency the first time you open
+the panel.
+If the matching CLI is on your `PATH`, the panel points the SDK at it so you
+keep the same version and sign-in you already use in the terminal.
+
+## Connect
+
+Press `A` on any slide, or click **Agent** in the toolbar. The first time the
+panel opens, it connects every agent whose CLI is on your `PATH`: the dev
+server runs `pnpm add -D <sdk>` (or your package manager's equivalent) and the
+panel switches to chat as soon as the install finishes. Sign in to the CLI
+once (`claude` or `codex login`); the panel reuses that login.
+
+If neither CLI is installed, the panel shows the install command for each and
+a **Check again** button instead.
+
+Both agents can be connected. The model menu in the panel header lists each
+connected agent's models (Opus, Sonnet and Haiku for Claude Code; the models
+your Codex CLI offers for Codex) and the reasoning effort the chosen model
+supports. Set `agent: { enabled: false }` in `open-slide.config.ts` to hide
+the panel entirely.
+
+## What you can do
+
+- **Draft a deck.** From the home page click **New deck**, or pick *Draft a new
+  deck* in the panel. A blank deck opens with the agent panel beside it;
+  describe what it should be and the agent drafts it with the `create-slide`
+  skill, one page at a time, while the canvas follows each new page. Any
+  scoping questions show up as option cards you answer in place. When the
+  draft is done, the deck's `untitled` folder is renamed to a slug the agent
+  picks for it.
+- **Apply comments.** Leave comments in the inspector's comment mode, then
+  click **Apply with Claude Code** in the comment island (or the comment chip
+  in the composer). The agent resolves every `@slide-comment` marker and the
+  page hot-reloads.
+- **Edit the current page.** On a slide, the composer carries the slide, page
+  and selected element as context, so "make this heading bigger" refers to
+  what you have selected.
+- **Create a theme**, or ask for anything else the skills cover.
+
+Every turn streams into the transcript: assistant text, each file read or
+edit, and shell commands. While an agent is editing the open deck, the slide
+frame glows in the agent's colours and a pill above the canvas shows its
+current step. Edits inside the slides and assets folders are applied directly.
+Other actions, such as editing a config file or running a shell command that
+changes state, pause for approval in the panel unless you turn on **Auto-approve** in the provider
+menu. Codex runs inside its own `workspace-write` sandbox and never prompts.
+Claude Code also loads the project's `.claude/settings.json`, so hooks and
+permission rules defined there apply without the trust prompt the CLI shows.
+Only open the panel in projects you trust.
+
+The history button in the panel header lists past conversations, newest
+first, with this deck's chats above the ones from other decks. Picking one from
+another deck opens that deck. Opening the panel on a different deck starts a new
+conversation; earlier ones stay in history.
+
+Hover a message to copy its text. Your own messages also have an edit
+button: sending the edit replaces everything after that message and runs the
+turn again. Claude Code rewinds its own conversation to that point; Codex can't,
+so it is told to set the old replies aside. Files the agent already changed stay
+as they are.
+
+Sessions persist across dev-server restarts under
+`node_modules/.open-slide/agent-sessions.json`, and each one resumes the
+agent's own native session, so follow-ups keep their history.
+
+## Dev-server API
+
+The panel is a thin client over `/__agent/*`:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/__agent/status` | Which agents are installed, their CLI versions, and whether they are connected. |
+| `POST` | `/__agent/install` | Install an agent SDK into the workspace. |
+| `GET` / `POST` | `/__agent/sessions` | List sessions / start one. |
+| `GET` / `DELETE` | `/__agent/sessions/:id` | Read a session's transcript / delete it. |
+| `POST` | `/__agent/sessions/:id/messages` | Send a prompt, or pass `edit` with a message id to replace that message. Progress streams from `GET /__agent/events` as server-sent events. |
+| `POST` | `/__agent/sessions/:id/respond` | Answer a question or approve a command. |
+| `POST` | `/__agent/sessions/:id/stop` | Abort the running turn. |
+
+All mutating routes carry the same origin checks as the rest of the dev API
+and are only available while the dev server runs. The agent only answers
+requests from the machine running the dev server, so other devices on the
+network see the panel as disabled even with `--host`.
+A tunnel or reverse proxy on that machine makes remote requests look local,
+and the rest of the dev API is equally reachable through it, so only expose
+the dev server that way to people you would trust with your workspace.

@@ -388,8 +388,8 @@ test.describe('editor interaction flow', () => {
     request,
   }) => {
     const { panel, headline, body } = await openEditor(page, request, 'ux-preview');
-    const preview = page.getByTitle('Preview', { exact: true });
-    const edit = page.getByTitle('Edit', { exact: true });
+    const preview = page.getByRole('button', { name: 'Preview', exact: true });
+    const edit = page.getByRole('button', { name: 'Edit', exact: true });
     await expect(preview).toBeVisible();
     await expect(edit).toBeVisible();
     await expect(preview).toHaveAttribute('aria-pressed', 'false');
@@ -474,7 +474,7 @@ test.describe('editor interaction flow', () => {
     await openSlide(page, 'alpha');
     await expect(page.locator('[data-inspector-ready]')).toBeVisible();
     captureBrowserErrors(page);
-    await page.getByTitle('Preview', { exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(page.locator('aside[data-inspector-ui]')).toHaveCount(0);
     await page.keyboard.press('ArrowRight');
     await expect(page).toHaveURL(/[?&]p=2/);

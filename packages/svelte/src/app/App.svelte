@@ -22,7 +22,7 @@ import {
   renameAsset,
   uploadAsset,
 } from '@open-slide/shared/client';
-import { en, ja, type Locale, zhCN, zhTW } from '@open-slide/shared/locale';
+import { en, es, ja, type Locale, zhCN, zhTW } from '@open-slide/shared/locale';
 import { onMount, tick } from 'svelte';
 import type { Page } from '../index.ts';
 import { exportHtml, exportPdf, exportPptx } from './export.ts';
@@ -101,7 +101,7 @@ const editableStyles: EditableStyle[] = [
   'letter-spacing',
 ];
 
-const locales: Record<Locale['id'], Locale> = { en, ja, 'zh-CN': zhCN, 'zh-TW': zhTW };
+const locales: Record<Locale['id'], Locale> = { en, es, ja, 'zh-CN': zhCN, 'zh-TW': zhTW };
 
 let route = parseRoute();
 let deck: SlideModule<Page> | null = null;
@@ -1152,6 +1152,7 @@ onMount(() => {
           onchange={(event) => applyLocale(event.currentTarget.value as Locale['id'])}
         >
           <option value="en">English</option>
+          <option value="es">Español</option>
           <option value="zh-TW">繁體中文</option>
           <option value="zh-CN">简体中文</option>
           <option value="ja">日本語</option>

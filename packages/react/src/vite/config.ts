@@ -9,6 +9,7 @@ import type { InlineConfig } from 'vite';
 import { apiPlugin } from './api-plugin.ts';
 import { locTagsPlugin } from './loc-tags-plugin.ts';
 import { loadUserConfig, type OpenSlideConfig, openSlidePlugin } from './open-slide-plugin.ts';
+import { serverInfoPlugin } from './server-info-plugin.ts';
 
 function findPackageRoot(fromFile: string): string {
   let dir = path.dirname(fromFile);
@@ -77,9 +78,16 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
       openSlidePlugin({ userCwd, config, coreVersion: CORE_VERSION }),
       themesPlugin({ userCwd, config }),
       designPlugin({ userCwd }),
-      apiPlugin({ userCwd, slidesDir, assetsDir, coreVersion: CORE_VERSION }),
+      apiPlugin({
+        userCwd,
+        slidesDir,
+        assetsDir,
+        coreVersion: CORE_VERSION,
+        agentEnabled: config.agent?.enabled ?? true,
+      }),
       notesPlugin({ userCwd, slidesDir }),
       currentPlugin({ userCwd, slidesDir }),
+      serverInfoPlugin({ userCwd }),
     ],
     resolve: {
       alias: {
