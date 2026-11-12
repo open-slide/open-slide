@@ -86,7 +86,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "commander": "^15.0.0",
-    "emoji-picker-react": "^4.19.1",
+    "emoji-picker-react": "^5.1.4",
     "fast-glob": "^3.3.2",
     "fflate": "^0.8.3",
     "html-to-image": "^1.11.13",
