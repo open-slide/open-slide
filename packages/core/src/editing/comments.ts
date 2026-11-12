@@ -112,7 +112,15 @@ export function markerDeleteRegex(id: string): RegExp {
 // `breakAfter` is set when content follows the opening tag on the same
 // line, so the marker gets a line of its own instead of gluing onto that
 // content (deleting the marker line would otherwise take the content too).
-export type InsertionPlan = { offset: number; indent: string; breakAfter: boolean };
+// `close` is set when a self-closing call site is opened up to hold the
+// marker: the `/>` (and whitespace before it) at `offset` becomes
+// `>` … `</Name>`. A comment-only child compiles to no children.
+export type InsertionPlan = {
+  offset: number;
+  indent: string;
+  breakAfter: boolean;
+  close?: { length: number; tag: string; indent: string };
+};
 
 function lineToOffset(source: string, line: number): number {
   let off = 0;
@@ -128,6 +136,24 @@ function lineIndent(source: string, lineNumber: number): string {
   const start = lineToOffset(source, lineNumber);
   const m = source.slice(start, start + 200).match(/^[ \t]*/);
   return m?.[0] ?? '';
+}
+
+function planSelfClosing(source: string, target: t.JSXElement): InsertionPlan {
+  const opening = target.openingElement;
+  const end = opening.end ?? 0;
+  const lastAttr = opening.attributes[opening.attributes.length - 1];
+  const offset = (lastAttr ?? opening.name).end ?? end - 2;
+  const indent = lineIndent(source, target.loc?.start.line ?? 1);
+  return {
+    offset,
+    indent: `${indent}  `,
+    breakAfter: false,
+    close: {
+      length: end - offset,
+      tag: source.slice(opening.name.start ?? 0, opening.name.end ?? 0),
+      indent,
+    },
+  };
 }
 
 function planInsertion(source: string, target: JsxContainer): InsertionPlan | null {
@@ -149,6 +175,18 @@ export function buildMarker(
 ): string {
   const marker = `\n${plan.indent}{/* @slide-comment id="${id}" ts="${ts}" text="${encodedText}" */}`;
   return plan.breakAfter ? `${marker}\n${plan.indent}` : marker;
+}
+
+export function spliceMarker(
+  source: string,
+  plan: InsertionPlan,
+  marker: string,
+): { source: string; line: number } {
+  const head = source.slice(0, plan.offset) + (plan.close ? '>' : '');
+  const tail = plan.close
+    ? `\n${plan.close.indent}</${plan.close.tag}>${source.slice(plan.offset + plan.close.length)}`
+    : source.slice(plan.offset);
+  return { source: head + marker + tail, line: offsetToLine(head + marker, head.length + 1) };
 }
 
 export function updateMarkerNote(source: string, id: string, note: string): string | null {
@@ -183,16 +221,29 @@ export function removeMarker(source: string, id: string): string | null {
 // Walk innermost → outermost looking for the first JSX container we
 // can insert *inside* (not self-closing). Self-closing elements like
 // `<img/>` get hoisted to their nearest non-self-closing ancestor.
+// `call` marks a reused component's call site: a self-closing one is
+// opened up rather than hoisted, since its parent may hold other calls.
 export function findInsertion(
   source: string,
   line: number,
   column: number | undefined,
+  opts?: { call?: boolean },
 ): InsertionPlan | null {
   const ast = parseSource(source);
   if (!ast) return null;
 
   const col = column ?? 0;
   const ancestors = findJsxAncestors(ast, line, col);
+  const [innermost] = ancestors;
+  if (
+    opts?.call &&
+    t.isJSXElement(innermost) &&
+    innermost.openingElement.selfClosing &&
+    innermost.loc?.start.line === line &&
+    innermost.loc.start.column === col
+  ) {
+    return planSelfClosing(source, innermost);
+  }
   for (const node of ancestors) {
     const plan = planInsertion(source, node);
     if (plan) return plan;

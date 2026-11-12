@@ -14,14 +14,29 @@ export type FindSlideSourceOptions = {
 type FiberLike = {
   return: FiberLike | null;
   stateNode?: unknown;
+  alternate?: FiberLike | null;
+  _debugOwner?: FiberLike | null;
   _debugSource?: { fileName?: string; lineNumber?: number; columnNumber?: number };
-  memoizedProps?: { __source?: { fileName?: string; lineNumber?: number; columnNumber?: number } };
+  memoizedProps?: {
+    __source?: { fileName?: string; lineNumber?: number; columnNumber?: number };
+    'data-slide-call'?: unknown;
+  };
 };
 
 function getFiber(el: Element): FiberLike | null {
   const key = Object.keys(el).find((k) => k.startsWith('__reactFiber$'));
   if (!key) return null;
   return (el as unknown as Record<string, FiberLike>)[key] ?? null;
+}
+
+// The node caches the fiber it was created with, which may be the stale
+// alternate after an update; the committed one holds the node's props.
+function getCommittedFiber(el: Element): FiberLike | null {
+  const fiber = getFiber(el);
+  if (!fiber?.alternate) return fiber;
+  const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+  const props = key ? (el as unknown as Record<string, unknown>)[key] : undefined;
+  return fiber.alternate.memoizedProps === props ? fiber.alternate : fiber;
 }
 
 function getSource(fiber: FiberLike) {
@@ -80,6 +95,42 @@ export function findSlideSource(
       anchor = fiber.stateNode as HTMLElement;
     }
     fiber = fiber.return;
+  }
+  return null;
+}
+
+function parseLoc(loc: unknown): { line: number; column: number } | null {
+  if (typeof loc !== 'string') return null;
+  const idx = loc.indexOf(':');
+  if (idx <= 0) return null;
+  const line = Number(loc.slice(0, idx));
+  const column = Number(loc.slice(idx + 1));
+  return Number.isFinite(line) && Number.isFinite(column) ? { line, column } : null;
+}
+
+// Source location of the outermost `<Component/>` call (stamped as
+// `data-slide-call` by the loc-tags plugin) whose definition rendered
+// `el`. Follows owners rather than parents, so JSX passed in as children
+// stays with the call site that wrote it.
+export function findCallSite(el: HTMLElement): { line: number; column: number } | null {
+  let owner = getCommittedFiber(el)?._debugOwner ?? null;
+  let call: { line: number; column: number } | null = null;
+  while (owner) {
+    const loc = parseLoc(owner.memoizedProps?.['data-slide-call']);
+    if (!loc) break;
+    call = loc;
+    owner = owner._debugOwner ?? null;
+  }
+  return call;
+}
+
+export function findCallAnchor(
+  root: HTMLElement,
+  call: { line: number; column: number },
+): HTMLElement | null {
+  for (const element of root.querySelectorAll<HTMLElement>('[data-slide-loc]')) {
+    const hit = findCallSite(element);
+    if (hit?.line === call.line && hit.column === call.column) return element;
   }
   return null;
 }

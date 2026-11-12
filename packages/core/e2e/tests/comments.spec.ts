@@ -165,4 +165,54 @@ export default [One, Two] satisfies Page[];
     await expect(editorCanvas(page).getByText('First page')).toBeVisible();
     await expect(pin).toBeVisible();
   });
+
+  test('comments on a reused component land on the clicked call site', async ({
+    page,
+    request,
+  }) => {
+    createdSlides.push('cm-rows');
+    await duplicateSlide(request, 'edit-target', 'cm-rows');
+    await writeFile(
+      slideSourcePath('cm-rows'),
+      `import type { Page, SlideMeta } from '@open-slide/core';
+export const meta: SlideMeta = { title: 'Rows', createdAt: '2026-01-01T00:00:00.000Z' };
+const Row = ({ what }: { what: string }) => (
+  <div style={{ fontSize: 64, padding: 24 }}>
+    <strong>{what}</strong>
+  </div>
+);
+const Table: Page = () => (
+  <div style={{ width: '100%', height: '100%', background: 'white', padding: 120 }}>
+    <Row what="Alpha row" />
+    <Row what="Beta row" />
+    <Row what="Gamma row" />
+  </div>
+);
+export default [Table] satisfies Page[];
+`,
+    );
+    await openSlide(page, 'cm-rows');
+    await page.waitForLoadState('networkidle');
+    await expect(editorCanvas(page).getByText('Gamma row')).toBeVisible();
+    await page.locator('[data-inspector-mode="comment"]').click();
+
+    await editorCanvas(page).getByText('Gamma row', { exact: true }).click();
+    await page.getByPlaceholder('Describe a change for the agent…').fill('Fix the third row');
+    await page.keyboard.press('ControlOrMeta+Enter');
+
+    await expect
+      .poll(() => readSlideSource('cm-rows'))
+      .toMatch(/<Row what="Gamma row">\n\s+\{\/\* @slide-comment [^\n]+\*\/\}\n\s+<\/Row>/);
+    const source = await readSlideSource('cm-rows');
+    expect(source).toContain('<strong>{what}</strong>');
+    expect(source.match(/@slide-comment/g)).toHaveLength(1);
+
+    const pin = page.getByRole('button', { name: 'Fix the third row', exact: true });
+    await expect(pin).toBeVisible();
+    const gamma = await editorCanvas(page).getByText('Gamma row', { exact: true }).boundingBox();
+    const pinBox = await pin.boundingBox();
+    if (!gamma || !pinBox) throw new Error('not laid out');
+    expect(pinBox.y + pinBox.height).toBeGreaterThan(gamma.y - 40);
+    expect(pinBox.y).toBeLessThan(gamma.y + gamma.height);
+  });
 });
