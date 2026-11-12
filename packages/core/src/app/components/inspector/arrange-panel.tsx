@@ -16,6 +16,7 @@ import {
   Magnet,
   RotateCw,
   SendToBack,
+  Trash2,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NumberInput, NumberShell, Section } from '@/components/panel/panel-fields';
@@ -98,6 +99,12 @@ export function ArrangePanel() {
               icon={CornerLeftUp}
               disabled={multiple || committing}
               onClick={visual.selectParent}
+            />
+            <HeaderButton
+              label={t.removeElement}
+              icon={Trash2}
+              disabled={committing}
+              onClick={visual.removeSelected}
             />
             <Tooltip>
               <TooltipTrigger

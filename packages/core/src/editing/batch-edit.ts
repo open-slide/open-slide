@@ -6,6 +6,7 @@ import {
   planEdit,
   type Splice,
 } from './edit-ops.ts';
+import { sourceRevision } from './remove-element.ts';
 
 export type BatchEdit = {
   line?: number;
@@ -28,7 +29,7 @@ function rebaseOffset(offset: number, splices: Splice[], target: number): number
     if (offset < splice.from) break;
     if (offset >= splice.to) {
       shift += splice.text.length - (splice.to - splice.from);
-    } else if (offset === splice.from && offset === target) {
+    } else if (offset === splice.from && offset === target && splice.text.length > 0) {
       return offset + shift;
     } else {
       return null;
@@ -42,6 +43,7 @@ export function applyEditBatch(
   edits: BatchEdit[],
 ): { source: string; results: BatchEditResult[] } {
   const ast = parseSource(source);
+  const revision = sourceRevision(source);
   const targets = new Map<number, number>();
   const textTargets = new Map<string, number>();
   const tracked: TrackedEdit[] = edits.map((edit, index) => {
@@ -58,6 +60,13 @@ export function applyEditBatch(
       return { offset: null, ops: [], error: 'invalid edit' };
     }
     if (!edit.ops.length) return { offset: null, ops: [], dependsOn: edit.dependsOn };
+    const removal = edit.ops.find((op) => op.kind === 'remove-element');
+    if (removal && (edit.ops.length !== 1 || edit.dependsOn !== undefined)) {
+      return { offset: null, ops: edit.ops, error: 'remove must be a separate edit' };
+    }
+    if (removal && removal.revision !== revision) {
+      return { offset: null, ops: edit.ops, error: 'slide source changed since selection' };
+    }
     if (!ast) return { offset: null, ops: edit.ops, error: 'could not parse source' };
     const location = `${edit.line}:${edit.column ?? 0}:`;
     const textOp = edit.ops.find((op) => 'prevText' in op && op.prevText !== undefined);
@@ -102,7 +111,7 @@ export function applyEditBatch(
     const before = next.slice(0, edit.offset);
     const line = before.split('\n').length;
     const column = edit.offset - before.lastIndexOf('\n') - 1;
-    const plan = planEdit(next, line, column, edit.ops, true);
+    const plan = planEdit(next, line, column, edit.ops, true, revision);
     if (!plan.ok) {
       results.push({ ok: false, error: plan.error });
       continue;
