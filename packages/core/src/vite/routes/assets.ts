@@ -208,10 +208,13 @@ export function registerAssetRoutes(server: ViteDevServer, ctx: ApiContext): voi
           let oversized = false;
           await new Promise<void>((resolve, reject) => {
             req.on('data', (c: Buffer) => {
+              if (oversized) return;
               total += c.length;
               if (total > ASSET_MAX_BYTES) {
+                // Destroying the request resets the socket before the 413 can be
+                // written, so drain the rest of the body instead.
                 oversized = true;
-                req.destroy();
+                chunks.length = 0;
                 return;
               }
               chunks.push(c);
