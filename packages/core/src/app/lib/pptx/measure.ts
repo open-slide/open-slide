@@ -30,6 +30,7 @@ import {
 } from './css';
 import { resolveFontFamily } from './fonts';
 import type { ImageStore, LoadedImage } from './images';
+import { parseAnimationDataset, stepAnimation } from './motion';
 import {
   clampToSlide,
   expandRect,
@@ -40,11 +41,13 @@ import {
 import type {
   Bullet,
   Crop,
+  ElementAnimation,
   Fill,
   Geometry,
   Outline,
   Paragraph,
   PictureNode,
+  PptxTransition,
   Rect,
   RunStyle,
   SceneNode,
@@ -70,6 +73,7 @@ type Inherited = {
   opacity: number;
   clip: Rect | null;
   decoration: Decoration;
+  animation: ElementAnimation | null;
 };
 
 type Slot = { node: SceneNode | null };
@@ -81,14 +85,21 @@ type Measured = {
   world: Mat;
   opacity: number;
   clip: Rect | null;
+  animation: ElementAnimation | null;
 };
 
 type Ctx = {
   frame: HTMLElement;
   frameRect: DOMRect;
   transforms: Map<Element, Mat>;
+  animations: Map<Element, ElementAnimation>;
   slots: Slot[];
-  rasters: { slot: Slot; request: RasterRequest; svg: Uint8Array | null }[];
+  rasters: {
+    slot: Slot;
+    request: RasterRequest;
+    svg: Uint8Array | null;
+    animation: ElementAnimation | null;
+  }[];
   pending: Promise<void>[];
   images: ImageStore;
   color: ColorParser;
@@ -102,6 +113,7 @@ export type MeasurePageOptions = {
   images: ImageStore;
   rasterizer: Rasterizer;
   color: ColorParser;
+  transition: PptxTransition | null;
 };
 
 export async function measurePage(options: MeasurePageOptions): Promise<SlideScene> {
@@ -110,6 +122,7 @@ export async function measurePage(options: MeasurePageOptions): Promise<SlideSce
     frame,
     frameRect: frame.getBoundingClientRect(),
     transforms: snapshotTransforms(frame),
+    animations: collectAnimations(frame),
     slots: [],
     rasters: [],
     pending: [],
@@ -134,6 +147,7 @@ export async function measurePage(options: MeasurePageOptions): Promise<SlideSce
         opacity: 1,
         clip: slideClip,
         decoration: { underline: false, strike: false },
+        animation: null,
       });
     }
   } finally {
@@ -155,6 +169,7 @@ export async function measurePage(options: MeasurePageOptions): Promise<SlideSce
         box: result.rect,
         rotationDeg: 0,
         flipV: false,
+        animation: entry.animation,
         imageId: id,
         crop: null,
         alpha: 1,
@@ -169,6 +184,7 @@ export async function measurePage(options: MeasurePageOptions): Promise<SlideSce
   const first = nodes[0];
   if (
     first &&
+    !first.animation &&
     coversSlide(first) &&
     first.kind === 'shape' &&
     first.fill &&
@@ -180,7 +196,7 @@ export async function measurePage(options: MeasurePageOptions): Promise<SlideSce
     background = first.fill;
     nodes.shift();
   }
-  return { background, nodes, notes: options.notes };
+  return { background, nodes, notes: options.notes, transition: options.transition };
 }
 
 function coversSlide(node: SceneNode): boolean {
@@ -188,6 +204,29 @@ function coversSlide(node: SceneNode): boolean {
   return (
     b.x <= 0.5 && b.y <= 0.5 && b.x + b.w >= CANVAS_WIDTH - 0.5 && b.y + b.h >= CANVAS_HEIGHT - 0.5
   );
+}
+
+function collectAnimations(frame: HTMLElement): Map<Element, ElementAnimation> {
+  const out = new Map<Element, ElementAnimation>();
+  let nextId = 1;
+  for (const el of frame.querySelectorAll<HTMLElement>('[data-os-anim], [data-osd-step]')) {
+    const inStep = el.closest('[data-osd-step]') !== null;
+    const rawStepDuration = el.dataset.osdStepDuration;
+    const stepDuration =
+      rawStepDuration === undefined || rawStepDuration.trim() === ''
+        ? Number.NaN
+        : Number(rawStepDuration);
+    const spec =
+      el.dataset.osAnim !== undefined
+        ? parseAnimationDataset(el.dataset, inStep, nextId)
+        : inStep
+          ? stepAnimation(stepDuration, nextId)
+          : null;
+    if (!spec) continue;
+    out.set(el, spec);
+    nextId++;
+  }
+  return out;
 }
 
 function snapshotTransforms(frame: HTMLElement): Map<Element, Mat> {
@@ -287,7 +326,7 @@ function measureElement(
   } else if (clips) {
     clip = null;
   }
-  return { el, cs, rect, world, opacity, clip };
+  return { el, cs, rect, world, opacity, clip, animation: parent.animation };
 }
 
 function paddingBox(rect: Rect, cs: CSSStyleDeclaration): Rect {
@@ -368,7 +407,12 @@ function requestRaster(ctx: Ctx, m: Measured, mode: RasterMode): void {
   }
   if (region.w <= 0 || region.h <= 0) return;
   const slot = pushSlot(ctx, null);
-  ctx.rasters.push({ slot, request: { target: m.el, mode, region, trim: !svg }, svg });
+  ctx.rasters.push({
+    slot,
+    request: { target: m.el, mode, region, trim: !svg },
+    svg,
+    animation: m.animation,
+  });
 }
 
 const SVG_UNSUPPORTED =
@@ -422,11 +466,14 @@ function paintBlock(ctx: Ctx, el: Element, inherited: Inherited): void {
   if (SKIPPED_TAGS.has(el.tagName.toUpperCase())) return;
   const cs = getComputedStyle(el);
   if (isHidden(cs)) return;
+  const own = ctx.animations.get(el) ?? null;
+  const animation = own ?? inherited.animation;
   if (cs.display === 'contents') {
-    for (const child of Array.from(el.children)) paintBlock(ctx, child, inherited);
+    for (const child of Array.from(el.children))
+      paintBlock(ctx, child, { ...inherited, animation });
     return;
   }
-  const m = measureElement(ctx, el, cs, inherited);
+  const m = measureElement(ctx, el, cs, { ...inherited, animation });
   if (!m) return;
   const tag = el.tagName.toUpperCase();
 
@@ -445,6 +492,7 @@ function paintBlock(ctx: Ctx, el: Element, inherited: Inherited): void {
     opacity: m.opacity,
     clip: m.clip,
     decoration,
+    animation: m.animation,
   };
 
   if (paintsBackgroundSeparately(cs, m.rect.w, m.rect.h, ctx.color)) {
@@ -521,7 +569,8 @@ function collectInline(
     const cs = getComputedStyle(child);
     if (isHidden(cs)) continue;
     if (cs.display === 'contents') {
-      collectInline(ctx, child, inherited, atoms, blockChildren, inlineItems);
+      const animation = ctx.animations.get(child) ?? inherited.animation;
+      collectInline(ctx, child, { ...inherited, animation }, atoms, blockChildren, inlineItems);
       continue;
     }
     const inline =
@@ -736,6 +785,7 @@ function paintBoxRect(ctx: Ctx, m: Measured, rect: Rect): void {
         null,
         uniform ? outline : null,
         outer ? toShadowEffect(outer, opacity) : null,
+        m.animation,
       ),
     );
   }
@@ -754,6 +804,7 @@ function paintBoxRect(ctx: Ctx, m: Measured, rect: Rect): void {
           : last && inner
             ? toShadowEffect(inner, opacity)
             : null,
+        m.animation,
       ),
     );
   });
@@ -781,6 +832,7 @@ function paintBoxRect(ctx: Ctx, m: Measured, rect: Rect): void {
           { kind: 'solid', color: withAlpha(side.color, opacity) },
           null,
           null,
+          m.animation,
         ),
       );
     }
@@ -799,6 +851,7 @@ function makeShape(
   fill: Fill | null,
   outline: Outline | null,
   shadow: ShadowEffect | null,
+  animation: ElementAnimation | null,
 ): ShapeNode {
   const p = placed(rect, world);
   const scaledOutline =
@@ -813,6 +866,7 @@ function makeShape(
     box: p.box,
     rotationDeg: p.rotationDeg,
     flipV: p.flipV,
+    animation,
     geometry: scaledGeometry,
     fill,
     outline: scaledOutline,
@@ -904,6 +958,7 @@ function makePicture(
   geometry: Geometry,
   outline: Outline | null,
   shadow: ShadowEffect | null,
+  animation: ElementAnimation | null,
 ): PictureNode {
   const p = placed(placement.rect, world);
   return {
@@ -912,6 +967,7 @@ function makePicture(
     box: p.box,
     rotationDeg: p.rotationDeg,
     flipV: p.flipV,
+    animation,
     imageId,
     crop: placement.crop,
     alpha,
@@ -954,7 +1010,17 @@ function paintImage(ctx: Ctx, m: Measured & { el: HTMLImageElement }): void {
   ctx.pending.push(
     ctx.images.fromUrl(src).then((loaded: LoadedImage | null) => {
       if (!loaded) return;
-      slot.node = makePicture(name, placement, m.world, loaded.id, alpha, geometry, null, null);
+      slot.node = makePicture(
+        name,
+        placement,
+        m.world,
+        loaded.id,
+        alpha,
+        geometry,
+        null,
+        null,
+        m.animation,
+      );
     }),
   );
 }
@@ -1018,6 +1084,7 @@ function paintBackgroundImage(
           slot,
           request: { target: m.el, mode: 'self', region: clampToSlide(rect), trim: false },
           svg: null,
+          animation: m.animation,
         });
         return;
       }
@@ -1036,6 +1103,7 @@ function paintBackgroundImage(
             : { kind: 'rect' },
         null,
         null,
+        m.animation,
       );
     }),
   );
@@ -1275,6 +1343,7 @@ function paintText(ctx: Ctx, m: Measured, atoms: Atom[]): void {
     box: p.box,
     rotationDeg: p.rotationDeg,
     flipV: p.flipV,
+    animation: m.animation,
     paragraphs,
   };
   pushSlot(ctx, node);

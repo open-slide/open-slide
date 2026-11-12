@@ -18,6 +18,7 @@ import type {
   SlideScene,
   TextNode,
 } from './scene';
+import { type AnimationGroup, timingXml, transitionXml } from './timing';
 import { degrees, percent, px, pxToHundredthsPt, SLIDE_EMU_H, SLIDE_EMU_W } from './units';
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
@@ -256,28 +257,48 @@ export function slideXml(
   rels: SlideRels,
   imageById: Map<number, SceneImage>,
 ): string {
-  const ctx: EmitContext = { rels, imageById, nextId: 2 };
+  const ctx: EmitContext = { rels, imageById };
   const bg = slide.background
     ? `<p:bg><p:bgPr>${fillXml(slide.background, ctx)}<a:effectLst/></p:bgPr></p:bg>`
     : '';
-  const shapes = slide.nodes.map((node) => nodeXml(node, ctx)).join('');
-  return `${XML_DECL}<p:sld xmlns:a="${NS_A}" xmlns:r="${OD_REL}" xmlns:p="${NS_P}"><p:cSld>${bg}<p:spTree>${EMPTY_GROUP}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
+  let nextShapeId = 2;
+  const entries = slide.nodes
+    .map((node) => {
+      const spid = nextShapeId++;
+      return { node, spid, xml: nodeXml(node, spid, ctx) };
+    })
+    .filter((entry) => entry.xml.length > 0);
+  const shapes = entries.map((entry) => entry.xml).join('');
+  const groups = collectAnimationGroups(entries);
+  const transition = transitionXml(slide.transition);
+  const timing = timingXml(groups);
+  return `${XML_DECL}<p:sld xmlns:a="${NS_A}" xmlns:r="${OD_REL}" xmlns:p="${NS_P}"><p:cSld>${bg}<p:spTree>${EMPTY_GROUP}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transition}${timing}</p:sld>`;
+}
+
+function collectAnimationGroups(entries: { node: SceneNode; spid: number }[]): AnimationGroup[] {
+  const byId = new Map<number, AnimationGroup>();
+  for (const { node, spid } of entries) {
+    if (!node.animation) continue;
+    const existing = byId.get(node.animation.id);
+    if (existing) existing.spids.push(spid);
+    else byId.set(node.animation.id, { animation: node.animation, spids: [spid] });
+  }
+  return [...byId.values()].sort((a, b) => a.animation.id - b.animation.id);
 }
 
 type EmitContext = {
   rels: SlideRels;
   imageById: Map<number, SceneImage>;
-  nextId: number;
 };
 
-function nodeXml(node: SceneNode, ctx: EmitContext): string {
+function nodeXml(node: SceneNode, spid: number, ctx: EmitContext): string {
   switch (node.kind) {
     case 'shape':
-      return shapeXml(node, ctx);
+      return shapeXml(node, spid, ctx);
     case 'picture':
-      return pictureXml(node, ctx);
+      return pictureXml(node, spid, ctx);
     case 'text':
-      return textXml(node, ctx);
+      return textXml(node, spid);
   }
 }
 
@@ -285,13 +306,11 @@ function nvPr(id: number, name: string): string {
   return `<p:cNvPr id="${id}" name="${escapeXml(name.slice(0, 200))}"/>`;
 }
 
-function shapeXml(node: ShapeNode, ctx: EmitContext): string {
-  const id = ctx.nextId++;
+function shapeXml(node: ShapeNode, id: number, ctx: EmitContext): string {
   return `<p:sp><p:nvSpPr>${nvPr(id, node.name)}<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${xfrmXml(node)}${geometryXml(node.geometry, node.box)}${node.fill ? fillXml(node.fill, ctx) : '<a:noFill/>'}${outlineXml(node.outline)}${shadowXml(node.shadow, node.box)}</p:spPr></p:sp>`;
 }
 
-function pictureXml(node: PictureNode, ctx: EmitContext): string {
-  const id = ctx.nextId++;
+function pictureXml(node: PictureNode, id: number, ctx: EmitContext): string {
   const image = ctx.imageById.get(node.imageId);
   if (!image) return '';
   return `<p:pic><p:nvPicPr>${nvPr(id, node.name)}<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>${blipXml(image, node.alpha, ctx)}${cropXml(node.crop)}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(node)}${geometryXml(node.geometry, node.box)}${outlineXml(node.outline)}${shadowXml(node.shadow, node.box)}</p:spPr></p:pic>`;
@@ -315,8 +334,7 @@ function cropXml(crop: PictureNode['crop']): string {
   return `<a:srcRect l="${v(crop.l)}" t="${v(crop.t)}" r="${v(crop.r)}" b="${v(crop.b)}"/>`;
 }
 
-function textXml(node: TextNode, ctx: EmitContext): string {
-  const id = ctx.nextId++;
+function textXml(node: TextNode, id: number): string {
   const paragraphs = node.paragraphs.map(paragraphXml).join('');
   return `<p:sp><p:nvSpPr>${nvPr(id, node.name)}<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xfrmXml(node)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`;
 }
