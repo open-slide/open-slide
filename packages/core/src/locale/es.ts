@@ -617,6 +617,8 @@ export const es: Locale = {
     cliFoundNoVersion: 'CLI encontrada',
     cliMissing: 'CLI no encontrada en el PATH',
     cliHint: 'Instala la CLI de {name} e inicia sesión una vez; el panel reutiliza esa sesión.',
+    acpMissing: 'No se encontró el comando ACP configurado: {command}',
+    acpConfigured: 'Configurado mediante Agent Client Protocol.',
     needCliTitle: 'Instala Claude Code o Codex primero',
     needCliDescription:
       'El panel dirige la CLI del agente de código de esta máquina y no se encontró ninguna en el PATH. Instala una, inicia sesión una vez en una terminal y vuelve a comprobar.',

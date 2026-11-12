@@ -384,6 +384,10 @@ function ModelMenu({
   const choice = shown?.ready ? resolveModelChoice(shown.models, modelChoices[shown.id]) : null;
   const selectedModel = shown?.id === providerId ? (model ?? choice?.model) : choice?.model;
   const selectedEffort = shown?.id === providerId ? effort : (choice?.effort ?? null);
+  const showModels = !!shown?.ready && (shown.models.length > 1 || !!shown.models[0]?.id);
+  const showEfforts = !!shown?.ready && !!selectedModel && selectedModel.efforts.length > 0;
+  // Draw a divider only below a section that is actually there.
+  const choicesAbove = providers.length > 1 || (!!shown && !shown.ready) || showModels;
 
   return (
     <Popover
@@ -402,7 +406,11 @@ function ModelMenu({
         ) : (
           <span aria-hidden className="size-1.5 rounded-full bg-muted-foreground/50" />
         )}
-        <span className="truncate">{model ? modelLabel(model, t) : t.agent.title}</span>
+        <span className="truncate">
+          {model?.id
+            ? model.label
+            : (providers.find((p) => p.id === providerId)?.name ?? t.agent.title)}
+        </span>
         {effort && (
           <span className="shrink-0 font-normal text-muted-foreground">
             {t.agent.efforts[effort]}
@@ -421,12 +429,12 @@ function ModelMenu({
                 aria-selected={p.id === shownId}
                 onClick={() => setTab(p.id)}
                 className={cn(
-                  'flex h-7 flex-1 items-center justify-center gap-1.5 rounded-[5px] text-[12px] font-medium text-muted-foreground outline-none transition-colors duration-100 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30',
+                  'flex h-7 min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[5px] px-1.5 text-[12px] font-medium text-muted-foreground outline-none transition-colors duration-100 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30',
                   p.id === shownId && 'bg-background text-foreground shadow-edge',
                 )}
               >
                 <ProviderLogo provider={p.id} className="size-3.5 shrink-0" />
-                {p.name}
+                <span className="truncate">{p.name}</span>
               </button>
             ))}
           </div>
@@ -435,12 +443,14 @@ function ModelMenu({
         {shown && !shown.ready ? (
           <div className="flex flex-col items-start gap-2 px-2 py-2.5">
             <p className="text-[12px] leading-relaxed text-muted-foreground">
-              {shown.cliFound
-                ? format(t.agent.connectInstallHint, {
-                    pkg: shown.sdkPackage,
-                    pm: status?.packageManager ?? 'npm',
-                  })
-                : format(t.agent.cliHint, { name: shown.name })}
+              {shown.type === 'acp'
+                ? format(t.agent.acpMissing, { command: shown.cliCommand })
+                : shown.cliFound
+                  ? format(t.agent.connectInstallHint, {
+                      pkg: shown.sdkPackage,
+                      pm: status?.packageManager ?? 'npm',
+                    })
+                  : format(t.agent.cliHint, { name: shown.name })}
             </p>
             <Button
               size="xs"
@@ -453,7 +463,7 @@ function ModelMenu({
               {t.agent.connect}
             </Button>
           </div>
-        ) : shown ? (
+        ) : shown && showModels ? (
           <div className="flex flex-col gap-px">
             {shown.models.map((m) => {
               const checked = m.id === selectedModel?.id;
@@ -481,8 +491,8 @@ function ModelMenu({
           </div>
         ) : null}
 
-        {shown?.ready && selectedModel && selectedModel.efforts.length > 0 && (
-          <div className="mt-1.5 border-t border-hairline px-1 pt-2 pb-1">
+        {shown && selectedModel && showEfforts && (
+          <div className={cn('px-1 pb-1', choicesAbove && 'mt-1.5 border-t border-hairline pt-2')}>
             <div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">
               {t.agent.reasoning}
             </div>
@@ -508,7 +518,12 @@ function ModelMenu({
           </div>
         )}
 
-        <div className="mt-1.5 flex flex-col gap-px border-t border-hairline pt-1.5">
+        <div
+          className={cn(
+            'flex flex-col gap-px',
+            (choicesAbove || showEfforts) && 'mt-1.5 border-t border-hairline pt-1.5',
+          )}
+        >
           {readyProviders(status).length > 0 && (
             <button
               type="button"

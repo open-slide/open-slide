@@ -1,3 +1,4 @@
+import { Sparkles } from 'lucide-react';
 import type { SVGProps } from 'react';
 import type { AgentProviderId } from '../../../agent/types';
 
@@ -30,5 +31,7 @@ export function ProviderLogo({
   provider,
   ...props
 }: { provider: AgentProviderId } & SVGProps<SVGSVGElement>) {
-  return provider === 'claude' ? <ClaudeLogo {...props} /> : <OpenAILogo {...props} />;
+  if (provider === 'claude') return <ClaudeLogo {...props} />;
+  if (provider === 'codex') return <OpenAILogo {...props} />;
+  return <Sparkles aria-hidden="true" {...props} />;
 }
