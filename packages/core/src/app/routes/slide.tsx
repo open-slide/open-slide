@@ -73,6 +73,7 @@ import {
   isTypingTarget,
 } from '@/lib/keys';
 import { readLastHomeLocation } from '@/lib/last-home-location';
+import { rememberPresenting, wasPresenting } from '@/lib/presenting-session';
 import { useAgentSocketConnected } from '@/lib/use-agent-socket';
 import { useClickPageNavigation } from '@/lib/use-click-page-navigation';
 import { useDocumentTitle } from '@/lib/use-document-title';
@@ -129,7 +130,16 @@ export function Slide() {
   }, [navigate]);
   const { slide, error } = useSlideModule(slideId);
   useDocumentTitle(slide?.meta?.title);
-  const [playMode, setPlayMode] = useState<'window' | 'fullscreen' | null>(null);
+  // Fullscreen can't be re-entered without a user gesture, so a session
+  // resumed after a reload presents in the window.
+  const [playMode, setPlayMode] = useState<'window' | 'fullscreen' | null>(() =>
+    wasPresenting(slideId) ? 'window' : null,
+  );
+  // Cleanup covers leaving the route; a reload skips it, which keeps the flag.
+  useEffect(() => {
+    rememberPresenting(playMode ? slideId : null);
+    return () => rememberPresenting(null);
+  }, [playMode, slideId]);
   // Last deck the Player showed. During a presenter-driven deck switch the
   // route's slideId changes while the new module loads and warms; rendering
   // from this cache keeps the Player mounted, which preserves fullscreen

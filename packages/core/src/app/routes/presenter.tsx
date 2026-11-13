@@ -36,6 +36,8 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH, type SlideModule } from '../lib/sdk';
 import { loadSlide, slideIds } from '../lib/slides';
 import { useSlideModule } from '../lib/use-slide-module';
 
+const LINK_CHECK_INTERVAL_MS = 1500;
+
 export function Presenter() {
   const { slideId = '' } = useParams();
   const { slide, error } = useSlideModule(slideId);
@@ -49,7 +51,7 @@ export function Presenter() {
   // until the projection window publishes its actual `startedAt`.
   const [localStart] = useState(() => Date.now());
   const [hasProjection, setHasProjection] = useState(false);
-  const requestedRef = useRef(false);
+  const awaitingStateRef = useRef(false);
   const t = useLocale();
   const [, setWarmedTick] = useState(0);
   const handleAssetsWarmed = useCallback(() => {
@@ -59,6 +61,7 @@ export function Presenter() {
 
   const channel = usePresenterChannel(slideId, (msg) => {
     if (msg.type === 'state') {
+      awaitingStateRef.current = false;
       setState(msg.state);
       setHasProjection(true);
     }
@@ -72,15 +75,25 @@ export function Presenter() {
     prevSlideIdRef.current = slideId;
     setState(null);
     setHasProjection(false);
-    requestedRef.current = false;
   }
 
-  // Hydrate from the projection window once.
+  // Keep asking the projection for its state so the badge falls back to
+  // "Not linked" once it goes away (present mode exited, window reloaded or
+  // closed) instead of silently dropping commands. A miss is judged per
+  // unanswered ping rather than by elapsed time, so a throttled background
+  // timer can't mark a live projection as gone.
   // biome-ignore lint/correctness/useExhaustiveDependencies: slideId re-fires the handshake on a deck switch even when the channel memo keeps its identity (available toggling false→true in one commit nets to no change)
   useEffect(() => {
-    if (!channel.available || requestedRef.current) return;
-    requestedRef.current = true;
-    channel.send({ type: 'request-state' });
+    if (!channel.available) return;
+    const ping = () => {
+      if (awaitingStateRef.current) setHasProjection(false);
+      awaitingStateRef.current = true;
+      channel.send({ type: 'request-state' });
+    };
+    awaitingStateRef.current = false;
+    ping();
+    const id = window.setInterval(ping, LINK_CHECK_INTERVAL_MS);
+    return () => window.clearInterval(id);
   }, [channel, slideId]);
 
   const navigate = useNavigate();
@@ -268,8 +281,8 @@ export function Presenter() {
       </div>
 
       <PresenterBottomBar
-        index={index}
-        total={total}
+        hasPrev={index > 0 || stepIndex > 0}
+        hasNext={hasNext}
         blackout={blackout}
         onPrev={goPrev}
         onNext={goNext}
@@ -491,16 +504,16 @@ function DeckSwitcher({
 }
 
 function PresenterBottomBar({
-  index,
-  total,
+  hasPrev,
+  hasNext,
   blackout,
   onPrev,
   onNext,
   onBlackout,
   onWhiteout,
 }: {
-  index: number;
-  total: number;
+  hasPrev: boolean;
+  hasNext: boolean;
   blackout: 'black' | 'white' | null;
   onPrev: () => void;
   onNext: () => void;
@@ -511,10 +524,10 @@ function PresenterBottomBar({
   return (
     <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-hairline px-6 py-3">
       <div className="flex items-center gap-2">
-        <Button variant="outline" onClick={onPrev} disabled={index === 0}>
+        <Button variant="outline" onClick={onPrev} disabled={!hasPrev}>
           <ChevronLeft className="size-4" /> {t.presenter.prev}
         </Button>
-        <Button variant="outline" onClick={onNext} disabled={index >= total - 1}>
+        <Button variant="outline" onClick={onNext} disabled={!hasNext}>
           {t.presenter.next} <ChevronRight className="size-4" />
         </Button>
       </div>
@@ -629,6 +642,9 @@ function PresenterJumpControl({
         if (Number.isFinite(n) && n >= 1 && n <= total) {
           onJump(n - 1);
           setValue('');
+          // Shortcuts skip typing targets, so keeping focus here would swallow
+          // the next arrow, Space or Page key (e.g. from a clicker).
+          e.currentTarget.querySelector('input')?.blur();
         }
       }}
       className="flex items-center gap-2"
