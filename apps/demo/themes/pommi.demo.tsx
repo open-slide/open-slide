@@ -3,7 +3,7 @@ import {
   type Page,
   useIsActivePage,
   useSlidePageNumber,
-} from '@open-slide/core';
+} from '@open-slide/react';
 import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 
 export const design: DesignSystem = {

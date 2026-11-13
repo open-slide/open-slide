@@ -1,4 +1,4 @@
-import type { OpenSlideConfig } from '@open-slide/core';
+import type { OpenSlideConfig } from '@open-slide/react';
 
 const openSlideConfig: OpenSlideConfig = {};
 

@@ -2,12 +2,13 @@
 
 # open-slide
 
-The slide framework built for agents. Describe a deck, and your coding agent writes it as React. open-slide handles the canvas, scaling, navigation, hot reload, editing, and present mode.
+The slide framework built for agents. Describe a deck, and your coding agent writes it as React or Svelte. open-slide handles the canvas, scaling, navigation, hot reload, editing, and present mode.
 
-Every page is a React component rendered on a fixed 1920 × 1080 canvas.
+Every page is a React or Svelte component rendered on a fixed 1920 × 1080 canvas.
 
 ```bash
 npx @open-slide/cli init my-deck
+# For Svelte: npx @open-slide/cli init my-deck --framework svelte
 cd my-deck
 npm run dev
 ```
@@ -16,7 +17,7 @@ npm run dev
 
 ## Agent panel
 
-Connect the Claude Code or Codex CLI you already use and drive it from the browser. Press `A` on any slide to open the panel.
+In the React runtime, connect the Claude Code or Codex CLI you already use and drive it from the browser. Press `A` on any slide to open the panel.
 
 ![The agent panel beside the canvas while Claude Code edits the open deck](.github/assets/agent-panel.webp)
 
@@ -51,10 +52,14 @@ Fullscreen playback with keyboard navigation, and a presenter view with the next
 
 | Path | Description |
 | --- | --- |
-| [`packages/core`](packages/core) | `@open-slide/core`: runtime, Vite plugin, and the `open-slide` CLI |
-| [`packages/cli`](packages/cli) | `@open-slide/cli`: the `init` scaffolder and project template |
-| [`apps/demo`](apps/demo) | Local workspace for developing the framework |
-| [`apps/web`](apps/web) | Website and docs |
+| [packages/core](packages/core) | `@open-slide/core` — compatibility package that automatically routes existing installations to the React runtime. |
+| [packages/shared](packages/shared) | `@open-slide/shared` — framework-neutral config, types, slide discovery, virtual modules, filesystem helpers, and shared runtime utilities. |
+| [packages/react](packages/react) | `@open-slide/react` — the existing React viewer, presenter, inspector, Vite integration, and runtime CLI. |
+| [packages/svelte](packages/svelte) | `@open-slide/svelte` — native Svelte viewer, presenter, inspector, Vite integration, and runtime CLI. |
+| [packages/cli](packages/cli) | `@open-slide/cli` — framework-selecting workspace scaffolder. |
+| [apps/demo](apps/demo) | React dogfood workspace that consumes `@open-slide/react` via `workspace:*`. |
+| [apps/svelte-demo](apps/svelte-demo) | Svelte dogfood workspace that validates the native runtime in the Turbo graph. |
+
 
 ```bash
 pnpm install

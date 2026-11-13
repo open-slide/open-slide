@@ -35,8 +35,8 @@ jobs:
       - name: Run lint
         run: pnpm lint
 
-      - name: Check core package contents
-        run: pnpm core check:pack
+      - name: Check React package contents
+        run: pnpm react check:pack
 
   typecheck:
     runs-on: ubuntu-latest
@@ -106,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container:
-      # Image version must match @playwright/test in packages/core/package.json.
+      # Image version must match @playwright/test in packages/react/package.json.
       image: mcr.microsoft.com/playwright:v1.63.0-noble
       options: --user 1001
     steps:
@@ -133,5 +133,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ github.run_attempt }}
-          path: packages/core/playwright-report
+          path: packages/react/playwright-report
           retention-days: 7

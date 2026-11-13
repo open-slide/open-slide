@@ -227,7 +227,7 @@ const Title = ({
 The race bib: page number in a cut volt chip, total beside it, brand + deck title + meta label. Tone-aware via `TONES`. Rendered by `Stage` — covers, dividers and closers turn it off.
 
 ```tsx
-import { useSlidePageNumber } from '@open-slide/core';
+import { useSlidePageNumber } from '@open-slide/react';
 
 const Footer = ({
   tone,
@@ -590,7 +590,7 @@ const SpecChip = ({ children }: { children: ReactNode }) => (
 Easing + page transitions — a fast 240 ms nudge in the direction of travel; the outgoing page holds while the new one lands:
 
 ```tsx
-import { type SlideTransition } from '@open-slide/core';
+import { type SlideTransition } from '@open-slide/react';
 
 const EASE_OUT = 'cubic-bezier(0, 0, 0.2, 1)';
 const EASE_IN = 'cubic-bezier(0.4, 0, 1, 1)';

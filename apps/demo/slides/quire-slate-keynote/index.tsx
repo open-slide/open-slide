@@ -7,7 +7,7 @@ import {
   Step,
   Steps,
   useIsActivePage,
-} from '@open-slide/core';
+} from '@open-slide/react';
 import { type CSSProperties, type ReactNode, useId } from 'react';
 
 export const design: DesignSystem = {

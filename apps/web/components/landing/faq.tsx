@@ -22,11 +22,11 @@ export const faqs: QA[] = [
   },
   {
     q: 'How do I get started with open-slide?',
-    a: 'Run `npx @open-slide/cli init` to scaffold a workspace. The CLI sets up the @open-slide/core runtime, the dev server, and example slides. Open the dev server in your browser, ask your agent to draft a deck, and iterate with the visual inspector or by leaving @slide-comment markers in the source.',
+    a: 'Run `npx @open-slide/cli init` to scaffold a workspace. The CLI sets up the @open-slide/react runtime, the dev server, and example slides. Open the dev server in your browser, ask your agent to draft a deck, and iterate with the visual inspector or by leaving @slide-comment markers in the source.',
   },
   {
     q: 'Is open-slide open source?',
-    a: 'Yes. open-slide is MIT-licensed. The runtime ships as @open-slide/core on npm and the scaffolder as @open-slide/cli. Source lives at github.com/open-slide/open-slide.',
+    a: 'Yes. open-slide is MIT-licensed. The React runtime ships as @open-slide/react, the Svelte runtime as @open-slide/svelte, and the scaffolder as @open-slide/cli. Existing @open-slide/core installations continue to work. Source lives at github.com/open-slide/open-slide.',
   },
 ];
 

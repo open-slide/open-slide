@@ -138,7 +138,7 @@ const Heading = ({ children, size = 104 }: { children: ReactNode; size?: number 
 Pin mark + wordmark + label on the left, zero-padded counter on the right. Pass your own `brand` / `label`.
 
 ```tsx
-import { useSlidePageNumber } from '@open-slide/core';
+import { useSlidePageNumber } from '@open-slide/react';
 
 const Mark = ({ size = 24 }: { size?: number }) => (
   <svg
