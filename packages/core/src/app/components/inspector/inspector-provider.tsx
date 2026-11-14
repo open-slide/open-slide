@@ -25,6 +25,7 @@ import {
 import { type AddCommentInput, type SlideComment, useComments } from '@/lib/inspector/use-comments';
 import { type Edit, type EditOp, useEditor } from '@/lib/inspector/use-editor';
 import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-editor';
+import { independentTargets } from '@/lib/inspector/visual-dom';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
 import { format, plural, useLocale } from '@/lib/use-locale';
@@ -40,6 +41,7 @@ export type SelectedTarget = {
 };
 
 const INSTANCE_ID_ATTR = 'data-slide-instance-id';
+const REMOVED_ATTR = 'data-osd-removed';
 
 function elementPath(root: Element, el: Element): number[] | null {
   const path: number[] = [];
@@ -147,6 +149,7 @@ type Bucket = {
   origTexts: Map<string /* instanceId */, { value: string }>;
   origHtmls: Map<string /* instanceId */, TextDomSnapshot>;
   origAttrs: Map<string, string | null>;
+  removed: boolean;
 };
 
 function createBucket(line: number, column: number): Bucket {
@@ -161,7 +164,17 @@ function createBucket(line: number, column: number): Bucket {
     origTexts: new Map(),
     origHtmls: new Map(),
     origAttrs: new Map(),
+    removed: false,
   };
+}
+
+function bucketIsEmpty(bucket: Bucket): boolean {
+  return (
+    bucket.styleOps.size === 0 &&
+    bucket.textEdits.size === 0 &&
+    bucket.attrOps.size === 0 &&
+    !bucket.removed
+  );
 }
 
 export type DomTextPart = {
@@ -535,9 +548,7 @@ export function InspectorProvider({
   const refreshCount = useCallback(() => {
     let n = 0;
     for (const b of pendingRef.current.values()) {
-      if (b.styleOps.size > 0 || b.textEdits.size > 0 || b.attrOps.size > 0) {
-        n++;
-      }
+      if (!bucketIsEmpty(b)) n++;
     }
     setPendingCount(n);
     setOpsVersion((v) => v + 1);
@@ -830,9 +841,7 @@ export function InspectorProvider({
           }
         }
       }
-      if (bucket.styleOps.size === 0 && bucket.textEdits.size === 0 && bucket.attrOps.size === 0) {
-        pendingRef.current.delete(key);
-      }
+      if (bucketIsEmpty(bucket)) pendingRef.current.delete(key);
       refreshCount();
     },
     [findAnchor, findTextAnchor, refreshCount],
@@ -944,6 +953,60 @@ export function InspectorProvider({
     ],
   );
 
+  // Every DOM instance of the loc hides: removal edits the shared JSX, so
+  // `.map()` items and reused components all disappear on save.
+  const setRemovedRaw = useCallback(
+    (line: number, column: number, removed: boolean) => {
+      const key = `${line}:${column}`;
+      let bucket = pendingRef.current.get(key);
+      if (!bucket) {
+        if (!removed) return;
+        bucket = createBucket(line, column);
+        pendingRef.current.set(key, bucket);
+      }
+      bucket.removed = removed;
+      const root = document.querySelector<HTMLElement>('[data-inspector-root]');
+      for (const el of root?.querySelectorAll(`[data-slide-loc="${key}"]`) ?? []) {
+        el.toggleAttribute(REMOVED_ATTR, removed);
+      }
+      if (bucketIsEmpty(bucket)) pendingRef.current.delete(key);
+      refreshCount();
+    },
+    [refreshCount],
+  );
+
+  const removeElements = useCallback(
+    (targets: SelectedTarget[]) => {
+      if (committing) return;
+      const unique = new Map<string, SelectedTarget>();
+      for (const target of independentTargets(targets)) {
+        const hit = findSlideSource(target.anchor, slideId, { hostOnly: true }) ?? target;
+        const key = `${hit.line}:${hit.column}`;
+        if (!pendingRef.current.get(key)?.removed) unique.set(key, hit);
+      }
+      const removed = [...unique.values()];
+      if (!removed.length) return;
+      const reveal = removed.map(captureRevealTarget);
+      const apply = (value: boolean) => {
+        for (const target of removed) setRemovedRaw(target.line, target.column, value);
+      };
+      apply(true);
+      setSelection([]);
+      history.record({
+        pageIndex,
+        undo: () => {
+          apply(false);
+          revealTargets(reveal, pageIndex);
+        },
+        redo: () => {
+          apply(true);
+          setSelection([]);
+        },
+      });
+    },
+    [committing, slideId, setRemovedRaw, setSelection, history, pageIndex, revealTargets],
+  );
+
   const visual = useVisualEditor({
     active,
     inlineEditing: !!inlineEdit,
@@ -952,6 +1015,7 @@ export function InspectorProvider({
     selection,
     setSelection,
     bufferBatch,
+    removeElements,
   });
 
   const commitEdits = useCallback(async () => {
@@ -967,6 +1031,18 @@ export function InspectorProvider({
     const pending: PendingItem[] = [];
     for (const bucket of buckets.values()) {
       const { line, column, styleOps, textEdits, attrOps } = bucket;
+      if (bucket.removed) {
+        pending.push({
+          bucket,
+          // Removals go last so edits inside the removed element don't fail
+          // with "target was removed by an earlier edit".
+          seq: Number.MAX_SAFE_INTEGER,
+          edit: { line, column, ops: [{ kind: 'remove-element' }] },
+          onSuccess: (b) => {
+            b.removed = false;
+          },
+        });
+      }
       for (const [k, op] of styleOps) {
         pending.push({
           bucket,
@@ -1054,11 +1130,7 @@ export function InspectorProvider({
         const bucket = item.bucket;
         if (r.ok) {
           item.onSuccess(bucket);
-          if (
-            bucket.styleOps.size === 0 &&
-            bucket.textEdits.size === 0 &&
-            bucket.attrOps.size === 0
-          ) {
+          if (bucketIsEmpty(bucket)) {
             for (const [key, pendingBucket] of pendingRef.current) {
               if (pendingBucket === bucket) pendingRef.current.delete(key);
             }
@@ -1085,6 +1157,9 @@ export function InspectorProvider({
       return;
     }
     const root = document.querySelector<HTMLElement>('[data-inspector-root]');
+    for (const el of root?.querySelectorAll(`[${REMOVED_ATTR}]`) ?? []) {
+      el.removeAttribute(REMOVED_ATTR);
+    }
     for (const b of pendingRef.current.values()) {
       const sharedEl = root?.querySelector<HTMLElement>(`[data-slide-loc="${b.line}:${b.column}"]`);
       if (sharedEl) {
@@ -1150,6 +1225,7 @@ export function InspectorProvider({
       for (const [attr, op] of bucket.attrOps) {
         if (el.getAttribute(attr) !== op.previewUrl) el.setAttribute(attr, op.previewUrl);
       }
+      if (bucket.removed && !el.hasAttribute(REMOVED_ATTR)) el.setAttribute(REMOVED_ATTR, '');
     };
 
     let observer: MutationObserver | null = null;

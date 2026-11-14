@@ -58,6 +58,7 @@ Width, height, and rotation inputs apply to one element at a time.
 | `I` | Show or hide the Format panel |
 | Arrow keys | Move the selection by 1 slide pixel |
 | `Shift` + arrow keys | Move by 10 slide pixels |
+| `Delete` / `Backspace` | Remove the selected elements |
 | `Shift` while dragging | Constrain movement to one axis |
 | `Shift` while resizing | Preserve the aspect ratio |
 | `Alt` while dragging | Temporarily bypass smart guides |
@@ -70,9 +71,9 @@ Width, height, and rotation inputs apply to one element at a time.
 
 Inline text spans inherit their containing block's layout. Use **Select
 parent** to move that block. Elements rendered repeatedly from the same JSX
-definition also share source styles; select a unique parent container to
-arrange an instance independently. The panel explains when a selected element
-cannot be transformed.
+definition also share source styles, and deleting one removes them all;
+select a unique parent container to arrange an instance independently. The
+panel explains when a selected element cannot be transformed.
 Layer changes preserve nested content's position and size. If shared nested
 content prevents this, select a positioned parent container to change layers.
 

@@ -138,6 +138,7 @@ type Options = {
   selection: SelectedTarget[];
   setSelection: (targets: SelectedTarget[]) => void;
   bufferBatch: (edits: VisualEdit[], coalesceKey?: string) => void;
+  removeElements: (targets: SelectedTarget[]) => void;
 };
 
 export function useVisualEditor({
@@ -148,6 +149,7 @@ export function useVisualEditor({
   selection,
   setSelection,
   bufferBatch,
+  removeElements,
 }: Options) {
   const [snapping, setSnapping] = useState(true);
   const t = useLocale();
@@ -393,6 +395,12 @@ export function useVisualEditor({
         return;
       }
       if (!selection.length || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        removeElements(selection);
+        return;
+      }
       const vectors: Record<string, { x: number; y: number }> = {
         ArrowLeft: { x: -1, y: 0 },
         ArrowRight: { x: 1, y: 0 },
@@ -411,7 +419,7 @@ export function useVisualEditor({
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [active, inlineEditing, committing, selection, move, selectAll]);
+  }, [active, inlineEditing, committing, selection, move, selectAll, removeElements]);
 
   return useMemo(
     () => ({
