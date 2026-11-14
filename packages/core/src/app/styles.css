@@ -332,6 +332,11 @@
   }
 }
 
+[data-osd-removed] {
+  /* biome-ignore lint/complexity/noImportantStyles: A pending removal must hide the element over any slide-authored display, including inline styles. */
+  display: none !important;
+}
+
 [data-osd-freeze-motion],
 [data-osd-freeze-motion] *,
 [data-osd-freeze-motion] *::before,
