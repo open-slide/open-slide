@@ -354,7 +354,21 @@ function captureTextDom(
   el: HTMLElement,
   whiteSpace: WhiteSpaceResolver = computedWhiteSpace,
 ): TextDomSnapshot {
-  return { html: el.innerHTML, whiteSpaces: textSnapshotElements(el).map(whiteSpace) };
+  return {
+    html: htmlWithoutRemovalMarkers(el),
+    whiteSpaces: textSnapshotElements(el).map(whiteSpace),
+  };
+}
+
+// Removal markers are pending preview state; a snapshot that kept them would
+// re-hide a child on cancel, undo, or replay after its removal was dropped.
+function htmlWithoutRemovalMarkers(el: HTMLElement): string {
+  if (!el.querySelector(`[${REMOVED_ATTR}]`)) return el.innerHTML;
+  const clone = el.cloneNode(true) as HTMLElement;
+  for (const marked of clone.querySelectorAll(`[${REMOVED_ATTR}]`)) {
+    marked.removeAttribute(REMOVED_ATTR);
+  }
+  return clone.innerHTML;
 }
 
 function textEditHtml(snapshot: TextDomSnapshot, steps: TextEditStep[]): TextDomSnapshot {
@@ -1157,9 +1171,6 @@ export function InspectorProvider({
       return;
     }
     const root = document.querySelector<HTMLElement>('[data-inspector-root]');
-    for (const el of root?.querySelectorAll(`[${REMOVED_ATTR}]`) ?? []) {
-      el.removeAttribute(REMOVED_ATTR);
-    }
     for (const b of pendingRef.current.values()) {
       const sharedEl = root?.querySelector<HTMLElement>(`[data-slide-loc="${b.line}:${b.column}"]`);
       if (sharedEl) {
@@ -1181,6 +1192,9 @@ export function InspectorProvider({
           root?.querySelector<HTMLElement>(`[${INSTANCE_ID_ATTR}="${instanceId}"]`) ?? null;
         if (textEl?.isConnected) setEditableText(textEl, orig.value);
       }
+    }
+    for (const el of root?.querySelectorAll(`[${REMOVED_ATTR}]`) ?? []) {
+      el.removeAttribute(REMOVED_ATTR);
     }
     pendingRef.current = new Map();
     setPendingCount(0);
