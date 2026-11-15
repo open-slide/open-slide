@@ -17,7 +17,7 @@ const MANAGED_CORE_ENV = 'OPEN_SLIDE_MANAGED_CORE';
 const LISTEN_TIMEOUT_MS = 60_000;
 const LOG_LIMIT = 200 * 1024;
 
-export type ServerFailure = {
+type ServerFailure = {
   reason: 'core-missing' | 'timeout' | 'exited';
   code?: number | null;
   signal?: string | null;
@@ -47,10 +47,13 @@ function reservePort(port: number): Promise<number> {
 export class DevServer extends EventEmitter<ServerEvents> {
   status: ServerStatus = { state: 'idle' };
   private child: ChildProcess | null = null;
+  private exited: Promise<void> | null = null;
   private root: string | null = null;
   private port: number | null = null;
   private logText = '';
   private generation = 0;
+  private request = 0;
+  private queue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly env: () => Promise<NodeJS.ProcessEnv>,
@@ -68,20 +71,25 @@ export class DevServer extends EventEmitter<ServerEvents> {
     return this.logText;
   }
 
-  async start(root: string): Promise<void> {
-    await this.stop();
-    this.root = root;
-    this.port = null;
-    this.logText = '';
-    await this.spawn();
+  start(root: string): Promise<void> {
+    return this.enqueue(async (latest) => {
+      if (!latest()) return;
+      await this.halt();
+      this.root = root;
+      this.port = null;
+      this.logText = '';
+      await this.spawn();
+    });
   }
 
-  async restart(): Promise<void> {
-    if (!this.root) return;
-    const root = this.root;
-    await this.stop();
-    this.root = root;
-    await this.spawn();
+  restart(): Promise<void> {
+    return this.enqueue(async (latest) => {
+      const root = this.root;
+      if (!root || !latest()) return;
+      await this.halt();
+      this.root = root;
+      await this.spawn();
+    });
   }
 
   markInstalling() {
@@ -89,25 +97,40 @@ export class DevServer extends EventEmitter<ServerEvents> {
   }
 
   stop(): Promise<void> {
+    return this.enqueue(async (latest) => {
+      if (latest()) await this.halt();
+    });
+  }
+
+  // Starts and stops run one at a time, and a request overtaken while it
+  // waited does nothing, so the server left running always belongs to the last
+  // workspace asked for.
+  private enqueue(task: (latest: () => boolean) => Promise<void>): Promise<void> {
+    const request = ++this.request;
+    const run = this.queue.then(() => task(() => request === this.request));
+    this.queue = run.catch(() => {});
+    return run;
+  }
+
+  private async halt(): Promise<void> {
     this.generation++;
     const child = this.child;
+    const exited = this.exited;
     this.child = null;
+    this.exited = null;
     this.root = null;
     this.setStatus({ state: 'idle' });
-    if (!child || child.exitCode !== null) return Promise.resolve();
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => child.kill('SIGKILL'), 3000);
-      child.once('exit', () => {
-        clearTimeout(timer);
-        resolve();
-      });
-      child.kill('SIGTERM');
-    });
+    if (!child || !exited || child.exitCode !== null || child.signalCode !== null) return;
+    const timer = setTimeout(() => child.kill('SIGKILL'), 3000);
+    child.kill('SIGTERM');
+    await exited;
+    clearTimeout(timer);
   }
 
   private append(text: string) {
     const clean = stripAnsi(text);
-    this.logText = (this.logText + clean).slice(-LOG_LIMIT);
+    this.logText += clean;
+    if (this.logText.length > LOG_LIMIT * 2) this.logText = this.logText.slice(-LOG_LIMIT);
     this.emit('log', clean);
   }
 
@@ -121,8 +144,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
     if (!root) return;
     const { bin } = bundledCore();
     if (!existsSync(bin)) {
-      this.setStatus({ state: 'error', message: 'The bundled @open-slide/core is missing.' });
-      this.emit('failure', { reason: 'core-missing' });
+      this.fail('core-missing', 'The bundled @open-slide/core is missing.');
       return;
     }
     if (needsInstall(root)) {
@@ -131,15 +153,21 @@ export class DevServer extends EventEmitter<ServerEvents> {
     }
     const generation = ++this.generation;
     this.setStatus({ state: 'starting' });
-    // Each workspace keeps its port across launches: the port is part of the
-    // tabs' origin, and with it their localStorage (theme, agent panel state).
-    if (this.port === null) {
-      const preferred = this.ports.get(root);
-      this.port = await (preferred ? reservePort(preferred) : Promise.reject()).catch(() =>
-        reservePort(0),
-      );
+    let env: NodeJS.ProcessEnv;
+    try {
+      // Each workspace keeps its port across launches: the port is part of the
+      // tabs' origin, and with it their localStorage (theme, agent panel state).
+      if (this.port === null) {
+        const preferred = this.ports.get(root);
+        this.port = await (preferred ? reservePort(preferred) : Promise.reject()).catch(() =>
+          reservePort(0),
+        );
+      }
+      env = await this.env();
+    } catch (err) {
+      if (generation === this.generation) this.fail('exited', (err as Error).message);
+      return;
     }
-    const env = await this.env();
     if (generation !== this.generation) return;
 
     const child = fork(bin, ['dev', '--port', String(this.port), '--no-skills-check'], {
@@ -151,7 +179,6 @@ export class DevServer extends EventEmitter<ServerEvents> {
         [DEV_SUPERVISED_ENV]: '1',
         [MANAGED_CORE_ENV]: '1',
         [CACHE_DIR_ENV]: this.cacheDirFor(root),
-        OPEN_SLIDE_SKIP_SKILLS_CHECK: '1',
         FORCE_COLOR: '0',
       },
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
@@ -160,11 +187,44 @@ export class DevServer extends EventEmitter<ServerEvents> {
     child.stdout?.on('data', (d: Buffer) => this.append(d.toString('utf8')));
     child.stderr?.on('data', (d: Buffer) => this.append(d.toString('utf8')));
 
-    const timeout = setTimeout(() => {
-      if (generation === this.generation && this.status.state === 'starting') {
-        this.setStatus({ state: 'error', message: 'The dev server did not start in time.' });
-        this.emit('failure', { reason: 'timeout' });
+    let ended = false;
+    let timedOut = false;
+    const end = (code: number | null, signal: string | null, error?: Error) => {
+      if (ended) return;
+      ended = true;
+      clearTimeout(timeout);
+      if (generation !== this.generation) return;
+      this.child = null;
+      this.exited = null;
+      if (timedOut) return;
+      if (code === RESTART_EXIT_CODE) {
+        this.append('\nRestarting dev server…\n');
+        void this.spawn();
+        return;
       }
+      const reason = error ? error.message : signal ? `signal ${signal}` : `code ${code}`;
+      this.fail('exited', `The dev server exited (${reason}).`, code, signal);
+    };
+
+    this.exited = new Promise((resolve) => {
+      child.once('exit', (code, signal) => {
+        end(code, signal);
+        resolve();
+      });
+      child.on('error', (err) => {
+        this.append(`${err.message}\n`);
+        // Only a failed spawn ends the child; it never emits exit.
+        if (child.pid !== undefined) return;
+        end(null, null, err);
+        resolve();
+      });
+    });
+
+    const timeout = setTimeout(() => {
+      if (generation !== this.generation || this.status.state !== 'starting') return;
+      timedOut = true;
+      this.fail('timeout', 'The dev server did not start in time.');
+      child.kill('SIGKILL');
     }, LISTEN_TIMEOUT_MS);
 
     child.on('message', (message) => {
@@ -176,19 +236,15 @@ export class DevServer extends EventEmitter<ServerEvents> {
       this.ports.set(root, port);
       this.setStatus({ state: 'ready', url: `http://localhost:${port}` });
     });
+  }
 
-    child.on('exit', (code, signal) => {
-      clearTimeout(timeout);
-      if (generation !== this.generation) return;
-      this.child = null;
-      if (code === RESTART_EXIT_CODE) {
-        this.append('\nRestarting dev server…\n');
-        void this.spawn();
-        return;
-      }
-      const reason = signal ? `signal ${signal}` : `code ${code}`;
-      this.setStatus({ state: 'error', message: `The dev server exited (${reason}).` });
-      this.emit('failure', { reason: 'exited', code, signal });
-    });
+  private fail(
+    reason: ServerFailure['reason'],
+    message: string,
+    code?: number | null,
+    signal?: string | null,
+  ) {
+    this.setStatus({ state: 'error', message });
+    this.emit('failure', { reason, code, signal });
   }
 }
