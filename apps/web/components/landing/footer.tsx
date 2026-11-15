@@ -31,6 +31,7 @@ export function Footer() {
             ['Features', '/#features'],
             ['Docs', '/docs'],
             ['Changelog', '/changelog'],
+            ['Desktop', '/desktop'],
             ['FAQ', '/#faq'],
           ]}
         />

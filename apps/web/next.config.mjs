@@ -1,3 +1,4 @@
+import { wgslTurbopackRule } from '@vgpu/wgsl/next';
 import { createMDX } from 'fumadocs-mdx/next';
 
 const withMDX = createMDX();
@@ -6,6 +7,11 @@ const withMDX = createMDX();
 const config = {
   reactStrictMode: true,
   skipTrailingSlashRedirect: true,
+  turbopack: {
+    rules: {
+      '*.wgsl': wgslTurbopackRule({ minify: true }),
+    },
+  },
   async rewrites() {
     return [
       {
