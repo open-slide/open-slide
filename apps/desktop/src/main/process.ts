@@ -16,6 +16,12 @@ export type RunHandle = {
   done: Promise<{ code: number | null; output: string }>;
 };
 
+const running = new Set<ChildProcess>();
+
+export function killRunning() {
+  for (const child of running) child.kill();
+}
+
 const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[ -/]*[@-~]`, 'g');
 
 export function stripAnsi(text: string): string {
@@ -31,6 +37,7 @@ export function run(cmd: string, args: string[], opts: RunOptions): RunHandle {
     shell: process.platform === 'win32' && !path.isAbsolute(cmd),
     windowsHide: true,
   });
+  running.add(child);
   let output = '';
   const onData = (data: Buffer) => {
     const chunk = stripAnsi(data.toString('utf8'));
@@ -44,11 +51,13 @@ export function run(cmd: string, args: string[], opts: RunOptions): RunHandle {
       ? setTimeout(() => child.kill(), opts.timeoutMs).unref()
       : undefined;
     child.on('error', (err) => {
+      running.delete(child);
       clearTimeout(timer);
       onData(Buffer.from(`${err.message}\n`));
       resolve({ code: -1, output });
     });
     child.on('close', (code) => {
+      running.delete(child);
       clearTimeout(timer);
       resolve({ code, output });
     });

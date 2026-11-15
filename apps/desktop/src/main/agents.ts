@@ -3,7 +3,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentId, AgentInfo, LoginEvent, TaskResult } from '../shared/types';
-import { cancelInstall, canInstallCli, installCli, isManagedCli } from './agent-cli';
+import { cancelInstall, canInstallCli, cliSpec, installCli, isManagedCli } from './agent-cli';
 import { run } from './process';
 import { findOnPath } from './shell-env';
 import { modulesDir } from './workspace';
@@ -11,6 +11,11 @@ import { modulesDir } from './workspace';
 const STATUS_TIMEOUT_MS = 10_000;
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
 const URL_RE = /https?:\/\/[^\s"'<>]+/;
+// Output arrives in arbitrary chunks, so a URL only counts as whole once
+// something follows it.
+const COMPLETE_URL_RE = /https?:\/\/[^\s"'<>]+(?=[\s"'<>])/;
+const URL_SETTLE_MS = 200;
+const URL_SCAN_LIMIT = 8 * 1024;
 
 type AgentSpec = {
   id: AgentId;
@@ -26,9 +31,7 @@ type AgentSpec = {
 const AGENTS: AgentSpec[] = [
   {
     id: 'claude',
-    name: 'Claude Code',
-    sdkPackage: '@anthropic-ai/claude-agent-sdk',
-    command: 'claude',
+    ...cliSpec('claude'),
     statusArgs: ['auth', 'status', '--json'],
     parseStatus(_code, output) {
       try {
@@ -47,9 +50,7 @@ const AGENTS: AgentSpec[] = [
   },
   {
     id: 'codex',
-    name: 'Codex',
-    sdkPackage: '@openai/codex-sdk',
-    command: 'codex',
+    ...cliSpec('codex'),
     statusArgs: ['login', 'status'],
     parseStatus(code, output) {
       const line = output.trim().split('\n').pop()?.trim() ?? '';
@@ -139,7 +140,7 @@ export async function login(
   env: NodeJS.ProcessEnv,
   emit: (event: LoginEvent) => void,
   openUrl: (url: string) => void,
-): Promise<TaskResult> {
+): Promise<TaskResult & { superseded?: boolean }> {
   const agent = spec(id);
   if (!resolveCli(agent, env) && canInstallCli(id)) {
     try {
@@ -154,6 +155,15 @@ export async function login(
   if (!cli) return { ok: false, error: `${agent.name} is not available on this platform.` };
   logins.get(id)?.kill();
   let opened = false;
+  let scanned = '';
+  let settle: NodeJS.Timeout | undefined;
+  const openFrom = (pattern: RegExp) => {
+    const url = opened ? null : pattern.exec(scanned)?.[0];
+    if (!url) return;
+    opened = true;
+    emit({ id, type: 'url', url });
+    openUrl(url);
+  };
   const handle = run(cli.path, agent.loginArgs, {
     cwd: os.homedir(),
     env,
@@ -161,17 +171,20 @@ export async function login(
     timeoutMs: LOGIN_TIMEOUT_MS,
     onChunk(chunk) {
       emit({ id, type: 'output', chunk });
-      const url = URL_RE.exec(chunk)?.[0];
-      if (url && !opened) {
-        opened = true;
-        emit({ id, type: 'url', url });
-        openUrl(url);
-      }
+      if (opened) return;
+      scanned = (scanned + chunk).slice(-URL_SCAN_LIMIT);
+      clearTimeout(settle);
+      openFrom(COMPLETE_URL_RE);
+      // A prompt can end on the URL and wait there for input.
+      if (!opened) settle = setTimeout(() => openFrom(URL_RE), URL_SETTLE_MS);
     },
   });
   logins.set(id, handle.child);
   const { code } = await handle.done;
-  if (logins.get(id) === handle.child) logins.delete(id);
+  clearTimeout(settle);
+  // A sign-in replaced by a newer one must not end the newer one's UI state.
+  if (logins.get(id) !== handle.child) return { ok: true, superseded: true };
+  logins.delete(id);
   emit({ id, type: 'exit', ok: code === 0 });
   return code === 0 ? { ok: true } : { ok: false, error: `Sign-in exited with code ${code}` };
 }

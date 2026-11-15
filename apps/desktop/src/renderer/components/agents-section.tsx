@@ -17,6 +17,8 @@ export type Login = {
   download: { received: number; total: number | null } | null;
 };
 
+const LOGIN_OUTPUT_LIMIT = 16 * 1024;
+
 export const IDLE_LOGIN: Login = {
   output: '',
   url: null,
@@ -34,6 +36,8 @@ export function useAgents() {
     setRefreshing(true);
     try {
       setAgents(await desktop.agents.list());
+    } catch {
+      setAgents((prev) => prev ?? []);
     } finally {
       setRefreshing(false);
     }
@@ -49,7 +53,8 @@ export function useAgents() {
         setLogins((prev) => {
           const current = prev[event.id] ?? { ...IDLE_LOGIN, running: true };
           if (event.type === 'output') {
-            return { ...prev, [event.id]: { ...current, output: current.output + event.chunk } };
+            const output = (current.output + event.chunk).slice(-LOGIN_OUTPUT_LIMIT);
+            return { ...prev, [event.id]: { ...current, output } };
           }
           if (event.type === 'url') return { ...prev, [event.id]: { ...current, url: event.url } };
           if (event.type === 'download') {

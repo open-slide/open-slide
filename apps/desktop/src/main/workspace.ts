@@ -27,6 +27,13 @@ export function modulesDir(): string {
 // the workspace installed. The workspace only supplies slides, themes, assets
 // and its config.
 export function bundledCore(): { bin: string; version: string } {
+  core ??= readBundledCore();
+  return core;
+}
+
+let core: { bin: string; version: string } | null = null;
+
+function readBundledCore(): { bin: string; version: string } {
   const dir = path.join(modulesDir(), '@open-slide', 'core');
   const version = readPackageJson(dir)?.version;
   return {

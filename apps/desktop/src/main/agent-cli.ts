@@ -27,6 +27,7 @@ const CODEX_TRIPLES: Record<string, string> = {
 type CliSpec = {
   command: string;
   sdkPackage: string;
+  sdkName: string;
   // The SDK dependency whose optionalDependencies pin the per-platform CLI
   // build, when the SDK does not pin it itself.
   pinnedBy?: string;
@@ -41,12 +42,14 @@ const SPECS: Record<AgentId, CliSpec> = {
   claude: {
     command: 'claude',
     sdkPackage: '@anthropic-ai/claude-agent-sdk',
+    sdkName: 'Claude Code',
     platformPackage: `@anthropic-ai/claude-agent-sdk-${PLATFORM}`,
     binDirs: (root) => [root],
   },
   codex: {
     command: 'codex',
     sdkPackage: '@openai/codex-sdk',
+    sdkName: 'Codex',
     pinnedBy: '@openai/codex',
     platformPackage: `@openai/codex-${PLATFORM}`,
     binDirs: (root) => {
@@ -59,7 +62,12 @@ const SPECS: Record<AgentId, CliSpec> = {
 
 type Pin = { name: string; version: string };
 
-export type DownloadProgress = { received: number; total: number | null };
+type DownloadProgress = { received: number; total: number | null };
+
+export function cliSpec(id: AgentId): { command: string; sdkPackage: string; name: string } {
+  const { command, sdkPackage, sdkName } = SPECS[id];
+  return { command, sdkPackage, name: sdkName };
+}
 
 function agentsRoot(): string {
   return path.join(app.getPath('userData'), 'agents');
@@ -89,7 +97,15 @@ function findPackageJson(fromDir: string, name: string): string | null {
 
 // The SDK ships without its native CLI; the exact build it expects is the one
 // its package pins for this platform.
+const pins = new Map<CliSpec, Pin | null>();
+
+// The bundled SDKs never change while the app runs.
 function pin(spec: CliSpec): Pin | null {
+  if (!pins.has(spec)) pins.set(spec, readPin(spec));
+  return pins.get(spec) ?? null;
+}
+
+function readPin(spec: CliSpec): Pin | null {
   const sdkDir = path.join(modulesDir(), spec.sdkPackage);
   if (!existsSync(path.join(sdkDir, 'package.json'))) return null;
   const pinnedByJson = spec.pinnedBy
@@ -140,6 +156,13 @@ export function isManagedCli(file: string): boolean {
 // even before it exists, so a CLI downloaded mid-session is found by servers
 // that are already running; until then an older download stands in.
 export function managedCliDirs(): string[] {
+  cliDirs ??= findManagedCliDirs();
+  return cliDirs;
+}
+
+let cliDirs: string[] | null = null;
+
+function findManagedCliDirs(): string[] {
   return (Object.keys(SPECS) as AgentId[]).flatMap((id) => {
     const current = pin(SPECS[id])?.version;
     const versions = current ? [current] : [];
@@ -167,6 +190,10 @@ export function cancelInstall(id: AgentId) {
   installs.get(id)?.abort.abort();
 }
 
+export function cancelAllInstalls() {
+  for (const { abort } of installs.values()) abort.abort();
+}
+
 async function download(
   id: AgentId,
   signal: AbortSignal,
@@ -182,6 +209,9 @@ async function download(
   const dist = ((await metaRes.json()) as { dist?: { tarball?: string; integrity?: string } }).dist;
   const expected = dist?.integrity?.startsWith('sha512-') ? dist.integrity.slice(7) : null;
   if (!dist?.tarball || !expected) throw new Error(`Registry has no checksum for ${target.name}.`);
+  if (!dist.tarball.startsWith(`${REGISTRY}/`)) {
+    throw new Error(`Registry pointed ${target.name} at an unexpected host.`);
+  }
 
   const agentDir = path.join(agentsRoot(), id);
   const tarball = path.join(agentDir, `.${target.version}.tgz`);
@@ -238,6 +268,7 @@ async function download(
 
     await rm(versionDir(id, target.version), { recursive: true, force: true });
     await rename(staging, versionDir(id, target.version));
+    cliDirs = null;
     if (!existsSync(executable(id, target.version))) {
       throw new Error(`${target.name} did not contain a ${SPECS[id].command} executable.`);
     }
@@ -259,6 +290,7 @@ export async function syncManagedClis() {
       for (const stale of installed.filter((v) => v !== current)) {
         await rm(versionDir(id, stale), { recursive: true, force: true });
       }
+      cliDirs = null;
     } else {
       void installCli(id, () => {}).catch(() => {});
     }
