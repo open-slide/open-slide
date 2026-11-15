@@ -76,8 +76,11 @@ export function createSessionStore(opts: { file: string | null }) {
     }
   }
 
+  let rev = 0;
+
   const emit = (event: AgentStreamEvent) => {
-    for (const l of listeners) l(event);
+    const numbered = { ...event, rev: ++rev };
+    for (const l of listeners) l(numbered);
   };
 
   const scheduleSave = () => {
@@ -264,5 +267,6 @@ export function createSessionStore(opts: { file: string | null }) {
     appendDelta,
     subscribe,
     flush,
+    rev: () => rev,
   };
 }

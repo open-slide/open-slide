@@ -23,6 +23,7 @@ import {
   consumeRequest,
   createSession,
   deleteSession,
+  openSessionInHost,
   readyProviders,
   resolveModelChoice,
   respond,
@@ -37,7 +38,6 @@ import {
   useAgentStatus,
   useCreateDeck,
 } from '@/lib/agent/use-agent';
-import { openDeckInHost } from '@/lib/desktop';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import { applyCommentsPrompt } from '../../../agent/prompt';
@@ -98,6 +98,11 @@ export function AgentPanel({
     if (active?.slideId && active.slideId !== slideId) setActiveSession(null);
   }, [slideId, sessionsLoaded, activeId, sessions]);
   const isNewDeck = Boolean(context.slideId) && newDeck === context.slideId;
+
+  // A session handed over from another tab can arrive while history is showing.
+  useEffect(() => {
+    if (activeId) setView('chat');
+  }, [activeId]);
 
   const ensureSession = useCallback(
     async (fresh: boolean) => {
@@ -301,11 +306,11 @@ export function AgentPanel({
           activeId={activeId}
           slideId={context.slideId ?? null}
           onSelect={(s) => {
-            setActiveSession(s.id);
             setView('chat');
-            if (s.slideId && s.slideId !== context.slideId) {
-              if (!openDeckInHost(s.slideId)) navigate(`/s/${s.slideId}`);
-            }
+            const deck = s.slideId && s.slideId !== context.slideId ? s.slideId : null;
+            if (deck && openSessionInHost(deck, s.id)) return;
+            setActiveSession(s.id);
+            if (deck) navigate(`/s/${deck}`);
           }}
           onDelete={async (id) => {
             try {

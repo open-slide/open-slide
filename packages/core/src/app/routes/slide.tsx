@@ -63,7 +63,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { setDockOpen, useAgentActivity, useAgentDock } from '@/lib/agent/use-agent';
+import {
+  setDockOpen,
+  useAgentActivity,
+  useAgentDock,
+  useSessionHandoff,
+} from '@/lib/agent/use-agent';
 import { openHomeInHost } from '@/lib/desktop';
 import { useFolders } from '@/lib/folders';
 import {
@@ -149,6 +154,7 @@ export function Slide() {
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const { open: agentOpen, toggle: toggleAgent } = useAgentDock();
+  useSessionHandoff(slideId);
   useLayoutEffect(() => {
     if (agentOpen) setDesignOpen(false);
   }, [agentOpen]);

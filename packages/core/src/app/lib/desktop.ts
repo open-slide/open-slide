@@ -71,6 +71,7 @@ function interceptLinkClick(host: DesktopHost, e: MouseEvent) {
   if (!(anchor instanceof HTMLAnchorElement) || (anchor.target && anchor.target !== '_self')) {
     return;
   }
+  if (anchor.hasAttribute('download')) return;
   const url = new URL(anchor.href);
   if (url.origin !== window.location.origin) return;
   const currentDeck = deckIdFromPath(window.location.pathname);

@@ -124,7 +124,7 @@ export function SlideCommandMenu({
         icon: <ChevronLeft />,
         keywords: ['home', 'back', 'slides'],
         run: () => {
-          if (!openHomeInHost()) navigate('/');
+          if (!openHomeInHost('/')) navigate('/');
         },
       });
     }

@@ -6,14 +6,20 @@ import { pathToFileURL } from 'node:url';
 const IS_WINDOWS = process.platform === 'win32';
 const VERSION_TIMEOUT_MS = 5000;
 
-export function findOnPath(command: string, env: NodeJS.ProcessEnv = process.env): string | null {
+export function findOnPath(
+  command: string,
+  env: NodeJS.ProcessEnv = process.env,
+  accept: (candidate: string) => boolean = () => true,
+): string | null {
   const dirs = (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean);
   const exts = IS_WINDOWS ? (env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';') : [''];
   for (const dir of dirs) {
     for (const ext of exts) {
       const candidate = path.join(dir, command + ext.toLowerCase());
       try {
-        if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate;
+        if (statSync(candidate, { throwIfNoEntry: false })?.isFile() && accept(candidate)) {
+          return candidate;
+        }
       } catch {}
     }
   }
@@ -23,9 +29,8 @@ export function findOnPath(command: string, env: NodeJS.ProcessEnv = process.env
 // The SDKs spawn the CLI without a shell, which cannot run a Windows .cmd shim,
 // so only a real executable is worth overriding their bundled default with.
 export function findSpawnableCli(command: string, env: NodeJS.ProcessEnv = process.env) {
-  const found = findOnPath(command, env);
-  if (!found || !IS_WINDOWS) return found;
-  return found.toLowerCase().endsWith('.exe') ? found : null;
+  if (!IS_WINDOWS) return findOnPath(command, env);
+  return findOnPath(command, env, (candidate) => candidate.toLowerCase().endsWith('.exe'));
 }
 
 const versionCache = new Map<string, Promise<string | null>>();

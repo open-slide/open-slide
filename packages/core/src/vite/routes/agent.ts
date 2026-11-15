@@ -37,9 +37,9 @@ import { detectPackageManager } from './update.ts';
 
 // GET    /__agent/status                      → AgentStatus
 // POST   /__agent/install                     { provider } → { ok }
-// GET    /__agent/sessions                    → { sessions: AgentSessionSummary[] }
+// GET    /__agent/sessions                    → { sessions: AgentSessionSummary[], rev }
 // POST   /__agent/sessions                    { provider, slideId? } → AgentSession
-// GET    /__agent/sessions/:id                → AgentSession
+// GET    /__agent/sessions/:id                → AgentSession & { rev }
 // DELETE /__agent/sessions/:id                → { ok }
 // POST   /__agent/sessions/:id/messages       { text, context?, autoApprove?, model?, effort?, edit? } → { ok }
 // POST   /__agent/sessions/:id/stop           → { ok }
@@ -231,7 +231,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
 
       if (method === 'GET' && url.pathname === '/sessions') {
         res.setHeader('cache-control', 'no-store');
-        return json(res, 200, { sessions: store.list() });
+        return json(res, 200, { sessions: store.list(), rev: store.rev() });
       }
 
       if (method === 'POST' && url.pathname === '/sessions') {
@@ -255,7 +255,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
 
         if (method === 'GET' && !action) {
           res.setHeader('cache-control', 'no-store');
-          return json(res, 200, session);
+          return json(res, 200, { ...session, rev: store.rev() });
         }
 
         if (method === 'DELETE' && !action) {

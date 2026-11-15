@@ -134,13 +134,19 @@ export type RespondPayload =
 // The HMR custom event that carries AgentStreamEvent payloads.
 export const AGENT_EVENT = 'open-slide:agent';
 
-export type AgentStreamEvent =
+// `rev` numbers the session store's events. A snapshot read from the store
+// carries the count it was taken at, which tells a client holding both which
+// events that snapshot already includes.
+export type AgentStreamEvent = (
   | { type: 'session'; session: AgentSessionSummary }
   | { type: 'session-removed'; sessionId: string }
   | { type: 'item'; sessionId: string; item: AgentItem }
   | { type: 'delta'; sessionId: string; itemId: string; text: string }
   | { type: 'truncate'; sessionId: string; itemId: string }
-  | { type: 'slide-renamed'; from: string; to: string };
+  | { type: 'slide-renamed'; from: string; to: string }
+) & { rev?: number };
+
+export type AgentSnapshot<T> = T & { rev: number };
 
 export function sessionSummary(session: AgentSession): AgentSessionSummary {
   const {

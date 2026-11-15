@@ -67,6 +67,20 @@ describe('findOnPath', () => {
     expect(findOnPath('other-cli', { PATH: bin })).toBeNull();
     expect(findOnPath('fake-cli', { PATH: '' })).toBeNull();
   });
+
+  it('keeps searching past a candidate it is told to skip', async () => {
+    const first = path.join(dir, 'first');
+    const second = path.join(dir, 'second');
+    await mkdir(first);
+    await mkdir(second);
+    await writeFile(path.join(first, 'fake-cli'), '');
+    await writeFile(path.join(second, 'fake-cli'), '');
+    const env = { PATH: `${first}${path.delimiter}${second}` };
+    expect(findOnPath('fake-cli', env, (file) => !file.startsWith(first))).toBe(
+      path.join(second, 'fake-cli'),
+    );
+    expect(findOnPath('fake-cli', env, () => false)).toBeNull();
+  });
 });
 
 describe('resolveWorkspacePackage', () => {

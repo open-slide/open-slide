@@ -61,6 +61,8 @@ describe('createSessionStore', () => {
       'item',
       'session',
     ]);
+    expect(events.map((e) => e.rev)).toEqual(events.map((_, i) => i + 1));
+    expect(store.rev()).toBe(events.length);
   });
 
   it('ignores deltas for non-assistant items and unknown ids', () => {
