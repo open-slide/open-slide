@@ -52,6 +52,11 @@ async function startServer(opts: DevOptions): Promise<void> {
   if (process.send && address && typeof address === 'object') {
     process.send({ type: 'open-slide:listening', port: address.port });
   }
+  // A supervisor that crashes or is force-quit sends no signal; its closed IPC
+  // channel is the only notice, and without it the server would keep the port.
+  process.once('disconnect', () => {
+    void server.close().finally(() => process.exit(0));
+  });
 }
 
 // Vite's built-in `r` and `u` print URLs in its own house style; override
