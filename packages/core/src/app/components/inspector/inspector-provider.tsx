@@ -27,6 +27,7 @@ import { type Edit, type EditOp, useEditor } from '@/lib/inspector/use-editor';
 import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-editor';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
+import { trackWrite, useUnsavedSource } from '@/lib/unsaved';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
 import { AssetPickerDialog } from './asset-picker-dialog';
@@ -148,6 +149,13 @@ type Bucket = {
   origHtmls: Map<string /* instanceId */, TextDomSnapshot>;
   origAttrs: Map<string, string | null>;
 };
+
+function hasBufferedOps(buckets: Map<string, Bucket>): boolean {
+  for (const b of buckets.values()) {
+    if (b.styleOps.size > 0 || b.textEdits.size > 0 || b.attrOps.size > 0) return true;
+  }
+  return false;
+}
 
 function createBucket(line: number, column: number): Bucket {
   return {
@@ -504,6 +512,8 @@ export function InspectorProvider({
   );
   const instanceCounterRef = useRef(0);
   const pendingSeqRef = useRef(0);
+  const commitInflightRef = useRef<Promise<void> | null>(null);
+  const commitFailureRef = useRef<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [committing, setCommitting] = useState(false);
   const [cropTarget, setCropTarget] = useState<{
@@ -954,8 +964,9 @@ export function InspectorProvider({
     bufferBatch,
   });
 
-  const commitEdits = useCallback(async () => {
+  const writeEdits = useCallback(async () => {
     const buckets = pendingRef.current;
+    commitFailureRef.current = null;
     if (buckets.size === 0) return;
     type PendingItem = {
       bucket: Bucket;
@@ -1068,16 +1079,36 @@ export function InspectorProvider({
         }
       }
       refreshCount();
-      if (failures.length > 0) toast.error(`${t.inspector.saveFailed} ${failures.join('; ')}`);
+      if (failures.length > 0) {
+        commitFailureRef.current = `${t.inspector.saveFailed} ${failures.join('; ')}`;
+        toast.error(commitFailureRef.current);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`${t.inspector.saveFailed} ${msg}`);
+      commitFailureRef.current = `${t.inspector.saveFailed} ${msg}`;
+      toast.error(commitFailureRef.current);
       throw err;
     } finally {
       setCommitting(false);
       history.clear();
     }
   }, [applyEdits, history, refreshCount, t]);
+
+  // One write at a time: a second commit starting while the first is in
+  // flight would send the same buffered ops twice.
+  const commitEdits = useCallback(() => {
+    const previous = commitInflightRef.current;
+    const run = (async () => {
+      await previous?.catch(() => {});
+      await writeEdits();
+    })();
+    commitInflightRef.current = run;
+    const release = () => {
+      if (commitInflightRef.current === run) commitInflightRef.current = null;
+    };
+    run.then(release, release);
+    return run;
+  }, [writeEdits]);
 
   const cancelEdits = useCallback(() => {
     if (pendingRef.current.size === 0) {
@@ -1124,9 +1155,21 @@ export function InspectorProvider({
   }, [active]);
   useEffect(() => {
     return () => {
-      commitRef.current().catch(() => {});
+      trackWrite(commitRef.current()).catch(() => {});
     };
   }, []);
+
+  useUnsavedSource({
+    kind: 'draft',
+    dirty: () => commitInflightRef.current !== null || hasBufferedOps(pendingRef.current),
+    save: async () => {
+      await commitEdits().catch(() => {});
+      if (hasBufferedOps(pendingRef.current)) {
+        throw new Error(commitFailureRef.current ?? t.inspector.saveFailed);
+      }
+    },
+    discard: cancelEdits,
+  });
 
   // Re-apply buffered ops onto any `[data-slide-loc]` element that gets
   // (re)mounted in the slide canvas. Without this, navigating to a

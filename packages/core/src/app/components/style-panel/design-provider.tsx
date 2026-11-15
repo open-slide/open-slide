@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { useHistory } from '@/components/history-provider';
 import { type DesignSystem, designToCssVars } from '../../lib/design';
 import { shuffleDesign } from '../../lib/design-presets';
+import { useUnsavedSource } from '../../lib/unsaved';
 import { useDesign as useDesignFetch } from './use-design';
 
 type DesignCtx = {
@@ -48,6 +49,10 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
   const history = useHistory();
   const draftRef = useRef<DesignSystem | null>(null);
   draftRef.current = draft;
+  // A save or discard only reaches `dirty` on the next render, so the draft it
+  // settled is remembered to answer in between.
+  const settledDraftRef = useRef<DesignSystem | null>(null);
+  const writingRef = useRef(false);
 
   useEffect(() => {
     if (design) setDraft(clone(design));
@@ -74,19 +79,46 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
     [history],
   );
 
-  const commit = useCallback(async () => {
-    if (!draft) return;
+  const write = useCallback(async (): Promise<string | null> => {
+    const saving = draftRef.current;
+    if (!saving) return null;
     setCommitting(true);
-    const r = await save(draft);
+    writingRef.current = true;
+    const r = await save(saving);
+    writingRef.current = false;
     setCommitting(false);
-    if (!r.ok) toast.error(r.error ?? 'Failed to save');
     history.clear();
-  }, [draft, save, history]);
+    if (r.ok) {
+      settledDraftRef.current = saving;
+      return null;
+    }
+    const error = r.error ?? 'Failed to save';
+    toast.error(error);
+    return error;
+  }, [save, history]);
+
+  const commit = useCallback(async () => {
+    await write();
+  }, [write]);
 
   const discard = useCallback(() => {
+    settledDraftRef.current = draftRef.current;
     if (design) setDraft(clone(design));
     history.clear();
   }, [design, history]);
+
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  useUnsavedSource({
+    kind: 'draft',
+    dirty: () =>
+      writingRef.current || (dirtyRef.current && draftRef.current !== settledDraftRef.current),
+    save: async () => {
+      const error = await write();
+      if (error) throw new Error(error);
+    },
+    discard,
+  });
 
   const shuffle = useCallback(() => {
     const prev = draftRef.current;

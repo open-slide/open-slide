@@ -1,25 +1,11 @@
 import { useTheme } from 'next-themes';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { DesktopHost, HapticPattern } from './desktop-host';
 import { slideIds } from './slides';
+import { settleUnsaved, unsavedStatus } from './unsaved';
 
-export type HapticPattern = 'alignment' | 'levelChange' | 'generic';
-
-// Injected by the open-slide desktop app's preload into every tab. Home and
-// each deck live in their own tab there, so moving between them asks the host
-// to switch tabs instead of navigating this page.
-export type DesktopHost = {
-  translucent: boolean;
-  openDeck: (slideId: string) => void;
-  openHome: (path?: string) => void;
-  setTheme: (theme: string) => void;
-  // Absent in desktop builds that predate trackpad haptics.
-  haptic?: (pattern: HapticPattern) => void;
-  // Saves the current page as a PDF via a native save dialog; resolves false
-  // when the user cancels. Absent in desktop builds that predate it.
-  printToPdf?: (filename: string) => Promise<boolean>;
-  onNavigate: (listener: (path: string) => void) => () => void;
-};
+export type { DesktopHost, HapticPattern } from './desktop-host';
 
 declare global {
   interface Window {
@@ -29,6 +15,16 @@ declare global {
 
 export const desktopHost: DesktopHost | undefined =
   typeof window === 'undefined' ? undefined : window.openSlideDesktop;
+
+if (desktopHost) {
+  desktopHost.guardUnsaved?.({ status: unsavedStatus, settle: settleUnsaved });
+  // The host settles unsaved work before it closes or reloads a tab itself;
+  // this holds the page through any other unload, such as a dev-server reload.
+  window.addEventListener('beforeunload', (e) => {
+    const { drafts, pending } = unsavedStatus();
+    if (drafts || pending) e.preventDefault();
+  });
+}
 
 const DECK_PATH_RE = /^\/s\/([^/]+)\/?$/;
 
@@ -116,6 +112,14 @@ export function DesktopBridge() {
   useEffect(() => {
     if (theme) desktopHost?.setTheme(theme);
   }, [theme]);
+
+  useEffect(
+    () =>
+      desktopHost?.onTranslucentChange?.((translucent) => {
+        document.documentElement.toggleAttribute('data-translucent', translucent);
+      }),
+    [],
+  );
 
   return null;
 }
