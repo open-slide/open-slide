@@ -46,5 +46,5 @@ export function useWorkspaceActions(openCreate: (target: CreateTarget) => void) 
     if (!result.ok) setError(result.error);
   }, []);
 
-  return { error, setError, starting, open, choose, createNew, quickStart };
+  return { error, starting, open, choose, createNew, quickStart };
 }

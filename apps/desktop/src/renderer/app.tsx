@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { type CreateTarget, CreateWorkspaceDialog } from './components/create-workspace-dialog';
-import { Intro } from './components/intro';
-import { Onboarding } from './components/onboarding';
 import { ServerScreen } from './components/server-screen';
 import { SettingsWindow } from './components/settings';
 import { TabStrip } from './components/tab-strip';
@@ -10,11 +8,23 @@ import { Welcome } from './components/welcome';
 import { desktop, useAppState, useWindowAppearance } from './lib/desktop';
 import { useWorkspaceActions } from './lib/workspace-actions';
 
+// First-run only, so the everyday windows never parse them.
+const Intro = lazy(() => import('./components/intro').then((m) => ({ default: m.Intro })));
+const Onboarding = lazy(() =>
+  import('./components/onboarding').then((m) => ({ default: m.Onboarding })),
+);
+
 const route = window.location.hash.slice(1);
 document.documentElement.dataset.route = route || 'main';
 
 export function App() {
-  return route === 'intro' ? <Intro /> : <Shell />;
+  return route === 'intro' ? (
+    <Suspense>
+      <Intro />
+    </Suspense>
+  ) : (
+    <Shell />
+  );
 }
 
 function Shell() {
@@ -66,14 +76,16 @@ function MainWindow() {
         <TabStrip state={state} showTabs={screen === 'tabs' || booting} />
         <main className="relative min-h-0 flex-1">
           {screen === 'onboarding' && (
-            <Onboarding
-              state={state}
-              error={actions.error}
-              starting={actions.starting}
-              onChoose={chooseWorkspace}
-              onStart={() => void actions.quickStart()}
-              onOpenRecent={(path) => void actions.open(path)}
-            />
+            <Suspense>
+              <Onboarding
+                state={state}
+                error={actions.error}
+                starting={actions.starting}
+                onChoose={chooseWorkspace}
+                onStart={() => void actions.quickStart()}
+                onOpenRecent={(path) => void actions.open(path)}
+              />
+            </Suspense>
           )}
           {screen === 'welcome' && (
             <Welcome
