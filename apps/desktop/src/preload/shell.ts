@@ -51,7 +51,7 @@ const api: ShellApi = {
     create: (request) => ipcRenderer.invoke('workspace:create', request),
     createDefault: () => ipcRenderer.invoke('workspace:create-default'),
     install: () => ipcRenderer.invoke('workspace:install'),
-    reveal: (path) => ipcRenderer.send('workspace:reveal', path),
+    reveal: () => ipcRenderer.send('workspace:reveal'),
     forget: (path) => ipcRenderer.send('workspace:forget', path),
   },
   server: {

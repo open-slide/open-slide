@@ -12,12 +12,14 @@ import {
   type MenuItemConstructorOptions,
   nativeTheme,
   screen,
+  session,
   shell,
   systemPreferences,
   type WebContents,
 } from 'electron';
 import {
   type AgentId,
+  type AgentInfo,
   type AppState,
   type CreateWorkspaceRequest,
   type DesktopSettings,
@@ -30,10 +32,11 @@ import {
   type TaskResult,
   type WorkspaceInfo,
 } from '../shared/types';
-import { managedCliDirs, syncManagedClis } from './agent-cli';
+import { cancelAllInstalls, managedCliDirs, syncManagedClis } from './agent-cli';
 import { cancelAllLogins, cancelLogin, listAgents, login, logout, sendLoginInput } from './agents';
 import { performHaptic } from './haptics';
 import { installMenu, type MenuActions } from './menu';
+import { killRunning } from './process';
 import { DevServer } from './server';
 import { settings } from './settings';
 import { shellEnv } from './shell-env';
@@ -47,6 +50,7 @@ import {
   startCrashReporter,
   track,
 } from './telemetry';
+import { isHttpUrl } from './url';
 import {
   availablePackageManagers,
   bundledCore,
@@ -64,6 +68,12 @@ const isWindows = process.platform === 'win32';
 const SHELL_PRELOAD = path.join(import.meta.dirname, '../preload/shell.cjs');
 const VIEW_PRELOAD = path.join(import.meta.dirname, '../preload/view.cjs');
 const THEMES = new Set(['light', 'dark', 'system']);
+const WORKSPACE_NAME_RE = /^[\p{L}\p{N}._-]+$/u;
+const AGENTS_TTL_MS = 5000;
+// What a deck or the shell may ask Chromium for; everything else is refused
+// without a prompt.
+const TAB_PERMISSIONS = new Set(['fullscreen', 'clipboard-sanitized-write']);
+const SHELL_PERMISSIONS = new Set(['clipboard-sanitized-write']);
 const SETTINGS_WIDTH = 640;
 // Matches the corner the system draws on the main window, so the intro lands on it.
 const WINDOW_RADIUS = isMac ? 12 : isWindows ? 8 : 0;
@@ -143,7 +153,7 @@ function sendAll(channel: string, payload: unknown) {
   for (const win of shellWindows()) win.webContents.send(channel, payload);
 }
 
-let menuRecent = '';
+let menuRecent: string | null = null;
 
 function refreshMenu() {
   const recent = settings.recent();
@@ -153,9 +163,17 @@ function refreshMenu() {
   installMenu(menuActions, recent);
 }
 
+let broadcastQueued = false;
+
+// A tab load fires several changes in a row, so they share one state message.
 function broadcast() {
-  sendAll('state', state());
-  refreshMenu();
+  if (broadcastQueued) return;
+  broadcastQueued = true;
+  setImmediate(() => {
+    broadcastQueued = false;
+    sendAll('state', state());
+    refreshMenu();
+  });
 }
 
 function sendLog(task: LogTask, chunk: string) {
@@ -201,17 +219,52 @@ async function syncSkillsOnce(root: string) {
   if (result.ok) settings.setSkillsVersion(root, version);
 }
 
+function removeCache(root: string) {
+  void rm(cacheDirFor(root), { recursive: true, force: true });
+}
+
+function forgetWorkspace(root: string) {
+  settings.forget(root);
+  removeCache(root);
+}
+
 type OpenSource = 'restored' | 'created' | 'shell' | 'menu';
+
+// Opening a workspace runs its config and slides with the user's permissions,
+// and its decks can drive the agents they are signed in to. One the app set up
+// itself is trusted; any other folder is asked about once, and is never
+// reopened on launch before that.
+async function confirmTrust(root: string, name: string, source: OpenSource): Promise<boolean> {
+  if (settings.trusted(root)) return true;
+  if (source === 'restored') return false;
+  if (source !== 'created') {
+    const options: Electron.MessageBoxOptions = {
+      type: 'question',
+      message: `Do you trust the authors of “${name}”?`,
+      detail: `Opening this workspace runs its code on your computer, and its decks can use the agents you are signed in to. Only open folders from people you trust.\n\n${root}`,
+      buttons: ['Trust and Open', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+    };
+    const { response } = await (window
+      ? dialog.showMessageBox(window, options)
+      : dialog.showMessageBox(options));
+    if (response !== 0) return false;
+  }
+  settings.trust(root);
+  return true;
+}
 
 async function openWorkspace(root: string, source: OpenSource): Promise<TaskResult> {
   const inspection = inspectWorkspace(root);
   if (inspection.kind !== 'project') {
     return { ok: false, error: `${inspection.path} is not an open-slide workspace.` };
   }
+  if (!(await confirmTrust(inspection.path, inspection.name, source))) return { ok: true };
   track('workspace_opened', { source });
   persistSession();
   workspace = { root: inspection.path, name: inspection.name };
-  settings.setWorkspace(inspection.path);
+  for (const evicted of settings.setWorkspace(inspection.path)) removeCache(evicted);
   settings.setOnboarded(true);
   tabs?.reset(settings.session(inspection.path));
   broadcast();
@@ -542,14 +595,76 @@ function listen<A extends unknown[]>(channel: string, fn: (...args: A) => void) 
   });
 }
 
-function isHttpUrl(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  try {
-    const { protocol } = new URL(value);
-    return protocol === 'http:' || protocol === 'https:';
-  } catch {
-    return false;
-  }
+// Tabs and their presenter windows, and only while they show the dev server:
+// a page that navigated elsewhere keeps the preload but loses the bridge.
+function fromHost(e: IpcMainEvent | IpcMainInvokeEvent): boolean {
+  if (!tabs?.hosts(e.sender)) return false;
+  const url = e.senderFrame?.url;
+  return !!url && tabs.isServerUrl(url);
+}
+
+function listenHost<A extends unknown[]>(channel: string, fn: (...args: A) => void) {
+  ipcMain.on(channel, (e, ...args) => {
+    if (fromHost(e)) fn(...(args as A));
+  });
+}
+
+function isCreateRequest(value: unknown): value is CreateWorkspaceRequest {
+  if (typeof value !== 'object' || value === null) return false;
+  const { parent, name, packageManager } = value as Record<string, unknown>;
+  return (
+    typeof parent === 'string' &&
+    path.isAbsolute(parent) &&
+    typeof name === 'string' &&
+    (name === '.' || (WORKSPACE_NAME_RE.test(name) && name !== '..')) &&
+    PACKAGE_MANAGERS.includes(packageManager as PackageManager)
+  );
+}
+
+// Every page stays where it was put: a tab or presenter on the dev server, the
+// shell on its own file. Tabs and presenter windows refine this with their own
+// handlers; anything created without one gets no navigation and no popups.
+function restrictContents(contents: WebContents) {
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  const guard = (e: Electron.Event, url: string) => {
+    if (url.startsWith('devtools://') || tabs?.isServerUrl(url)) return;
+    e.preventDefault();
+  };
+  contents.on('will-navigate', (e) => guard(e, e.url));
+  contents.on('will-redirect', (e) => guard(e, e.url));
+  contents.on('will-attach-webview', (e) => e.preventDefault());
+}
+
+function permitted(contents: WebContents | null, permission: string, origin: string): boolean {
+  if (!contents) return false;
+  if (tabs?.hosts(contents)) return tabs.isServerUrl(origin) && TAB_PERMISSIONS.has(permission);
+  return (
+    shellWindows().some((w) => w.webContents === contents) && SHELL_PERMISSIONS.has(permission)
+  );
+}
+
+function installPermissionPolicy() {
+  const ses = session.defaultSession;
+  ses.setPermissionRequestHandler((contents, permission, callback, details) => {
+    callback(permitted(contents, permission, details.requestingUrl));
+  });
+  ses.setPermissionCheckHandler((contents, permission, origin) =>
+    permitted(contents, permission, origin),
+  );
+}
+
+let agentList: { at: number; value: Promise<AgentInfo[]> } | null = null;
+
+// The settings window and the tour both ask, and each answer costs four CLI
+// launches, so one answer serves every caller for a few seconds.
+function cachedAgents(): Promise<AgentInfo[]> {
+  if (agentList && Date.now() - agentList.at < AGENTS_TTL_MS) return agentList.value;
+  const entry = { at: Date.now(), value: childEnv().then((env) => listAgents(env)) };
+  agentList = entry;
+  entry.value.catch(() => {
+    if (agentList === entry) agentList = null;
+  });
+  return entry.value;
 }
 
 let pdfDir: string | null = null;
@@ -607,10 +722,12 @@ async function loginTracked(id: AgentId): Promise<TaskResult> {
         downloaded = true;
         track('agent_cli_downloaded', { agent: id, duration_ms: Date.now() - started });
       }
+      if (event.type === 'installed' || event.type === 'exit') agentList = null;
       sendAll('agents:login-event', event);
     },
     (url) => void shell.openExternal(url),
   );
+  if (result.superseded) return result;
   track(result.ok ? 'agent_login_succeeded' : 'agent_login_failed', {
     agent: id,
     cli_downloaded: downloaded,
@@ -654,8 +771,8 @@ function registerIpc() {
     if (introWindow && !introWindow.isDestroyed()) introWindow.close();
   });
   listen('onboarding:finish', () => {
-    track('onboarding_finished', { has_workspace: workspace !== null });
     settings.setOnboarded(true);
+    track('onboarding_finished', { has_workspace: workspace !== null });
     broadcast();
   });
 
@@ -681,9 +798,9 @@ function registerIpc() {
     return result;
   });
 
-  listen('tabs:activate', (id: string) => tabs?.activate(id));
-  listen('tabs:close', (id: string) => tabs?.close(id));
-  listen('tabs:move', (id: string, index: number) => tabs?.move(id, index));
+  listen('tabs:activate', (id: string) => tabs?.activate(String(id)));
+  listen('tabs:close', (id: string) => tabs?.close(String(id)));
+  listen('tabs:move', (id: string, index: number) => tabs?.move(String(id), index));
   listen('tabs:menu', (id: string) => tabs?.showMenu(String(id)));
 
   handle('workspace:choose', async () => {
@@ -708,8 +825,9 @@ function registerIpc() {
   handle('workspace:default-parent', () => app.getPath('documents'));
   handle('workspace:package-managers', async () => availablePackageManagers(await childEnv()));
   handle('workspace:open', (root: string) => openWorkspace(String(root), 'shell'));
-  handle('workspace:create', (request: CreateWorkspaceRequest) =>
-    createWorkspaceTracked(
+  handle('workspace:create', (request: CreateWorkspaceRequest) => {
+    if (!isCreateRequest(request)) return { ok: false, error: 'That workspace name is not valid.' };
+    return createWorkspaceTracked(
       'custom',
       async () => {
         const result = await createWorkspace(request, await childEnv(), (chunk) =>
@@ -719,30 +837,32 @@ function registerIpc() {
         return result;
       },
       request.packageManager,
-    ),
-  );
+    );
+  });
   handle('workspace:create-default', () =>
     createWorkspaceTracked('default', async () =>
       createDefaultWorkspace(await childEnv(), (chunk) => sendLog('create', chunk)),
     ),
   );
   handle('workspace:install', () => installWorkspace());
-  listen('workspace:reveal', (target?: string) => {
-    const dir = typeof target === 'string' ? target : workspace?.root;
-    if (dir) void shell.openPath(dir);
+  listen('workspace:reveal', () => {
+    if (workspace) void shell.openPath(workspace.root);
   });
   listen('workspace:forget', (root: string) => {
-    settings.forget(String(root));
-    void rm(cacheDirFor(String(root)), { recursive: true, force: true });
+    if (settings.recent().includes(root)) forgetWorkspace(root);
     broadcast();
   });
 
   listen('server:restart', () => void server.restart());
   handle('server:log', () => server.log);
 
-  handle('agents:list', async () => listAgents(await childEnv()));
+  handle('agents:list', () => cachedAgents());
   handle('agents:login', (id: AgentId) => loginTracked(id));
-  handle('agents:logout', async (id: AgentId) => logout(id, await childEnv()));
+  handle('agents:logout', async (id: AgentId) => {
+    const result = await logout(id, await childEnv());
+    agentList = null;
+    return result;
+  });
   listen('agents:login-input', (id: AgentId, text: string) => sendLoginInput(id, String(text)));
   listen('agents:login-cancel', (id: AgentId) => cancelLogin(id));
 
@@ -751,7 +871,7 @@ function registerIpc() {
     e.returnValue = { translucent: translucent() && (tabs?.owns(e.sender) ?? false) };
   });
   ipcMain.on('host:adopted', (e) => tabs?.adopted(e.sender));
-  ipcMain.on('host:open-deck', (_e, slideId: unknown) => {
+  listenHost('host:open-deck', (slideId: unknown) => {
     if (typeof slideId === 'string' && slideId && tabs) {
       const before = tabs.info.tabs.length;
       tabs.openDeck(slideId);
@@ -760,18 +880,21 @@ function registerIpc() {
     }
     window?.focus();
   });
-  ipcMain.on('host:open-home', (_e, path: unknown) => {
+  listenHost('host:open-home', (path: unknown) => {
     tabs?.openHome(typeof path === 'string' && path.startsWith('/') ? path : undefined);
     window?.focus();
   });
-  ipcMain.on('host:haptic', (_e, pattern: unknown) => performHaptic(pattern));
-  ipcMain.handle('host:print-to-pdf', (e, filename: unknown) =>
-    printToPdf(e.sender, filename).catch((err: unknown) => {
+  ipcMain.on('host:haptic', (e, pattern: unknown) => {
+    if (fromShell(e) || fromHost(e)) performHaptic(pattern);
+  });
+  ipcMain.handle('host:print-to-pdf', (e, filename: unknown) => {
+    if (!fromHost(e)) throw new Error('Rejected host:print-to-pdf from an unknown sender');
+    return printToPdf(e.sender, filename).catch((err: unknown) => {
       captureError(err, { step: 'pdf_export' });
       throw err;
-    }),
-  );
-  ipcMain.on('host:set-theme', (_e, theme: unknown) => {
+    });
+  });
+  listenHost('host:set-theme', (theme: unknown) => {
     if (typeof theme !== 'string' || !THEMES.has(theme)) return;
     nativeTheme.themeSource = theme as 'light' | 'dark' | 'system';
   });
@@ -807,7 +930,7 @@ const menuActions: MenuActions = {
   replayIntro: () => replayIntro(),
   clearRecent: () => {
     for (const root of settings.recent()) {
-      if (root !== workspace?.root) settings.forget(root);
+      if (root !== workspace?.root) forgetWorkspace(root);
     }
     broadcast();
   },
@@ -824,8 +947,11 @@ if (!app.requestSingleInstanceLock()) {
     window?.focus();
   });
 
+  app.on('web-contents-created', (_e, contents) => restrictContents(contents));
+
   app.whenReady().then(() => {
     initTelemetry();
+    installPermissionPolicy();
     registerIpc();
     refreshMenu();
     app.setAboutPanelOptions({
@@ -869,6 +995,8 @@ if (!app.requestSingleInstanceLock()) {
     persistSession();
     settings.flush();
     cancelAllLogins();
+    cancelAllInstalls();
+    killRunning();
     void Promise.all([server.stop(), shutdownTelemetry()]).finally(() => app.quit());
   });
 }

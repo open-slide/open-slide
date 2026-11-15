@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { app } from 'electron';
-import type { DesktopSettings, PackageManager } from '../shared/types';
+import { type DesktopSettings, PACKAGE_MANAGERS, type PackageManager } from '../shared/types';
 
 export type DeckSession = { decks: { slideId: string; title: string }[]; active: string | null };
 
@@ -11,6 +11,8 @@ type Bounds = { x: number; y: number; width: number; height: number };
 type Stored = DesktopSettings & {
   workspace: string | null;
   recent: string[];
+  // Workspaces whose code the user agreed to run.
+  trusted: string[];
   sessions: Record<string, DeckSession>;
   ports: Record<string, number>;
   skillsVersions: Record<string, string>;
@@ -31,6 +33,7 @@ const defaults: Stored = {
   telemetry: true,
   workspace: null,
   recent: [],
+  trusted: [],
   sessions: {},
   ports: {},
   skillsVersions: {},
@@ -47,15 +50,71 @@ function file(): string {
   return path.join(app.getPath('userData'), 'settings.json');
 }
 
+type Check = (value: unknown) => boolean;
+
+const isString: Check = (v) => typeof v === 'string';
+const isBoolean: Check = (v) => typeof v === 'boolean';
+const isNumber: Check = (v) => typeof v === 'number' && Number.isFinite(v);
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+const nullOr =
+  (check: Check): Check =>
+  (v) =>
+    v === null || check(v);
+const recordOf =
+  (check: Check): Check =>
+  (v) =>
+    isRecord(v) && Object.values(v).every(check);
+const isSession: Check = (v) =>
+  isRecord(v) &&
+  nullOr(isString)(v.active) &&
+  Array.isArray(v.decks) &&
+  v.decks.every((d) => isRecord(d) && isString(d.slideId) && isString(d.title));
+const isBounds: Check = (v) =>
+  isRecord(v) && [v.x, v.y, v.width, v.height].every((side) => isNumber(side));
+
+const checks: { [K in keyof Stored]: Check } = {
+  translucent: isBoolean,
+  packageManager: (v) => v === null || (PACKAGE_MANAGERS as readonly unknown[]).includes(v),
+  telemetry: isBoolean,
+  workspace: nullOr(isString),
+  recent: (v) => Array.isArray(v) && v.every(isString),
+  trusted: (v) => Array.isArray(v) && v.every(isString),
+  sessions: recordOf(isSession),
+  ports: recordOf((v) => Number.isInteger(v) && (v as number) > 0 && (v as number) < 65536),
+  skillsVersions: recordOf(isString),
+  bounds: nullOr(isBounds),
+  loginPath: nullOr(isString),
+  introSeen: isBoolean,
+  onboarded: isBoolean,
+  installId: nullOr(isString),
+  lastVersion: nullOr(isString),
+  crashCheckedAt: isNumber,
+};
+
 function load(): Stored {
+  let saved: unknown;
   try {
-    const saved = JSON.parse(readFileSync(file(), 'utf8')) as Partial<Stored>;
-    // Settings written before the first-run tour existed belong to people who
-    // already set the app up, so they skip it.
-    return { ...defaults, introSeen: true, onboarded: true, ...saved };
+    saved = JSON.parse(readFileSync(file(), 'utf8'));
   } catch {
-    return { ...defaults };
+    return structuredClone(defaults);
   }
+  if (!isRecord(saved)) return structuredClone(defaults);
+  // Settings written before the first-run tour existed belong to people who
+  // already set the app up, so they skip it.
+  const next: Record<string, unknown> = {
+    ...structuredClone(defaults),
+    introSeen: true,
+    onboarded: true,
+  };
+  // A hand-edited or damaged field falls back to its default on its own.
+  for (const key of Object.keys(checks) as (keyof Stored)[]) {
+    if (key in saved && checks[key](saved[key])) next[key] = saved[key];
+  }
+  const loaded = next as Stored;
+  // Settings from before trust was asked for list workspaces that already ran.
+  if (!('trusted' in saved)) loaded.trusted = [...loaded.recent];
+  return loaded;
 }
 
 let stored: Stored | null = null;
@@ -98,25 +157,43 @@ export const settings = {
   recent(): string[] {
     return current().recent;
   },
-  setWorkspace(root: string | null) {
+  // Returns the workspaces this pushed off the end of the recent list, whose
+  // per-workspace records go with them.
+  setWorkspace(root: string | null): string[] {
     const s = current();
     s.workspace = root;
-    if (root) s.recent = [root, ...s.recent.filter((r) => r !== root)].slice(0, RECENT_LIMIT);
+    const all = root ? [root, ...s.recent.filter((r) => r !== root)] : s.recent;
+    s.recent = all.slice(0, RECENT_LIMIT);
+    const evicted = all.slice(RECENT_LIMIT);
+    for (const gone of evicted) settings.forget(gone);
     save();
+    return evicted;
   },
   forget(root: string) {
     const s = current();
     s.recent = s.recent.filter((r) => r !== root);
+    s.trusted = s.trusted.filter((r) => r !== root);
     delete s.sessions[root];
     delete s.ports[root];
     delete s.skillsVersions[root];
+    save();
+  },
+  trusted(root: string): boolean {
+    return current().trusted.includes(root);
+  },
+  trust(root: string) {
+    const s = current();
+    if (s.trusted.includes(root)) return;
+    s.trusted.push(root);
     save();
   },
   session(root: string): DeckSession {
     return current().sessions[root] ?? { decks: [], active: null };
   },
   setSession(root: string, session: DeckSession) {
-    current().sessions[root] = session;
+    const sessions = current().sessions;
+    if (JSON.stringify(sessions[root]) === JSON.stringify(session)) return;
+    sessions[root] = session;
     save();
   },
   port(root: string): number | null {

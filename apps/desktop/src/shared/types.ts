@@ -156,7 +156,7 @@ export type ShellApi = {
     create(request: CreateWorkspaceRequest): Promise<TaskResult>;
     createDefault(): Promise<TaskResult>;
     install(): Promise<TaskResult>;
-    reveal(path?: string): void;
+    reveal(): void;
     forget(path: string): void;
   };
   server: {
