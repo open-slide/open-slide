@@ -8,11 +8,14 @@ import { settings } from './settings';
 import { bundledCore } from './workspace';
 
 type Value = string | number | boolean | null | undefined;
-export type Properties = Record<string, Value>;
+type Properties = Record<string, Value>;
 
 const HOST = 'https://us.i.posthog.com';
 const TOKEN = import.meta.env.MAIN_VITE_POSTHOG_TOKEN ?? '';
 const SHUTDOWN_TIMEOUT_MS = 2000;
+const ERROR_WINDOW_MS = 60_000;
+const MAX_ERRORS_PER_WINDOW = 10;
+const MAX_HELD = 50;
 
 let client: PostHog | null = null;
 let base: Properties = {};
@@ -25,6 +28,28 @@ function allowed(): boolean {
 
 function enabled(): boolean {
   return client !== null && settings.get().telemetry;
+}
+
+// The tour is where the user is told about telemetry and how to turn it off,
+// so nothing leaves before it ends: events wait here, and are dropped if the
+// user opts out or quits first.
+const held: ((client: PostHog) => void)[] = [];
+
+function send(deliver: (client: PostHog) => void) {
+  if (!client) return;
+  if (!settings.onboarded()) {
+    if (held.length < MAX_HELD) held.push(deliver);
+    return;
+  }
+  releaseHeld();
+  deliver(client);
+}
+
+function releaseHeld() {
+  if (!client || !settings.onboarded()) return;
+  const waiting = held.splice(0);
+  if (!enabled()) return;
+  for (const deliver of waiting) deliver(client);
 }
 
 function osName(): string {
@@ -56,6 +81,48 @@ function redact(event: EventMessage): EventMessage {
   let json = JSON.stringify(event.properties);
   for (const needle of HOME_NEEDLES) json = json.replaceAll(needle, '~');
   return { ...event, properties: JSON.parse(json) };
+}
+
+const LOCAL_URL_RE = /(https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?)[^\s"'`)]*/g;
+const QUOTED_PATH_RE = /(['"`])(?:\/|[A-Za-z]:[\\/])[^'"`\n]*\1/g;
+const POSIX_PATH_RE = /(?<![\w.:/<])\/(?:[^\s/'":]+\/)+[^\s/'":]*/g;
+const WINDOWS_PATH_RE = /\b[A-Za-z]:\\[^\s'":]+/g;
+
+// Error messages quote whatever the failing call was given: a save path named
+// after a deck, a dev-server URL ending in a deck id. Neither leaves the
+// machine; the error's name, code and stack are enough to act on.
+function scrubMessage(text: string): string {
+  return text
+    .replace(LOCAL_URL_RE, '$1')
+    .replace(QUOTED_PATH_RE, '$1<path>$1')
+    .replace(POSIX_PATH_RE, '<path>')
+    .replace(WINDOWS_PATH_RE, '<path>');
+}
+
+function scrubError(error: unknown): Error {
+  if (!(error instanceof Error)) return new Error(scrubMessage(String(error)));
+  const message = scrubMessage(error.message);
+  const clean = new Error(message);
+  clean.name = error.name;
+  clean.stack = error.stack?.replace(error.message, message) ?? `${error.name}: ${message}`;
+  return clean;
+}
+
+let errorWindowStart = 0;
+const reported = new Set<string>();
+
+// An error thrown from a frame loop or a retry would otherwise arrive once per
+// frame: each distinct error is sent once a minute, up to a cap.
+function shouldReport(error: Error): boolean {
+  const now = Date.now();
+  if (now - errorWindowStart > ERROR_WINDOW_MS) {
+    errorWindowStart = now;
+    reported.clear();
+  }
+  const key = `${error.name}:${error.message}`;
+  if (reported.has(key) || reported.size >= MAX_ERRORS_PER_WINDOW) return false;
+  reported.add(key);
+  return true;
 }
 
 // Kept on disk only: PostHog cannot symbolicate minidumps, so the next launch
@@ -143,17 +210,27 @@ function trackLaunch() {
 }
 
 export function track(event: string, properties: Properties = {}, setPerson = false) {
-  if (!enabled() || !client) return;
-  client.capture({
+  if (!enabled()) return;
+  const message = {
     distinctId: settings.installId(),
     event,
     properties: { ...base, ...properties, ...(setPerson ? { $set: base } : {}) },
-  });
+    timestamp: new Date(),
+  };
+  send((posthog) => posthog.capture(message));
 }
 
 export function captureError(error: unknown, properties: Properties = {}) {
-  if (!enabled() || !client) return;
-  client.captureException(error, settings.installId(), { ...base, ...properties });
+  if (!enabled()) return;
+  const clean = scrubError(error);
+  if (!shouldReport(clean)) return;
+  const code = (error as { code?: unknown } | null)?.code;
+  const props = {
+    ...base,
+    ...properties,
+    ...(typeof code === 'string' ? { error_code: code } : {}),
+  };
+  send((posthog) => posthog.captureException(clean, settings.installId(), props));
 }
 
 function isReportedError(value: unknown): value is ReportedError {
@@ -182,6 +259,7 @@ export function reportRendererError(report: unknown, window: string) {
 }
 
 export async function shutdownTelemetry() {
+  releaseHeld();
   await client?.shutdown(SHUTDOWN_TIMEOUT_MS).catch(() => {});
 }
 

@@ -8,6 +8,10 @@ The desktop app sends anonymous usage events and crash reports to
 where it breaks. The `open-slide` CLI and the `@open-slide/core` package send
 nothing.
 
+On a first launch nothing is sent until the welcome tour, which tells you about
+this, has ended. Turn reporting off before then and those first events are
+discarded.
+
 ## Turning it off
 
 - **Settings → Privacy → Usage & crash reports → Off.** The change applies at once.
@@ -16,7 +20,8 @@ nothing.
 ## What is never sent
 
 - Slide content, deck names, themes, or assets
-- File or folder paths. The home directory is replaced with `~` in error stacks.
+- File or folder paths. They are stripped from error messages, and the home
+  directory is replaced with `~` in error stacks.
 - Agent prompts, replies, or account emails
 - Dev server, install, or sign-in logs
 
