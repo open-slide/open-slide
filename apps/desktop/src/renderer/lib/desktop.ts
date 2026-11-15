@@ -1,5 +1,12 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import type { AppState, LogTask, ShellApi, TaskResult } from '../../shared/types';
+import type {
+  AgentId,
+  AppState,
+  LoginState,
+  LogTask,
+  ShellApi,
+  TaskResult,
+} from '../../shared/types';
 
 declare global {
   interface Window {
@@ -39,6 +46,36 @@ export function useAppState(): AppState | null {
       return () => listeners.delete(listener);
     },
     () => current,
+  );
+}
+
+// Sign-ins run in the main process and outlive whatever started them, so a
+// surface that mounts mid-way reads the same state as one that watched it all.
+let logins: Partial<Record<AgentId, LoginState>> = {};
+const loginListeners = new Set<() => void>();
+
+function publishLogin(next: LoginState) {
+  logins = { ...logins, [next.id]: next };
+  for (const listener of loginListeners) listener();
+}
+
+// Subscribed before the snapshot is asked for, and both arrive in order, so
+// the snapshot can only ever be overwritten by something newer.
+desktop.agents.onLoginState(publishLogin);
+void desktop.agents
+  .logins()
+  .then((all) => {
+    for (const login of all) publishLogin(login);
+  })
+  .catch(() => {});
+
+export function useLogins(): Partial<Record<AgentId, LoginState>> {
+  return useSyncExternalStore(
+    (listener) => {
+      loginListeners.add(listener);
+      return () => loginListeners.delete(listener);
+    },
+    () => logins,
   );
 }
 

@@ -4,8 +4,8 @@ import { ProviderLogo } from '@/components/agent/provider-logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import type { AgentId, AgentInfo } from '../../shared/types';
-import { desktop } from '../lib/desktop';
+import { AGENT_IDS, type AgentId, type AgentInfo, type LoginState } from '../../shared/types';
+import { desktop, useLogins } from '../lib/desktop';
 import { tildify } from '../lib/paths';
 import { LineLoader, LogView, ProgressLine, SectionCard, StatusDot } from './primitives';
 
@@ -17,8 +17,6 @@ export type Login = {
   download: { received: number; total: number | null } | null;
 };
 
-const LOGIN_OUTPUT_LIMIT = 16 * 1024;
-
 export const IDLE_LOGIN: Login = {
   output: '',
   url: null,
@@ -27,10 +25,22 @@ export const IDLE_LOGIN: Login = {
   download: null,
 };
 
+function toLogin(state: LoginState | undefined): Login {
+  if (!state) return IDLE_LOGIN;
+  const { output, url, error, download, phase } = state;
+  return {
+    output,
+    url,
+    error,
+    download,
+    running: phase === 'downloading' || phase === 'signing-in',
+  };
+}
+
 export function useAgents() {
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [logins, setLogins] = useState<Partial<Record<AgentId, Login>>>({});
+  const states = useLogins();
 
   const latest = useRef(0);
 
@@ -44,51 +54,28 @@ export function useAgents() {
     setRefreshing(false);
   }, []);
 
+  // What an agent offers changes when its CLI lands and when a sign-in ends,
+  // whichever window that happened in.
+  const progress = AGENT_IDS.map((id) => {
+    const state = states[id];
+    return state ? `${state.operation}:${state.phase}` : '';
+  }).join(' ');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refetch on every sign-in step
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [refresh, progress]);
 
-  useEffect(
-    () =>
-      desktop.agents.onLogin((event) => {
-        setLogins((prev) => {
-          const current = prev[event.id] ?? { ...IDLE_LOGIN, running: true };
-          if (event.type === 'output') {
-            const output = (current.output + event.chunk).slice(-LOGIN_OUTPUT_LIMIT);
-            return { ...prev, [event.id]: { ...current, output } };
-          }
-          if (event.type === 'url') return { ...prev, [event.id]: { ...current, url: event.url } };
-          if (event.type === 'download') {
-            const download = { received: event.received, total: event.total };
-            return { ...prev, [event.id]: { ...current, download } };
-          }
-          if (event.type === 'installed') {
-            return { ...prev, [event.id]: { ...current, download: null } };
-          }
-          return { ...prev, [event.id]: { ...current, running: false } };
-        });
-        if (event.type === 'exit' || event.type === 'installed') void refresh();
-      }),
-    [refresh],
-  );
+  const logins: Partial<Record<AgentId, Login>> = {};
+  for (const id of AGENT_IDS) logins[id] = toLogin(states[id]);
 
-  const signIn = async (id: AgentId) => {
-    setLogins((prev) => ({ ...prev, [id]: { ...IDLE_LOGIN, running: true } }));
-    const result = await desktop.agents.login(id);
-    if (!result.ok) {
-      setLogins((prev) => ({
-        ...prev,
-        [id]: { ...(prev[id] ?? IDLE_LOGIN), running: false, download: null, error: result.error },
-      }));
-    }
-  };
+  const signIn = (id: AgentId) => void desktop.agents.login(id).catch(() => {});
 
   const signOut = async (id: AgentId) => {
     await desktop.agents.logout(id);
     await refresh();
   };
 
-  const dismiss = (id: AgentId) => setLogins((prev) => ({ ...prev, [id]: IDLE_LOGIN }));
+  const dismiss = (id: AgentId) => desktop.agents.dismissLogin(id);
 
   return { agents, refreshing, logins, refresh, signIn, signOut, dismiss };
 }
@@ -275,7 +262,11 @@ export function DownloadStatus({
         </span>
       </p>
       {download.total ? (
-        <ProgressLine value={download.received / download.total} className="w-full" />
+        <ProgressLine
+          value={download.received / download.total}
+          label={`Downloading ${name}`}
+          className="w-full"
+        />
       ) : (
         <LineLoader className="w-full" />
       )}
@@ -298,6 +289,7 @@ export function LoginCodeForm({ id }: { id: AgentId }) {
       <Input
         value={code}
         onChange={(e) => setCode(e.target.value)}
+        aria-label="Sign-in code"
         placeholder="Paste a code here if the browser shows one"
         spellCheck={false}
         className="font-mono text-[12px]"

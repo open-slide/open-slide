@@ -64,7 +64,9 @@ const api: ShellApi = {
     logout: (id) => ipcRenderer.invoke('agents:logout', id),
     sendLoginInput: (id, text) => ipcRenderer.send('agents:login-input', id, text),
     cancelLogin: (id) => ipcRenderer.send('agents:login-cancel', id),
-    onLogin: (listener) => subscribe('agents:login-event', listener),
+    dismissLogin: (id) => ipcRenderer.send('agents:login-dismiss', id),
+    logins: () => ipcRenderer.invoke('agents:logins'),
+    onLoginState: (listener) => subscribe('agents:login-state', listener),
   },
 };
 

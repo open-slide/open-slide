@@ -71,7 +71,9 @@ export type CreateWorkspaceRequest = {
 
 export type TaskResult = { ok: true } | { ok: false; error: string };
 
-export type AgentId = 'claude' | 'codex';
+export const AGENT_IDS = ['claude', 'codex'] as const;
+
+export type AgentId = (typeof AGENT_IDS)[number];
 
 export type AgentInfo = {
   id: AgentId;
@@ -86,12 +88,18 @@ export type AgentInfo = {
   account: string | null;
 };
 
-export type LoginEvent =
-  | { id: AgentId; type: 'output'; chunk: string }
-  | { id: AgentId; type: 'url'; url: string }
-  | { id: AgentId; type: 'download'; received: number; total: number | null }
-  | { id: AgentId; type: 'installed' }
-  | { id: AgentId; type: 'exit'; ok: boolean };
+// One agent's sign-in as the main process holds it, so any window can show
+// it, including one opened after it began.
+export type LoginState = {
+  id: AgentId;
+  // Counts this agent's sign-in attempts.
+  operation: number;
+  phase: 'idle' | 'downloading' | 'signing-in' | 'succeeded' | 'failed';
+  output: string;
+  url: string | null;
+  download: { received: number; total: number | null } | null;
+  error: string | null;
+};
 
 export type LogTask = 'server' | 'install' | 'create';
 
@@ -169,6 +177,8 @@ export type ShellApi = {
     logout(id: AgentId): Promise<TaskResult>;
     sendLoginInput(id: AgentId, text: string): void;
     cancelLogin(id: AgentId): void;
-    onLogin(listener: (event: LoginEvent) => void): () => void;
+    dismissLogin(id: AgentId): void;
+    logins(): Promise<LoginState[]>;
+    onLoginState(listener: (state: LoginState) => void): () => void;
   };
 };

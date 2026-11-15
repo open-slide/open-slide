@@ -1,10 +1,9 @@
-import type { ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { AgentId, AgentInfo, LoginEvent, TaskResult } from '../shared/types';
+import type { AgentId, AgentInfo, TaskResult } from '../shared/types';
 import { cancelInstall, canInstallCli, cliSpec, installCli, isManagedCli } from './agent-cli';
-import { run } from './process';
+import { type RunHandle, run } from './process';
 import { findExecutable } from './shell-env';
 import { modulesDir } from './workspace';
 
@@ -134,70 +133,85 @@ export function listAgents(env: NodeJS.ProcessEnv): Promise<AgentInfo[]> {
   return Promise.all(AGENTS.map((agent) => describe(agent, env)));
 }
 
-const logins = new Map<AgentId, ChildProcess>();
+export type LoginHooks = {
+  download: (progress: { received: number; total: number | null }) => void;
+  installed: () => void;
+  output: (chunk: string) => void;
+  url: (url: string) => void;
+};
 
-export async function login(
+export type LoginSession = {
+  done: Promise<TaskResult>;
+  write: (text: string) => void;
+  cancel: () => void;
+};
+
+// One sign-in attempt: downloads the CLI when it is missing, then runs its
+// login command until it exits or is cancelled.
+export function startLogin(
   id: AgentId,
-  env: NodeJS.ProcessEnv,
-  emit: (event: LoginEvent) => void,
-  openUrl: (url: string) => void,
-): Promise<TaskResult & { superseded?: boolean }> {
+  readEnv: () => Promise<NodeJS.ProcessEnv>,
+  hooks: LoginHooks,
+): LoginSession {
   const agent = spec(id);
-  if (!resolveCli(agent, env) && canInstallCli(id)) {
-    try {
-      await installCli(id, (progress) => emit({ id, type: 'download', ...progress }));
-    } catch (err) {
-      const aborted = err instanceof Error && err.name === 'AbortError';
-      emit({ id, type: 'exit', ok: false });
-      return { ok: false, error: aborted ? 'Download cancelled.' : (err as Error).message };
-    }
-    emit({ id, type: 'installed' });
-  }
-  const cli = resolveCli(agent, env);
-  if (!cli) return { ok: false, error: `${agent.name} is not available on this platform.` };
-  logins.get(id)?.kill();
-  let opened = false;
-  let scanned = '';
+  let cancelled = false;
+  let handle: RunHandle | null = null;
   let settle: NodeJS.Timeout | undefined;
-  const openFrom = (pattern: RegExp) => {
-    const url = opened ? null : pattern.exec(scanned)?.[0];
-    if (!url) return;
-    opened = true;
-    emit({ id, type: 'url', url });
-    openUrl(url);
+
+  const attempt = async (): Promise<TaskResult> => {
+    const env = await readEnv();
+    if (cancelled) return { ok: false, error: 'Sign-in cancelled.' };
+    if (!resolveCli(agent, env) && canInstallCli(id)) {
+      try {
+        await installCli(id, hooks.download);
+      } catch (err) {
+        const aborted = err instanceof Error && err.name === 'AbortError';
+        return { ok: false, error: aborted ? 'Download cancelled.' : (err as Error).message };
+      }
+      hooks.installed();
+    }
+    if (cancelled) return { ok: false, error: 'Sign-in cancelled.' };
+    const cli = resolveCli(agent, env);
+    if (!cli) return { ok: false, error: `${agent.name} is not available on this platform.` };
+    let opened = false;
+    let scanned = '';
+    const openFrom = (pattern: RegExp) => {
+      const url = opened ? null : pattern.exec(scanned)?.[0];
+      if (!url) return;
+      opened = true;
+      hooks.url(url);
+    };
+    handle = run(cli.path, agent.loginArgs, {
+      cwd: os.homedir(),
+      env,
+      stdin: true,
+      timeoutMs: LOGIN_TIMEOUT_MS,
+      onChunk(chunk) {
+        hooks.output(chunk);
+        if (opened) return;
+        scanned = (scanned + chunk).slice(-URL_SCAN_LIMIT);
+        clearTimeout(settle);
+        openFrom(COMPLETE_URL_RE);
+        // A prompt can end on the URL and wait there for input.
+        if (!opened) settle = setTimeout(() => openFrom(URL_RE), URL_SETTLE_MS);
+      },
+    });
+    const { code, timedOut } = await handle.done;
+    clearTimeout(settle);
+    if (code === 0) return { ok: true };
+    if (timedOut) return { ok: false, error: 'Sign-in took too long and was stopped.' };
+    return { ok: false, error: `Sign-in exited with code ${code}` };
   };
-  const handle = run(cli.path, agent.loginArgs, {
-    cwd: os.homedir(),
-    env,
-    stdin: true,
-    timeoutMs: LOGIN_TIMEOUT_MS,
-    onChunk(chunk) {
-      emit({ id, type: 'output', chunk });
-      if (opened) return;
-      scanned = (scanned + chunk).slice(-URL_SCAN_LIMIT);
-      clearTimeout(settle);
-      openFrom(COMPLETE_URL_RE);
-      // A prompt can end on the URL and wait there for input.
-      if (!opened) settle = setTimeout(() => openFrom(URL_RE), URL_SETTLE_MS);
+
+  return {
+    done: attempt(),
+    write: (text) => handle?.child.stdin?.write(`${text}\n`),
+    cancel: () => {
+      cancelled = true;
+      cancelInstall(id);
+      void handle?.terminate();
     },
-  });
-  logins.set(id, handle.child);
-  const { code } = await handle.done;
-  clearTimeout(settle);
-  // A sign-in replaced by a newer one must not end the newer one's UI state.
-  if (logins.get(id) !== handle.child) return { ok: true, superseded: true };
-  logins.delete(id);
-  emit({ id, type: 'exit', ok: code === 0 });
-  return code === 0 ? { ok: true } : { ok: false, error: `Sign-in exited with code ${code}` };
-}
-
-export function sendLoginInput(id: AgentId, text: string) {
-  logins.get(id)?.stdin?.write(`${text}\n`);
-}
-
-export function cancelLogin(id: AgentId) {
-  cancelInstall(id);
-  logins.get(id)?.kill();
+  };
 }
 
 export async function logout(id: AgentId, env: NodeJS.ProcessEnv): Promise<TaskResult> {
@@ -210,9 +224,4 @@ export async function logout(id: AgentId, env: NodeJS.ProcessEnv): Promise<TaskR
     timeoutMs: STATUS_TIMEOUT_MS,
   }).done;
   return code === 0 ? { ok: true } : { ok: false, error: output.trim() || `exit code ${code}` };
-}
-
-export function cancelAllLogins() {
-  for (const child of logins.values()) child.kill();
-  logins.clear();
 }

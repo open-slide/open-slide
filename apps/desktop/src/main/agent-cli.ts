@@ -261,7 +261,7 @@ async function download(
       env: process.env,
       timeoutMs: EXTRACT_TIMEOUT_MS,
     });
-    signal.addEventListener('abort', () => extract.child.kill(), { once: true });
+    signal.addEventListener('abort', () => void extract.terminate(), { once: true });
     const { code, output } = await extract.done;
     if (signal.aborted) throw signal.reason;
     if (code !== 0) throw new Error(output.trim() || `tar exited with code ${code}`);

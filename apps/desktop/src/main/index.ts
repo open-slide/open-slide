@@ -18,6 +18,7 @@ import {
   type WebContents,
 } from 'electron';
 import {
+  AGENT_IDS,
   type AgentId,
   type AgentInfo,
   type AppState,
@@ -33,10 +34,11 @@ import {
   type WorkspaceInfo,
 } from '../shared/types';
 import { cancelAllInstalls, managedCliDirs, syncManagedClis } from './agent-cli';
-import { cancelAllLogins, cancelLogin, listAgents, login, logout, sendLoginInput } from './agents';
+import { AgentLogins } from './agent-logins';
+import { listAgents, logout, startLogin } from './agents';
 import { performHaptic } from './haptics';
 import { installMenu, type MenuActions } from './menu';
-import { killRunning } from './process';
+import { terminateRunning } from './process';
 import { DevServer } from './server';
 import { settings } from './settings';
 import { loginEnv, shellEnv } from './shell-env';
@@ -710,31 +712,31 @@ async function createWorkspaceTracked(
   return openWorkspace(result.root, 'created');
 }
 
-async function loginTracked(id: AgentId): Promise<TaskResult> {
-  const started = Date.now();
-  let downloaded = false;
-  track('agent_login_started', { agent: id });
-  const result = await login(
-    id,
-    await childEnv(),
-    (event) => {
-      if (event.type === 'installed') {
-        downloaded = true;
-        track('agent_cli_downloaded', { agent: id, duration_ms: Date.now() - started });
-      }
-      if (event.type === 'installed' || event.type === 'exit') agentList = null;
-      sendAll('agents:login-event', event);
-    },
-    (url) => void shell.openExternal(url),
-  );
-  if (result.superseded) return result;
-  track(result.ok ? 'agent_login_succeeded' : 'agent_login_failed', {
-    agent: id,
-    cli_downloaded: downloaded,
-    duration_ms: Date.now() - started,
-  });
-  return result;
+function isAgentId(value: unknown): value is AgentId {
+  return (AGENT_IDS as readonly unknown[]).includes(value);
 }
+
+const logins = new AgentLogins({
+  start: (id, hooks) => startLogin(id, () => childEnv(), hooks),
+  openUrl: (url) => void shell.openExternal(url),
+  onChange: (state) => sendAll('agents:login-state', state),
+  onReport: (report) => {
+    if (report.type === 'started') {
+      track('agent_login_started', { agent: report.id });
+      return;
+    }
+    agentList = null;
+    if (report.type === 'installed') {
+      track('agent_cli_downloaded', { agent: report.id, duration_ms: report.durationMs });
+      return;
+    }
+    track(report.ok ? 'agent_login_succeeded' : 'agent_login_failed', {
+      agent: report.id,
+      cli_downloaded: report.downloaded,
+      duration_ms: report.durationMs,
+    });
+  },
+});
 
 function registerIpc() {
   handle('state:get', () => state());
@@ -857,14 +859,25 @@ function registerIpc() {
   handle('server:log', () => server.log);
 
   handle('agents:list', () => cachedAgents());
-  handle('agents:login', (id: AgentId) => loginTracked(id));
-  handle('agents:logout', async (id: AgentId) => {
+  handle('agents:logins', () => logins.snapshot());
+  handle('agents:login', (id: unknown) =>
+    isAgentId(id) ? logins.login(id) : { ok: false, error: 'Unknown agent.' },
+  );
+  handle('agents:logout', async (id: unknown) => {
+    if (!isAgentId(id)) return { ok: false, error: 'Unknown agent.' };
     const result = await logout(id, await childEnv());
     agentList = null;
     return result;
   });
-  listen('agents:login-input', (id: AgentId, text: string) => sendLoginInput(id, String(text)));
-  listen('agents:login-cancel', (id: AgentId) => cancelLogin(id));
+  listen('agents:login-input', (id: unknown, text: unknown) => {
+    if (isAgentId(id)) logins.input(id, String(text));
+  });
+  listen('agents:login-cancel', (id: unknown) => {
+    if (isAgentId(id)) logins.cancel(id);
+  });
+  listen('agents:login-dismiss', (id: unknown) => {
+    if (isAgentId(id)) logins.dismiss(id);
+  });
 
   // Presenter popups get the bridge too, but no window material behind them.
   ipcMain.on('host:config', (e) => {
@@ -994,9 +1007,10 @@ if (!app.requestSingleInstanceLock()) {
     quitting = true;
     persistSession();
     settings.flush();
-    cancelAllLogins();
+    logins.cancelAll();
     cancelAllInstalls();
-    killRunning();
-    void Promise.all([server.stop(), shutdownTelemetry()]).finally(() => app.quit());
+    void Promise.all([terminateRunning(), server.stop(), shutdownTelemetry()]).finally(() =>
+      app.quit(),
+    );
   });
 }

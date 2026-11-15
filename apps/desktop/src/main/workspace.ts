@@ -142,8 +142,9 @@ export async function installDependencies(
 ): Promise<TaskResult> {
   onChunk(`$ ${pm} install\n`);
   const { done } = run(pm, ['install'], { cwd: root, env, onChunk, timeoutMs: INSTALL_TIMEOUT_MS });
-  const { code } = await done;
+  const { code, timedOut } = await done;
   if (code === 0) return { ok: true };
+  if (timedOut) return { ok: false, error: `${pm} install took too long and was stopped.` };
   return { ok: false, error: `${pm} install exited with code ${code}` };
 }
 
@@ -194,7 +195,8 @@ async function initWorkspace(
     onChunk,
     timeoutMs: INSTALL_TIMEOUT_MS,
   });
-  const { code } = await done;
+  const { code, timedOut } = await done;
+  if (timedOut) return { ok: false, error: 'open-slide init took too long and was stopped.' };
   if (code !== 0 || inspectWorkspace(target).kind !== 'project') {
     return { ok: false, error: `open-slide init exited with code ${code}` };
   }
