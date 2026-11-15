@@ -169,13 +169,19 @@ function defaultWorkspaceRoot(): string {
   return path.join(homedir(), '.open-slide', 'slides');
 }
 
+// `created` tells a workspace this call scaffolded from one that was already
+// there: only the first is the app's own work, and trusted without asking.
+export type CreateResult =
+  | { ok: true; root: string; created: boolean }
+  | { ok: false; error: string };
+
 async function initWorkspace(
   parent: string,
   name: string,
   flags: string[],
   env: NodeJS.ProcessEnv,
   onChunk: (chunk: string) => void,
-): Promise<TaskResult & { root?: string }> {
+): Promise<CreateResult> {
   const target = path.join(parent, name);
   const existing = inspectWorkspace(target);
   if (existing.kind === 'project' || existing.kind === 'other') {
@@ -200,14 +206,14 @@ async function initWorkspace(
   if (code !== 0 || inspectWorkspace(target).kind !== 'project') {
     return { ok: false, error: `open-slide init exited with code ${code}` };
   }
-  return { ok: true, root: target };
+  return { ok: true, root: target, created: true };
 }
 
 export function createWorkspace(
   request: CreateWorkspaceRequest,
   env: NodeJS.ProcessEnv,
   onChunk: (chunk: string) => void,
-): Promise<TaskResult & { root?: string }> {
+): Promise<CreateResult> {
   return initWorkspace(
     request.parent,
     request.name,
@@ -223,9 +229,9 @@ export function createWorkspace(
 export async function createDefaultWorkspace(
   env: NodeJS.ProcessEnv,
   onChunk: (chunk: string) => void,
-): Promise<TaskResult & { root?: string }> {
+): Promise<CreateResult> {
   const root = defaultWorkspaceRoot();
-  if (inspectWorkspace(root).kind === 'project') return { ok: true, root };
+  if (inspectWorkspace(root).kind === 'project') return { ok: true, root, created: false };
   const parent = path.dirname(root);
   await mkdir(parent, { recursive: true });
   return initWorkspace(parent, path.basename(root), ['--no-install', '--no-git'], env, onChunk);

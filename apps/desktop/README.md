@@ -11,6 +11,7 @@ pnpm --filter desktop dist      # installers
 - `src/main` — window, tabs (one `WebContentsView` each), dev server supervisor, workspace init/install, skills sync, agent sign-in.
 - `src/preload/view.ts` — the `window.openSlideDesktop` bridge core reads in `packages/core/src/app/lib/desktop.ts`.
 - `src/renderer` — tab strip, welcome, and settings, built from core's own UI primitives and tokens.
+- Closing or reloading a tab, switching workspaces, closing the window and quitting first ask each tab's page (`src/main/unsaved.ts`) to save or discard what it has not written yet.
 - First launch plays a full-screen intro in its own clear window over the display, which folds into the main window, then a short tour. **Help → Welcome to open-slide** replays both.
 
 The bundled core keeps its Vite cache under the app's user data, syncs its built-in skills into a workspace once per app version, and hides the in-app core update — updating the app updates core.
@@ -21,7 +22,7 @@ Packaged builds send anonymous usage events and crash reports to PostHog from th
 
 ## Workspace trust
 
-Opening a workspace runs its config and slide code. A workspace the app created is trusted; any other folder is confirmed once with a native prompt, remembered in `settings.json`, and never reopened on launch before that.
+Opening a workspace runs its config and slide code. A workspace the app has just created is trusted; any other folder, including a project that was already at the default location, is confirmed once with a native prompt, remembered in `settings.json`, and never reopened on launch before that.
 
 - `MAIN_VITE_POSTHOG_TOKEN` — the desktop project's token, read at build time (env or `apps/desktop/.env.local`). Without it telemetry is compiled out to no-ops.
 - `POSTHOG_CLI_API_KEY`, `POSTHOG_CLI_PROJECT_ID` — when set, `pnpm --filter desktop dist` uploads source maps after building and deletes them before packaging.

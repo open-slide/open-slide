@@ -1,5 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import type { WorkspaceError } from '../shared/types';
 import { type CreateTarget, CreateWorkspaceDialog } from './components/create-workspace-dialog';
 import { ServerScreen } from './components/server-screen';
 import { SettingsWindow } from './components/settings';
@@ -58,9 +68,15 @@ function MainWindow() {
           ? 'server'
           : 'tabs';
 
+  // Welcome and the tour show a failure in place; every other screen has no
+  // room for it, so it is raised as a sheet.
+  const error = state?.workspaceError ?? null;
+  const inlineError = screen === 'welcome' || screen === 'onboarding';
+  const raisedError = inlineError || createTarget !== null ? null : error;
+
   // Tab contents are native views stacked above this page, so anything the
   // shell draws in the content area (screens, dialogs) needs them hidden.
-  const overlay = screen !== 'tabs' || createTarget !== null;
+  const overlay = screen !== 'tabs' || createTarget !== null || raisedError !== null;
   useEffect(() => desktop.setOverlay(overlay), [overlay]);
 
   if (!state) return null;
@@ -79,22 +95,22 @@ function MainWindow() {
             <Suspense>
               <Onboarding
                 state={state}
-                error={actions.error}
+                error={error?.message ?? null}
                 starting={actions.starting}
                 onChoose={chooseWorkspace}
                 onStart={() => void actions.quickStart()}
-                onOpenRecent={(path) => void actions.open(path)}
+                onOpenRecent={actions.open}
               />
             </Suspense>
           )}
           {screen === 'welcome' && (
             <Welcome
               state={state}
-              error={actions.error}
+              error={error?.message ?? null}
               starting={actions.starting}
               onChoose={chooseWorkspace}
               onStart={() => void actions.quickStart()}
-              onOpenRecent={(path) => void actions.open(path)}
+              onOpenRecent={actions.open}
             />
           )}
           {screen === 'server' && (
@@ -107,6 +123,39 @@ function MainWindow() {
         onClose={() => setCreateTarget(null)}
         onCreated={() => setCreateTarget(null)}
       />
+      <WorkspaceErrorDialog error={raisedError} />
     </TooltipProvider>
+  );
+}
+
+function WorkspaceErrorDialog({ error }: { error: WorkspaceError | null }) {
+  // The message stays up while the sheet animates out.
+  const [shown, setShown] = useState(error);
+  if (error && error !== shown) setShown(error);
+  const dismiss = () => {
+    if (error) desktop.workspace.dismissError(error.id);
+  };
+  return (
+    <Dialog
+      open={error !== null}
+      onOpenChange={(open) => {
+        if (!open) dismiss();
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="top-12 translate-y-0 rounded-[12px] sm:max-w-[440px]"
+      >
+        <DialogHeader>
+          <DialogTitle>Couldn’t open the workspace</DialogTitle>
+          <DialogDescription className="selectable break-words">{shown?.message}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button autoFocus onClick={dismiss}>
+            OK
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

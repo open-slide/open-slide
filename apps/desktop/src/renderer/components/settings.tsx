@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import type { AppState, DesktopSettings, PackageManager } from '../../shared/types';
-import { desktop, TELEMETRY_DOCS_URL, useAppState, useLog } from '../lib/desktop';
+import { desktop, settle, TELEMETRY_DOCS_URL, useAppState, useLog } from '../lib/desktop';
 import { splitPath, tildify } from '../lib/paths';
 import { AgentsSection } from './agents-section';
 import { LogView, SectionCard, StatusDot } from './primitives';
@@ -32,7 +32,6 @@ export function SettingsWindow() {
   const state = useAppState();
   const [section, setSection] = useState<SectionId>(storedSection);
   const [prefs, setPrefs] = useState<DesktopSettings | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const headerRef = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const label = SECTIONS.find((s) => s.id === section)?.label ?? 'Settings';
@@ -131,16 +130,12 @@ export function SettingsWindow() {
           {section === 'workspace' && (
             <WorkspaceSection
               state={state}
-              error={error}
+              error={state.workspaceError?.message ?? null}
               prefs={prefs}
               onUpdate={update}
               onChoose={() => desktop.sendCommand('open-workspace')}
               onCreate={() => desktop.sendCommand('new-workspace')}
-              onOpenRecent={async (path) => {
-                setError(null);
-                const result = await desktop.workspace.open(path);
-                if (!result.ok) setError(result.error);
-              }}
+              onOpenRecent={(path) => void settle(desktop.workspace.open(path))}
             />
           )}
           {section === 'agents' && <AgentsSection />}

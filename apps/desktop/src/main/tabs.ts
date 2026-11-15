@@ -12,6 +12,13 @@ import {
 import { SPARE_PATH, TAB_STRIP_HEIGHT, type TabInfo } from '../shared/types';
 import type { DeckSession } from './settings';
 import { moveTab } from './tab-order';
+import {
+  type LeaveIntent,
+  type Prompt,
+  UnsavedChannel,
+  UnsavedGuard,
+  type UnsavedPage,
+} from './unsaved';
 import { isHttpUrl, originOf } from './url';
 
 type Tab = {
@@ -29,6 +36,8 @@ type TabManagerOptions = {
   window: BrowserWindow;
   viewPreload: string;
   onChange: () => void;
+  // Shows a dialog on the window and resolves to the button that was chosen.
+  prompt: Prompt;
 };
 
 const DECK_ROOT_RE = /^\/s\/([^/]+)\/?$/;
@@ -88,8 +97,12 @@ export class TabManager {
   private readonly revealed = new WeakSet<WebContents>();
   private readonly popups = new Set<BrowserWindow>();
   private readonly crashes = new WeakMap<Tab, number[]>();
+  private readonly unsaved = new UnsavedChannel();
+  private readonly guard: UnsavedGuard;
+  private readonly allowedUnloads = new WeakSet<WebContents>();
 
   constructor(private readonly opts: TabManagerOptions) {
+    this.guard = new UnsavedGuard(opts.prompt);
     const home = this.makeTab('home', null);
     this.tabs = [home];
     this.activeId = home.id;
@@ -150,6 +163,26 @@ export class TabManager {
     this.layout();
   }
 
+  unsavedReply(contents: WebContents, request: unknown, payload: unknown) {
+    this.unsaved.answer(contents, request, payload);
+  }
+
+  // Settles the unsaved work in every tab before something destroys them all.
+  // Resolves false when the user chose to stay.
+  confirmLeave(intent: LeaveIntent): Promise<boolean> {
+    return this.confirm(this.tabs, intent);
+  }
+
+  setTranslucent(translucent: boolean) {
+    for (const view of [...this.tabs.map((t) => t.view), this.spare]) {
+      if (view && !view.webContents.isDestroyed()) {
+        view.webContents.send('host:translucent', translucent);
+      }
+    }
+  }
+
+  // Destroys every tab without asking; callers settle unsaved work first with
+  // confirmLeave.
   reset(session: DeckSession) {
     for (const tab of this.tabs) this.destroyView(tab);
     this.destroySpare();
@@ -232,28 +265,73 @@ export class TabManager {
     this.activate(home.id);
   }
 
-  close(id: string) {
-    const index = this.tabs.findIndex((t) => t.id === id);
-    const tab = this.tabs[index];
-    if (!tab || tab.kind === 'home') return;
-    this.destroyView(tab);
-    this.tabs.splice(index, 1);
-    if (this.fullscreenTab === tab) this.leaveHtmlFullscreen();
-    if (this.activeId === id) {
-      this.activate((this.tabs[index] ?? this.tabs[index - 1] ?? this.tabs[0]).id);
-    } else {
+  async close(id: string): Promise<boolean> {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab || tab.kind === 'home') return false;
+    if (!(await this.confirm([tab], 'close'))) return false;
+    this.remove([tab]);
+    return true;
+  }
+
+  private async closeAround(anchor: Tab, keep: (tab: Tab, index: number) => boolean) {
+    const closing = this.tabs.filter((t, i) => t.kind !== 'home' && !keep(t, i));
+    if (!closing.length || !(await this.confirm(closing, 'close'))) return;
+    this.remove(closing, anchor);
+  }
+
+  // The tabs may have changed while the user was deciding, so only the ones
+  // still open are removed.
+  private remove(closing: Tab[], anchor?: Tab) {
+    const gone = closing.filter((t) => this.tabs.includes(t));
+    if (!gone.length) return;
+    const index = this.tabs.findIndex((t) => t.id === this.activeId);
+    this.tabs = this.tabs.filter((t) => !gone.includes(t));
+    for (const tab of gone) this.destroyView(tab);
+    if (this.fullscreenTab && gone.includes(this.fullscreenTab)) this.leaveHtmlFullscreen();
+    if (this.tabs.some((t) => t.id === this.activeId)) {
       this.changed();
+      return;
+    }
+    const next =
+      anchor && this.tabs.includes(anchor)
+        ? anchor
+        : (this.tabs[Math.min(index, this.tabs.length - 1)] ?? this.tabs[0]);
+    this.activate(next.id);
+  }
+
+  async reload(id: string) {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab?.view || !(await this.confirm([tab], 'reload'))) return;
+    const contents = tab.view?.webContents;
+    if (contents && !contents.isDestroyed()) {
+      this.allowedUnloads.add(contents);
+      contents.reload();
     }
   }
 
-  private closeAround(anchor: Tab, keep: (tab: Tab, index: number) => boolean) {
-    const closing = this.tabs.filter((t, i) => t.kind !== 'home' && !keep(t, i));
-    if (!closing.length) return;
-    this.tabs = this.tabs.filter((t) => !closing.includes(t));
-    for (const tab of closing) this.destroyView(tab);
-    if (this.fullscreenTab && closing.includes(this.fullscreenTab)) this.leaveHtmlFullscreen();
-    if (!this.tabs.some((t) => t.id === this.activeId)) this.activeId = anchor.id;
-    this.activate(this.activeId);
+  reloadActive() {
+    void this.reload(this.activeId);
+  }
+
+  private confirm(tabs: Tab[], intent: LeaveIntent): Promise<boolean> {
+    const pages: UnsavedPage[] = [];
+    for (const tab of tabs) {
+      const contents = tab.view?.webContents;
+      if (!contents || !this.canHoldWork(contents)) continue;
+      pages.push(this.unsaved.page(contents, tab.title, () => this.activate(tab.id)));
+    }
+    return this.guard.confirm(pages, intent);
+  }
+
+  // A page that never loaded, crashed, or sits on an error page has no core
+  // app in it to hold work or answer for it.
+  private canHoldWork(contents: WebContents): boolean {
+    return (
+      !contents.isDestroyed() &&
+      !contents.isCrashed() &&
+      this.loaded.has(contents) &&
+      this.isServerUrl(contents.getURL())
+    );
   }
 
   showMenu(id: string) {
@@ -262,27 +340,31 @@ export class TabManager {
     if (!tab) return;
     const decks = this.tabs.filter((t) => t.kind === 'deck');
     const items: MenuItemConstructorOptions[] = [
-      { label: 'Reload Tab', click: () => tab.view?.webContents.reload(), enabled: !!tab.view },
+      { label: 'Reload Tab', click: () => void this.reload(id), enabled: !!tab.view },
       { type: 'separator' },
-      { label: 'Close Tab', enabled: tab.kind === 'deck', click: () => this.close(id) },
+      { label: 'Close Tab', enabled: tab.kind === 'deck', click: () => void this.close(id) },
       {
         label: 'Close Other Tabs',
         enabled: decks.some((t) => t !== tab),
-        click: () => this.closeAround(tab, (t) => t === tab),
+        click: () => void this.closeAround(tab, (t) => t === tab),
       },
       {
         label: 'Close Tabs to the Right',
         enabled: index < this.tabs.length - 1,
-        click: () => this.closeAround(tab, (_t, i) => i <= index),
+        click: () => {
+          const at = this.tabs.indexOf(tab);
+          if (at >= 0) void this.closeAround(tab, (_t, i) => i <= at);
+        },
       },
     ];
     Menu.buildFromTemplate(items).popup({ window: this.opts.window });
   }
 
+  // False when the active tab is not one that closes.
   closeActive(): boolean {
     const tab = this.active();
     if (!tab || tab.kind === 'home') return false;
-    this.close(tab.id);
+    void this.close(tab.id);
     return true;
   }
 
@@ -291,14 +373,6 @@ export class TabManager {
     if (from < 1 || !Number.isInteger(toIndex)) return;
     this.tabs = moveTab(this.tabs, from, toIndex);
     this.changed();
-  }
-
-  reloadAll() {
-    // The spare read its host config at boot, so it can't be reloaded into a
-    // new one; a fresh spare picks up the change.
-    this.destroySpare();
-    for (const tab of this.tabs) tab.view?.webContents.reload();
-    this.scheduleWarm();
   }
 
   activeContents(): WebContents | null {
@@ -538,7 +612,7 @@ export class TabManager {
     });
     if (tab.view?.webContents !== contents || contents.isDestroyed()) return;
     if (response === 0) contents.reload();
-    else if (tab.kind === 'deck') this.close(tab.id);
+    else if (tab.kind === 'deck') void this.close(tab.id);
   }
 
   private wire(tab: Tab, contents: WebContents) {
@@ -637,6 +711,16 @@ export class TabManager {
       }
       if (items.length) Menu.buildFromTemplate(items).popup({ window: this.opts.window });
     });
+
+    // Core holds any unload it was not asked for while it has drafts, such as
+    // a reload from the dev server. The page stays; the user is asked, and the
+    // reload it wanted follows once the drafts are settled.
+    contents.on('will-prevent-unload', (event) => {
+      if (this.allowedUnloads.delete(contents)) event.preventDefault();
+      else void this.reload(tab.id);
+    });
+    contents.on('did-finish-load', () => this.allowedUnloads.delete(contents));
+    contents.on('did-fail-load', () => this.allowedUnloads.delete(contents));
 
     contents.on('render-process-gone', (_e, details) => {
       if (details.reason === 'clean-exit') return;

@@ -30,8 +30,6 @@ import {
   type PackageManager,
   type ShellCommand,
   TAB_STRIP_HEIGHT,
-  type TaskResult,
-  type WorkspaceInfo,
 } from '../shared/types';
 import { cancelAllInstalls, managedCliDirs, syncManagedClis } from './agent-cli';
 import { AgentLogins } from './agent-logins';
@@ -39,6 +37,7 @@ import { listAgents, logout, startLogin } from './agents';
 import { performHaptic } from './haptics';
 import { installMenu, type MenuActions } from './menu';
 import { terminateRunning } from './process';
+import { QuitGate } from './quit';
 import { DevServer } from './server';
 import { settings } from './settings';
 import { loginEnv, shellEnv } from './shell-env';
@@ -57,14 +56,11 @@ import { isHttpUrl } from './url';
 import {
   availablePackageManagers,
   bundledCore,
-  createDefaultWorkspace,
-  createWorkspace,
   detectPackageManager,
-  inspectWorkspace,
-  installDependencies,
   modulesDir,
   syncSkills,
 } from './workspace';
+import { WorkspaceController } from './workspace-controller';
 
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
@@ -84,6 +80,7 @@ const WINDOW_RADIUS = isMac ? 12 : isWindows ? 8 : 0;
 const INTRO_TIMEOUT = 20_000;
 // Once released, the intro only has its score's tail left to ring out.
 const INTRO_TAIL_TIMEOUT = 14_000;
+const WINDOW_SHOW_TIMEOUT_MS = 2000;
 
 let window: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -91,7 +88,6 @@ let introWindow: BrowserWindow | null = null;
 let introCovering = false;
 let releaseIntro: (() => void) | null = null;
 let tabs: TabManager | null = null;
-let workspace: WorkspaceInfo | null = null;
 
 async function childEnv(read = shellEnv): Promise<NodeJS.ProcessEnv> {
   const env = await read();
@@ -138,7 +134,8 @@ function state(): AppState {
     fullscreen: window?.isFullScreen() ?? false,
     onboarding: !settings.onboarded(),
     intro: introCovering,
-    workspace,
+    workspace: workspaces.current,
+    workspaceError: workspaces.error,
     recent: settings.recent(),
     server: server.status,
     tabs: info.tabs,
@@ -183,19 +180,37 @@ function sendLog(task: LogTask, chunk: string) {
   sendAll('log', { task, chunk });
 }
 
-function sendCommand(command: ShellCommand) {
+// Every way of reaching the main window from outside it comes through here.
+// On macOS the app outlives its last window, so there may be none to reach.
+async function ensureMainWindow(): Promise<BrowserWindow> {
   if (window) {
+    if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
-    window.webContents.send('command', command);
-    return;
+    return window;
   }
   const created = createWindow();
-  created.webContents.once('did-finish-load', () => created.webContents.send('command', command));
+  // It shows itself once it has painted; a dialog attached before then would
+  // hang off a window nobody can see.
+  if (!created.isVisible()) {
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, WINDOW_SHOW_TIMEOUT_MS);
+      created.once('show', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+  return created;
 }
 
-function persistSession() {
-  if (workspace && tabs) settings.setSession(workspace.root, tabs.session);
+function sendCommand(command: ShellCommand) {
+  void ensureMainWindow().then((win) => {
+    const contents = win.webContents;
+    if (contents.isLoading())
+      contents.once('did-finish-load', () => contents.send('command', command));
+    else contents.send('command', command);
+  });
 }
 
 let serverStartedAt = 0;
@@ -231,65 +246,32 @@ function forgetWorkspace(root: string) {
   removeCache(root);
 }
 
-type OpenSource = 'restored' | 'created' | 'shell' | 'menu';
+const workspaces = new WorkspaceController({
+  tabs: () => tabs,
+  server,
+  ensureWindow: ensureMainWindow,
+  env: () => childEnv(),
+  log: sendLog,
+  prepare: syncSkillsOnce,
+  removeCache,
+  onChange: broadcast,
+});
 
-// Opening a workspace runs its config and slides with the user's permissions,
-// and its decks can drive the agents they are signed in to. One the app set up
-// itself is trusted; any other folder is asked about once, and is never
-// reopened on launch before that.
-async function confirmTrust(root: string, name: string, source: OpenSource): Promise<boolean> {
-  if (settings.trusted(root)) return true;
-  if (source === 'restored') return false;
-  if (source !== 'created') {
-    const options: Electron.MessageBoxOptions = {
-      type: 'question',
-      message: `Do you trust the authors of “${name}”?`,
-      detail: `Opening this workspace runs its code on your computer, and its decks can use the agents you are signed in to. Only open folders from people you trust.\n\n${root}`,
-      buttons: ['Trust and Open', 'Cancel'],
-      defaultId: 1,
-      cancelId: 1,
-    };
-    const { response } = await (window
-      ? dialog.showMessageBox(window, options)
-      : dialog.showMessageBox(options));
-    if (response !== 0) return false;
-  }
-  settings.trust(root);
-  return true;
-}
+const quitGate = new QuitGate({
+  confirm: async () => (await tabs?.confirmLeave('quit')) ?? true,
+  cleanup: async () => {
+    workspaces.persistSession();
+    settings.flush();
+    logins.cancelAll();
+    cancelAllInstalls();
+    await Promise.all([terminateRunning(), server.stop(), shutdownTelemetry()]);
+  },
+  quit: () => app.quit(),
+});
 
-async function openWorkspace(root: string, source: OpenSource): Promise<TaskResult> {
-  const inspection = inspectWorkspace(root);
-  if (inspection.kind !== 'project') {
-    return { ok: false, error: `${inspection.path} is not an open-slide workspace.` };
-  }
-  if (!(await confirmTrust(inspection.path, inspection.name, source))) return { ok: true };
-  track('workspace_opened', { source });
-  persistSession();
-  workspace = { root: inspection.path, name: inspection.name };
-  for (const evicted of settings.setWorkspace(inspection.path)) removeCache(evicted);
-  settings.setOnboarded(true);
-  tabs?.reset(settings.session(inspection.path));
-  broadcast();
-  await Promise.all([syncSkillsOnce(inspection.path), server.start(inspection.path)]);
-  return { ok: true };
-}
-
-async function installWorkspace(): Promise<TaskResult> {
-  if (!workspace) return { ok: false, error: 'No workspace is open.' };
-  const root = workspace.root;
-  const pm = detectPackageManager(root, fallbackPackageManager());
-  server.markInstalling();
-  const started = Date.now();
-  const result = await installDependencies(root, pm, await childEnv(), (chunk) =>
-    sendLog('install', chunk),
-  );
-  track(result.ok ? 'install_completed' : 'install_failed', {
-    package_manager: pm,
-    duration_ms: Date.now() - started,
-  });
-  if (workspace?.root === root) await server.start(root);
-  return result;
+async function restartServer() {
+  if (tabs && !(await tabs.confirmLeave('restart'))) return;
+  await server.restart();
 }
 
 function windowBackground(): string {
@@ -439,17 +421,24 @@ function createWindow(): BrowserWindow {
     },
   });
   window = win;
-  tabs = new TabManager({
+  const manager = new TabManager({
     window: win,
     viewPreload: VIEW_PRELOAD,
     onChange: () => {
-      persistSession();
+      workspaces.persistSession();
       broadcast();
     },
+    prompt: async (options) => {
+      if (win.isDestroyed()) return options.cancelId ?? 0;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      return (await dialog.showMessageBox(win, options)).response;
+    },
   });
-  if (workspace) {
-    tabs.reset(settings.session(workspace.root));
-    if (server.status.state === 'ready') tabs.setBaseUrl(server.status.url);
+  tabs = manager;
+  if (workspaces.current) {
+    manager.reset(settings.session(workspaces.current.root));
+    if (server.status.state === 'ready') manager.setBaseUrl(server.status.url);
   }
 
   win.on('enter-full-screen', broadcast);
@@ -458,14 +447,26 @@ function createWindow(): BrowserWindow {
   win.once('ready-to-show', () => {
     if (!introWindow) win.show();
   });
-  win.on('close', () => {
-    persistSession();
+  // Closing the window destroys its tabs, so their unsaved work is settled
+  // first and the close goes ahead once the user has agreed.
+  let closeConfirmed = false;
+  win.on('close', (e) => {
+    if (!closeConfirmed && !quitGate.leaving) {
+      e.preventDefault();
+      void manager.confirmLeave('close').then((confirmed) => {
+        if (!confirmed || win.isDestroyed()) return;
+        closeConfirmed = true;
+        win.close();
+      });
+      return;
+    }
+    workspaces.persistSession();
     if (!win.isFullScreen()) settings.setBounds(win.getNormalBounds());
   });
   win.on('closed', () => {
-    tabs?.destroy();
-    tabs = null;
-    window = null;
+    manager.destroy();
+    if (tabs === manager) tabs = null;
+    if (window === win) window = null;
   });
   wireShell(win);
   loadShell(win);
@@ -700,19 +701,6 @@ function windowKind(win: BrowserWindow): string {
   return 'main';
 }
 
-async function createWorkspaceTracked(
-  method: 'custom' | 'default',
-  create: () => Promise<TaskResult & { root?: string }>,
-  packageManager?: PackageManager,
-): Promise<TaskResult> {
-  const started = Date.now();
-  const result = await create();
-  const props = { method, package_manager: packageManager, duration_ms: Date.now() - started };
-  track(result.ok ? 'workspace_created' : 'workspace_create_failed', props);
-  if (!result.ok || !result.root) return result;
-  return openWorkspace(result.root, 'created');
-}
-
 function isAgentId(value: unknown): value is AgentId {
   return (AGENT_IDS as readonly unknown[]).includes(value);
 }
@@ -775,7 +763,7 @@ function registerIpc() {
   });
   listen('onboarding:finish', () => {
     settings.setOnboarded(true);
-    track('onboarding_finished', { has_workspace: workspace !== null });
+    track('onboarding_finished', { has_workspace: workspaces.current !== null });
     broadcast();
   });
 
@@ -795,7 +783,7 @@ function registerIpc() {
     }
     if (translucent() !== before) {
       for (const win of shellWindows()) applyMaterial(win);
-      tabs?.reloadAll();
+      tabs?.setTranslucent(translucent());
     }
     if (result.telemetry !== previous.telemetry) setTelemetryEnabled(result.telemetry);
     broadcast();
@@ -803,20 +791,11 @@ function registerIpc() {
   });
 
   listen('tabs:activate', (id: string) => tabs?.activate(String(id)));
-  listen('tabs:close', (id: string) => tabs?.close(String(id)));
+  listen('tabs:close', (id: string) => void tabs?.close(String(id)));
   listen('tabs:move', (id: string, index: number) => tabs?.move(String(id), index));
   listen('tabs:menu', (id: string) => tabs?.showMenu(String(id)));
 
-  handle('workspace:choose', async () => {
-    if (!window) return null;
-    const result = await dialog.showOpenDialog(window, {
-      title: 'Open Workspace',
-      buttonLabel: 'Open',
-      properties: ['openDirectory', 'createDirectory'],
-    });
-    const [dir] = result.filePaths;
-    return result.canceled || !dir ? null : inspectWorkspace(dir);
-  });
+  handle('workspace:choose', () => workspaces.choose());
   handle('workspace:choose-parent', async () => {
     if (!window) return null;
     const result = await dialog.showOpenDialog(window, {
@@ -828,36 +807,24 @@ function registerIpc() {
   });
   handle('workspace:default-parent', () => app.getPath('documents'));
   handle('workspace:package-managers', async () => availablePackageManagers(await childEnv()));
-  handle('workspace:open', (root: string) => openWorkspace(String(root), 'shell'));
-  handle('workspace:create', (request: CreateWorkspaceRequest) => {
-    if (!isCreateRequest(request)) return { ok: false, error: 'That workspace name is not valid.' };
-    return createWorkspaceTracked(
-      'custom',
-      async () => {
-        const result = await createWorkspace(request, await childEnv(), (chunk) =>
-          sendLog('create', chunk),
-        );
-        if (result.ok) settings.update({ packageManager: request.packageManager });
-        return result;
-      },
-      request.packageManager,
-    );
-  });
-  handle('workspace:create-default', () =>
-    createWorkspaceTracked('default', async () =>
-      createDefaultWorkspace(await childEnv(), (chunk) => sendLog('create', chunk)),
-    ),
+  handle('workspace:open', (root: string) => workspaces.open(String(root), 'shell'));
+  handle('workspace:create', (request: CreateWorkspaceRequest) =>
+    isCreateRequest(request)
+      ? workspaces.create(request)
+      : { ok: false, error: 'That workspace name is not valid.' },
   );
-  handle('workspace:install', () => installWorkspace());
+  handle('workspace:create-default', () => workspaces.createDefault());
+  handle('workspace:install', () => workspaces.install());
   listen('workspace:reveal', () => {
-    if (workspace) void shell.openPath(workspace.root);
+    if (workspaces.current) void shell.openPath(workspaces.current.root);
   });
+  listen('workspace:dismiss-error', (id: unknown) => workspaces.dismissError(id));
   listen('workspace:forget', (root: string) => {
     if (settings.recent().includes(root)) forgetWorkspace(root);
     broadcast();
   });
 
-  listen('server:restart', () => void server.restart());
+  listen('server:restart', () => void restartServer());
   handle('server:log', () => server.log);
 
   handle('agents:list', () => cachedAgents());
@@ -886,6 +853,9 @@ function registerIpc() {
     e.returnValue = { translucent: translucent() && (tabs?.owns(e.sender) ?? false) };
   });
   ipcMain.on('host:adopted', (e) => tabs?.adopted(e.sender));
+  ipcMain.on('host:unsaved-reply', (e, request: unknown, payload: unknown) => {
+    if (fromHost(e)) tabs?.unsavedReply(e.sender, request, payload);
+  });
   listenHost('host:open-deck', (slideId: unknown) => {
     if (typeof slideId === 'string' && slideId && tabs) {
       const before = tabs.info.tabs.length;
@@ -923,7 +893,7 @@ const menuActions: MenuActions = {
   openSettings: () => openSettingsWindow(),
   openWorkspace: () => sendCommand('open-workspace'),
   newWorkspace: () => sendCommand('new-workspace'),
-  revealWorkspace: () => workspace && void shell.openPath(workspace.root),
+  revealWorkspace: () => workspaces.current && void shell.openPath(workspaces.current.root),
   closeTab: () => {
     // Settings and presenter windows have no tabs, so ⌘W closes them outright.
     const focused = BrowserWindow.getFocusedWindow();
@@ -936,16 +906,13 @@ const menuActions: MenuActions = {
   goHome: () => tabs?.openHome(),
   selectTab: (index) => tabs?.activateIndex(index),
   cycleTab: (delta) => tabs?.cycle(delta),
-  reloadTab: () => tabs?.activeContents()?.reload(),
+  reloadTab: () => tabs?.reloadActive(),
   toggleTabDevTools: () => tabs?.activeContents()?.toggleDevTools(),
-  openRecent: (root) => {
-    window?.focus();
-    void openWorkspace(root, 'menu');
-  },
+  openRecent: (root) => void workspaces.open(root, 'menu'),
   replayIntro: () => replayIntro(),
   clearRecent: () => {
     for (const root of settings.recent()) {
-      if (root !== workspace?.root) forgetWorkspace(root);
+      if (root !== workspaces.current?.root) forgetWorkspace(root);
     }
     broadcast();
   },
@@ -956,11 +923,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   startCrashReporter();
 
-  app.on('second-instance', () => {
-    if (!window) createWindow();
-    if (window?.isMinimized()) window.restore();
-    window?.focus();
-  });
+  app.on('second-instance', () => void ensureMainWindow());
 
   app.on('web-contents-created', (_e, contents) => restrictContents(contents));
 
@@ -991,7 +954,7 @@ if (!app.requestSingleInstanceLock()) {
       else playIntro();
     }
     const saved = settings.workspace();
-    if (saved) void openWorkspace(saved, 'restored');
+    if (saved) void workspaces.open(saved, 'restored');
 
     app.on('activate', () => {
       if (!window) createWindow();
@@ -1002,17 +965,5 @@ if (!app.requestSingleInstanceLock()) {
     if (!isMac) app.quit();
   });
 
-  let quitting = false;
-  app.on('before-quit', (e) => {
-    if (quitting) return;
-    e.preventDefault();
-    quitting = true;
-    persistSession();
-    settings.flush();
-    logins.cancelAll();
-    cancelAllInstalls();
-    void Promise.all([terminateRunning(), server.stop(), shutdownTelemetry()]).finally(() =>
-      app.quit(),
-    );
-  });
+  app.on('before-quit', (e) => quitGate.beforeQuit(e));
 }

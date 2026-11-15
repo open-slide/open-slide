@@ -1,3 +1,11 @@
+export type {
+  DesktopHost,
+  UnsavedAction,
+  UnsavedGuard,
+  UnsavedOutcome,
+  UnsavedStatus,
+} from '../../../../packages/core/src/app/lib/desktop-host';
+
 export const TAB_STRIP_HEIGHT = 40;
 
 // Matches no core route, so a spare view boots the whole app behind a cheap
@@ -26,6 +34,10 @@ export type TabInfo = {
 
 export type WorkspaceInfo = { root: string; name: string };
 
+// Why the last attempt to open or set up a workspace failed. The id lets a
+// surface dismiss the failure it showed, not one that replaced it.
+export type WorkspaceError = { id: number; message: string };
+
 export type AppState = {
   platform: string;
   translucent: boolean;
@@ -37,6 +49,7 @@ export type AppState = {
   // The full-screen intro is still covering the main window.
   intro: boolean;
   workspace: WorkspaceInfo | null;
+  workspaceError: WorkspaceError | null;
   recent: string[];
   server: ServerStatus;
   tabs: TabInfo[];
@@ -156,7 +169,9 @@ export type ShellApi = {
     showMenu(id: string): void;
   };
   workspace: {
-    choose(): Promise<WorkspaceInspection | null>;
+    // Opens the folder the user picks. Resolves to an empty folder that still
+    // needs setting up, and to null once there is nothing left to do.
+    choose(): Promise<{ create: string } | null>;
     chooseParent(): Promise<string | null>;
     defaultParent(): Promise<string>;
     packageManagers(): Promise<PackageManager[]>;
@@ -166,6 +181,7 @@ export type ShellApi = {
     install(): Promise<TaskResult>;
     reveal(): void;
     forget(path: string): void;
+    dismissError(id: number): void;
   };
   server: {
     restart(): void;

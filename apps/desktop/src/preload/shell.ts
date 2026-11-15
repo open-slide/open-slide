@@ -53,6 +53,7 @@ const api: ShellApi = {
     install: () => ipcRenderer.invoke('workspace:install'),
     reveal: () => ipcRenderer.send('workspace:reveal'),
     forget: (path) => ipcRenderer.send('workspace:forget', path),
+    dismissError: (id) => ipcRenderer.send('workspace:dismiss-error', id),
   },
   server: {
     restart: () => ipcRenderer.send('server:restart'),

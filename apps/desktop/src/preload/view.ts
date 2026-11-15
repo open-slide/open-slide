@@ -1,6 +1,11 @@
 /// <reference lib="dom" />
 import { contextBridge, ipcRenderer } from 'electron';
-import { SPARE_PATH } from '../shared/types';
+import {
+  type DesktopHost,
+  SPARE_PATH,
+  type UnsavedAction,
+  type UnsavedGuard,
+} from '../shared/types';
 
 const config = ipcRenderer.sendSync('host:config') as { translucent: boolean };
 
@@ -45,16 +50,41 @@ ipcRenderer.on('host:navigate', (_e, path: string) => {
   else pending = path;
 });
 
-// The contract core reads in packages/core/src/app/lib/desktop.ts.
-contextBridge.exposeInMainWorld('openSlideDesktop', {
+let translucent = config.translucent;
+const materialListeners = new Set<(translucent: boolean) => void>();
+
+ipcRenderer.on('host:translucent', (_e, value: unknown) => {
+  translucent = value === true;
+  for (const listener of materialListeners) listener(translucent);
+});
+
+let guard: UnsavedGuard | null = null;
+
+// The host asks before it closes or reloads this page. A page that registered
+// no guard has nothing to lose, so it answers for itself.
+ipcRenderer.on('host:unsaved', (_e, request: number, action: 'query' | UnsavedAction) => {
+  const reply = (payload: unknown) => ipcRenderer.send('host:unsaved-reply', request, payload);
+  try {
+    if (action === 'query') {
+      reply(guard ? guard.status() : { drafts: false, pending: false });
+    } else if (guard) {
+      guard.settle(action).then(reply, (err: unknown) => reply({ ok: false, error: String(err) }));
+    } else {
+      reply({ ok: true });
+    }
+  } catch (err) {
+    reply({ ok: false, error: String(err) });
+  }
+});
+
+const host: DesktopHost = {
   translucent: config.translucent,
-  openDeck: (slideId: string) => ipcRenderer.send('host:open-deck', slideId),
-  openHome: (path?: string) => ipcRenderer.send('host:open-home', path),
-  setTheme: (theme: string) => ipcRenderer.send('host:set-theme', theme),
-  haptic: (pattern: string) => ipcRenderer.send('host:haptic', pattern),
-  printToPdf: (filename: string): Promise<boolean> =>
-    ipcRenderer.invoke('host:print-to-pdf', filename),
-  onNavigate: (listener: (path: string) => void) => {
+  openDeck: (slideId) => ipcRenderer.send('host:open-deck', slideId),
+  openHome: (path) => ipcRenderer.send('host:open-home', path),
+  setTheme: (theme) => ipcRenderer.send('host:set-theme', theme),
+  haptic: (pattern) => ipcRenderer.send('host:haptic', pattern),
+  printToPdf: (filename) => ipcRenderer.invoke('host:print-to-pdf', filename),
+  onNavigate: (listener) => {
     listeners.add(listener);
     if (pending !== null) {
       const path = pending;
@@ -65,4 +95,20 @@ contextBridge.exposeInMainWorld('openSlideDesktop', {
       listeners.delete(listener);
     };
   },
-});
+  guardUnsaved: (next) => {
+    guard = next;
+    return () => {
+      if (guard === next) guard = null;
+    };
+  },
+  onTranslucentChange: (listener) => {
+    materialListeners.add(listener);
+    // The page read the material it booted with; it may have changed since.
+    if (translucent !== config.translucent) listener(translucent);
+    return () => {
+      materialListeners.delete(listener);
+    };
+  },
+};
+
+contextBridge.exposeInMainWorld('openSlideDesktop', host);
