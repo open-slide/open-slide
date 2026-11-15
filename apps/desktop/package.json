@@ -10,8 +10,9 @@
     "start": "node scripts/start.mjs",
     "build": "electron-vite build && node scripts/build-native.mjs",
     "preview": "electron-vite preview",
-    "package": "pnpm build && electron-builder --dir",
-    "dist": "pnpm build && node scripts/upload-sourcemaps.mjs && electron-builder",
+    "build:deps": "pnpm --filter @open-slide/core --filter @open-slide/cli run build",
+    "package": "pnpm build:deps && pnpm build && electron-builder --dir",
+    "dist": "pnpm build:deps && pnpm build && node scripts/upload-sourcemaps.mjs && electron-builder",
     "typecheck": "tsc --noEmit --composite false -p tsconfig.node.json && tsc --noEmit --composite false -p tsconfig.web.json"
   },
   "dependencies": {

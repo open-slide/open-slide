@@ -602,7 +602,7 @@ export function Intro() {
 
     const fonts = Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 600))]);
     void Promise.all([desktop.intro.target().catch(() => null), fonts, sound.ready]).then(([t]) => {
-      if (cancelled) return;
+      if (cancelled || exiting) return;
       target = t as IntroTarget | null;
       run();
     });

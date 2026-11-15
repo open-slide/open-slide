@@ -5,15 +5,16 @@ import path from 'node:path';
 import type { AgentId, AgentInfo, LoginEvent, TaskResult } from '../shared/types';
 import { cancelInstall, canInstallCli, cliSpec, installCli, isManagedCli } from './agent-cli';
 import { run } from './process';
-import { findOnPath } from './shell-env';
+import { findExecutable } from './shell-env';
 import { modulesDir } from './workspace';
 
 const STATUS_TIMEOUT_MS = 10_000;
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
-const URL_RE = /https?:\/\/[^\s"'<>]+/;
+// Codex prints its own callback server's address ahead of the sign-in page.
+const URL_RE = /https?:\/\/(?!localhost\b|127\.0\.0\.1|\[::1\])[^\s"'<>]+/;
 // Output arrives in arbitrary chunks, so a URL only counts as whole once
 // something follows it.
-const COMPLETE_URL_RE = /https?:\/\/[^\s"'<>]+(?=[\s"'<>])/;
+const COMPLETE_URL_RE = new RegExp(`${URL_RE.source}(?=[\\s"'<>])`);
 const URL_SETTLE_MS = 200;
 const URL_SCAN_LIMIT = 8 * 1024;
 
@@ -90,7 +91,7 @@ function readVersion(pkgDir: string | null): string | null {
 // otherwise the copy downloaded on first sign-in, which the child env appends
 // to PATH so core's providers find the same binary.
 function resolveCli(agent: AgentSpec, env: NodeJS.ProcessEnv) {
-  const found = findOnPath(agent.command, env);
+  const found = findExecutable(agent.command, env);
   if (!found) return null;
   return { path: found, source: isManagedCli(found) ? ('downloaded' as const) : ('path' as const) };
 }
@@ -147,6 +148,7 @@ export async function login(
       await installCli(id, (progress) => emit({ id, type: 'download', ...progress }));
     } catch (err) {
       const aborted = err instanceof Error && err.name === 'AbortError';
+      emit({ id, type: 'exit', ok: false });
       return { ok: false, error: aborted ? 'Download cancelled.' : (err as Error).message };
     }
     emit({ id, type: 'installed' });

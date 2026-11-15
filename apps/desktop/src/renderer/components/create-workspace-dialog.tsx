@@ -1,5 +1,5 @@
 import { FolderOpen } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,11 +14,12 @@ import { Label } from '@/components/ui/label';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import type { PackageManager } from '../../shared/types';
-import { desktop, useAppState, useLog } from '../lib/desktop';
+import { desktop, settle, useAppState, useLog } from '../lib/desktop';
 import { joinPath, sanitizeName, tildify } from '../lib/paths';
 import { LineLoader, LogView } from './primitives';
 
-// `fixed` initializes the folder the user picked instead of a new one below it.
+// `fixed` sets up `parent` itself, the folder the user picked, instead of a new
+// one below it.
 export type CreateTarget = { parent: string; name: string; fixed: boolean };
 
 type Phase = { kind: 'form' } | { kind: 'running' } | { kind: 'failed'; error: string };
@@ -40,8 +41,14 @@ export function CreateWorkspaceDialog({
   const [manager, setManager] = useState<PackageManager>('npm');
   const [phase, setPhase] = useState<Phase>({ kind: 'form' });
   const [log, setLog] = useLog('create');
+  const [shown, setShown] = useState<CreateTarget | null>(null);
+  const creating = useRef(false);
 
   useEffect(() => {
+    // The menu can ask for another workspace while one is being created; that
+    // creation keeps the dialog until it ends.
+    if (creating.current) return;
+    setShown(target);
     if (!target) return;
     setPhase({ kind: 'form' });
     setLog('');
@@ -58,26 +65,28 @@ export function CreateWorkspaceDialog({
     );
   }, [target, setLog]);
 
-  const fixed = target?.fixed ?? false;
-  const folderName = fixed ? name : sanitizeName(name);
-  const destination = parent ? joinPath(parent, folderName, platform) : '';
+  const fixed = shown?.fixed ?? false;
+  const folderName = sanitizeName(name);
+  const destination = fixed || !parent ? parent : joinPath(parent, folderName, platform);
   const running = phase.kind === 'running';
 
   const create = async () => {
+    creating.current = true;
     setPhase({ kind: 'running' });
     setLog('');
     // A picked folder is set up in place, so its name never needs to be shell-safe.
     const request = fixed
-      ? { parent: destination, name: '.', packageManager: manager }
+      ? { parent, name: '.', packageManager: manager }
       : { parent, name: folderName, packageManager: manager };
-    const result = await desktop.workspace.create(request);
+    const result = await settle(desktop.workspace.create(request));
+    creating.current = false;
     if (result.ok) onCreated();
     else setPhase({ kind: 'failed', error: result.error });
   };
 
   return (
     <Dialog
-      open={target !== null}
+      open={shown !== null}
       onOpenChange={(open) => {
         if (!open && !running) onClose();
       }}
@@ -89,8 +98,8 @@ export function CreateWorkspaceDialog({
           // zooming in at the center of the window.
           'top-12 translate-y-0 rounded-[12px] sm:max-w-[480px]',
           'transition-[translate,opacity] duration-200 ease-(--ease-swift)',
-          'data-starting-style:-translate-y-3 data-starting-style:scale-100',
-          'data-ending-style:-translate-y-3 data-ending-style:scale-100',
+          'data-starting-style:scale-100 motion-safe:data-starting-style:-translate-y-3',
+          'data-ending-style:scale-100 motion-safe:data-ending-style:-translate-y-3',
         )}
       >
         <DialogHeader>

@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { CreateTarget } from '../components/create-workspace-dialog';
-import { desktop } from './desktop';
-import { splitPath } from './paths';
+import { desktop, settle } from './desktop';
 
 export function useWorkspaceActions(openCreate: (target: CreateTarget) => void) {
   const [error, setError] = useState<string | null>(null);
@@ -9,7 +8,7 @@ export function useWorkspaceActions(openCreate: (target: CreateTarget) => void) 
 
   const open = useCallback(async (path: string) => {
     setError(null);
-    const result = await desktop.workspace.open(path);
+    const result = await settle(desktop.workspace.open(path));
     if (!result.ok) setError(result.error);
     return result.ok;
   }, []);
@@ -20,7 +19,7 @@ export function useWorkspaceActions(openCreate: (target: CreateTarget) => void) 
     if (!picked) return false;
     if (picked.kind === 'project') return open(picked.path);
     if (picked.kind === 'empty') {
-      openCreate({ ...splitPath(picked.path), fixed: true });
+      openCreate({ parent: picked.path, name: '', fixed: true });
       return false;
     }
     setError(
@@ -41,7 +40,7 @@ export function useWorkspaceActions(openCreate: (target: CreateTarget) => void) 
   const quickStart = useCallback(async () => {
     setError(null);
     setStarting(true);
-    const result = await desktop.workspace.createDefault();
+    const result = await settle(desktop.workspace.createDefault());
     setStarting(false);
     if (!result.ok) setError(result.error);
   }, []);

@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import type { AppState, LogTask, ShellApi } from '../../shared/types';
+import type { AppState, LogTask, ShellApi, TaskResult } from '../../shared/types';
 
 declare global {
   interface Window {
@@ -10,6 +10,16 @@ declare global {
 export const desktop = window.desktop;
 
 export const TELEMETRY_DOCS_URL = 'https://open-slide.dev/docs/reference/desktop-telemetry';
+
+// A handler that throws in the main process rejects the call instead of
+// answering with a failed result.
+export async function settle(task: Promise<TaskResult>): Promise<TaskResult> {
+  try {
+    return await task;
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
 
 let current: AppState | null = null;
 const listeners = new Set<() => void>();

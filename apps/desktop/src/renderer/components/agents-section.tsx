@@ -1,5 +1,5 @@
 import { RotateCw } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ProviderLogo } from '@/components/agent/provider-logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,15 +32,16 @@ export function useAgents() {
   const [refreshing, setRefreshing] = useState(false);
   const [logins, setLogins] = useState<Partial<Record<AgentId, Login>>>({});
 
+  const latest = useRef(0);
+
+  // Sign-in fires several refreshes in a row, and an earlier one can answer last.
   const refresh = useCallback(async () => {
+    const request = ++latest.current;
     setRefreshing(true);
-    try {
-      setAgents(await desktop.agents.list());
-    } catch {
-      setAgents((prev) => prev ?? []);
-    } finally {
-      setRefreshing(false);
-    }
+    const next = await desktop.agents.list().catch(() => null);
+    if (request !== latest.current) return;
+    setAgents((prev) => next ?? prev ?? []);
+    setRefreshing(false);
   }, []);
 
   useEffect(() => {

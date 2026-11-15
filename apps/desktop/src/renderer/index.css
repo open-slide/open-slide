@@ -254,6 +254,20 @@ html[data-route="intro"] body {
   animation: ob-shimmer 1.6s linear infinite;
 }
 
+/* Registered as non-inheriting, so a pointer move restyles the stage alone
+   instead of every element of the scene inside it. */
+@property --tilt-x {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --tilt-y {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
 /* The stage leans toward the pointer, a few degrees at most. */
 .ob-tilt {
   transform: perspective(1600px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));

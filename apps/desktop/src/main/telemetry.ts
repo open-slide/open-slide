@@ -86,7 +86,7 @@ function redact(event: EventMessage): EventMessage {
 const LOCAL_URL_RE = /(https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?)[^\s"'`)]*/g;
 const QUOTED_PATH_RE = /(['"`])(?:\/|[A-Za-z]:[\\/])[^'"`\n]*\1/g;
 const POSIX_PATH_RE = /(?<![\w.:/<])\/(?:[^\s/'":]+\/)+[^\s/'":]*/g;
-const WINDOWS_PATH_RE = /\b[A-Za-z]:\\[^\s'":]+/g;
+const WINDOWS_PATH_RE = /\b[A-Za-z]:[\\/][^\s'":]+/g;
 
 // Error messages quote whatever the failing call was given: a save path named
 // after a deck, a dev-server URL ending in a deck id. Neither leaves the

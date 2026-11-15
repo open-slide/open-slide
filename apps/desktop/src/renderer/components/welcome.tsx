@@ -67,8 +67,9 @@ export function Welcome({
                 <li key={path} className="group relative">
                   <button
                     type="button"
+                    disabled={starting}
                     onClick={() => onOpenRecent(path)}
-                    className="flex w-full min-w-0 items-baseline gap-3 rounded-[7px] px-2.5 py-2 pr-9 text-left outline-none transition-colors hover:bg-foreground/[0.05] focus-visible:ring-2 focus-visible:ring-ring/30"
+                    className="flex w-full min-w-0 items-baseline gap-3 rounded-[7px] px-2.5 py-2 pr-9 text-left outline-none transition-colors enabled:hover:bg-foreground/[0.05] focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50"
                   >
                     <span className="shrink-0 text-[13px] font-medium">{splitPath(path).name}</span>
                     <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">

@@ -39,7 +39,7 @@ import { installMenu, type MenuActions } from './menu';
 import { killRunning } from './process';
 import { DevServer } from './server';
 import { settings } from './settings';
-import { shellEnv } from './shell-env';
+import { loginEnv, shellEnv } from './shell-env';
 import { TabManager } from './tabs';
 import {
   bucket,
@@ -90,8 +90,8 @@ let releaseIntro: (() => void) | null = null;
 let tabs: TabManager | null = null;
 let workspace: WorkspaceInfo | null = null;
 
-async function childEnv(): Promise<NodeJS.ProcessEnv> {
-  const env = await shellEnv();
+async function childEnv(read = shellEnv): Promise<NodeJS.ProcessEnv> {
+  const env = await read();
   const PATH = [env.PATH ?? '', ...managedCliDirs()].filter(Boolean).join(path.delimiter);
   return { ...env, PATH, OPEN_SLIDE_AGENT_MODULES: modulesDir() };
 }
@@ -106,7 +106,7 @@ function cacheDirFor(root: string): string {
 }
 
 const server = new DevServer(
-  childEnv,
+  () => childEnv(loginEnv),
   (root) => detectPackageManager(root, fallbackPackageManager()),
   { get: (root) => settings.port(root), set: (root, port) => settings.setPort(root, port) },
   cacheDirFor,

@@ -38,8 +38,13 @@ export function SettingsWindow() {
   const label = SECTIONS.find((s) => s.id === section)?.label ?? 'Settings';
   const ready = state !== null;
 
+  // Creating a workspace in the main window changes the package manager.
   useEffect(() => {
-    void desktop.settings.get().then(setPrefs);
+    const load = () => void desktop.settings.get().then(setPrefs);
+    load();
+    return desktop.window.onFocus((focused) => {
+      if (focused) load();
+    });
   }, []);
 
   useEffect(() => {

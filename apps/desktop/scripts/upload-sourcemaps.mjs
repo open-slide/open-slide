@@ -14,6 +14,8 @@ if (!process.env.POSTHOG_CLI_API_KEY || !process.env.POSTHOG_CLI_PROJECT_ID) {
 
 const core = path.join(root, 'node_modules/@open-slide/core/package.json');
 const { version } = JSON.parse(fs.readFileSync(core, 'utf8'));
+const isWindows = process.platform === 'win32';
+const dist = path.join(root, 'dist');
 
 execFileSync(
   'npx',
@@ -25,12 +27,13 @@ execFileSync(
     'sourcemap',
     'process',
     '--directory',
-    path.join(root, 'dist'),
+    // npx is a .cmd shim there, run through a shell that splits unquoted spaces.
+    isWindows ? `"${dist}"` : dist,
     '--release-name',
     'open-slide-desktop',
     '--release-version',
     version,
     '--delete-after',
   ],
-  { stdio: 'inherit', shell: process.platform === 'win32' },
+  { stdio: 'inherit', shell: isWindows },
 );

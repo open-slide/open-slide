@@ -20,6 +20,15 @@ let attempts = 0;
 // takes about a second, so until it answers, launches reuse the PATH the
 // previous launch found.
 export function shellEnv(): Promise<NodeJS.ProcessEnv> {
+  const login = loginEnv();
+  const cached = settings.loginPath();
+  if (probed || cached === null) return login;
+  return Promise.resolve(merge({}, cached));
+}
+
+// Always waits for the shell: a child that outlives the launch would otherwise
+// keep the cached PATH and none of the profile's other exports.
+export function loginEnv(): Promise<NodeJS.ProcessEnv> {
   probe ??= readLoginEnv().then((login) => {
     const loginPath = login?.PATH ?? null;
     if (loginPath !== null) settings.setLoginPath(loginPath);
@@ -28,9 +37,7 @@ export function shellEnv(): Promise<NodeJS.ProcessEnv> {
     if (loginPath !== null) probed = env;
     return env;
   });
-  const cached = settings.loginPath();
-  if (probed || cached === null) return probe;
-  return Promise.resolve(merge({}, cached));
+  return probe;
 }
 
 function merge(login: NodeJS.ProcessEnv, loginPath: string | null): NodeJS.ProcessEnv {
@@ -82,16 +89,29 @@ function readLoginEnv(): Promise<NodeJS.ProcessEnv | null> {
   });
 }
 
-export function findOnPath(command: string, env: NodeJS.ProcessEnv): string | null {
+export function findOnPath(
+  command: string,
+  env: NodeJS.ProcessEnv,
+  accept: (candidate: string) => boolean = () => true,
+): string | null {
   const isWindows = process.platform === 'win32';
   const exts = isWindows ? (env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';') : [''];
   for (const dir of (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean)) {
     for (const ext of exts) {
       const candidate = path.join(dir, command + ext.toLowerCase());
       try {
-        if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate;
+        if (statSync(candidate, { throwIfNoEntry: false })?.isFile() && accept(candidate)) {
+          return candidate;
+        }
       } catch {}
     }
   }
   return null;
+}
+
+// An absolute path is spawned without a shell, which cannot run a Windows .cmd
+// shim, so there only a real executable counts as found.
+export function findExecutable(command: string, env: NodeJS.ProcessEnv): string | null {
+  if (process.platform !== 'win32') return findOnPath(command, env);
+  return findOnPath(command, env, (candidate) => candidate.toLowerCase().endsWith('.exe'));
 }
