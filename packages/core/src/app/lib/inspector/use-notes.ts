@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { trackWrite, useUnsavedSource } from '@/lib/unsaved';
 
 export type NoteSaveStatus =
   | { kind: 'idle' }
@@ -53,7 +54,9 @@ export function useNotes(slideId: string, index: number, initial: string | undef
     }
   }, []);
 
-  const persist = useCallback(async (target: Target, text: string) => {
+  // Resolves to the failure, or null once the text is on disk or a newer
+  // write has taken over.
+  const persist = useCallback(async (target: Target, text: string): Promise<string | null> => {
     inflightRef.current?.abort();
     const ctl = new AbortController();
     inflightRef.current = ctl;
@@ -68,17 +71,32 @@ export function useNotes(slideId: string, index: number, initial: string | undef
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? `PUT /__notes → ${res.status}`);
       sessionCache.set(cacheKey(target.slideId, target.index), text);
-      if (inflightRef.current !== ctl) return;
+      if (inflightRef.current !== ctl) return null;
       lastSavedRef.current = text;
       dirtyRef.current = false;
       setStatus({ kind: 'saved' });
+      return null;
     } catch (err) {
-      if ((err as { name?: string }).name === 'AbortError') return;
-      setStatus({ kind: 'error', message: String((err as Error).message ?? err) });
+      if ((err as { name?: string }).name === 'AbortError') return null;
+      const message = String((err as Error).message ?? err);
+      setStatus({ kind: 'error', message });
+      return message;
     } finally {
       if (inflightRef.current === ctl) inflightRef.current = null;
     }
   }, []);
+
+  // For a write nothing here will wait on: the page still counts as unsaved
+  // until it lands.
+  const persistDetached = useCallback(
+    (target: Target, text: string) => {
+      const write = persist(target, text).then((error) => {
+        if (error) throw new Error(error);
+      });
+      trackWrite(write).catch(() => {});
+    },
+    [persist],
+  );
 
   const flush = useCallback(async () => {
     cancelTimer();
@@ -95,7 +113,7 @@ export function useNotes(slideId: string, index: number, initial: string | undef
     if (targetChanged && dirtyRef.current) {
       cancelTimer();
       const pending = valueRef.current;
-      if (lastSavedRef.current !== pending) void persist(prev, pending);
+      if (lastSavedRef.current !== pending) persistDetached(prev, pending);
     }
     targetRef.current = { slideId, index };
     cancelTimer();
@@ -103,14 +121,32 @@ export function useNotes(slideId: string, index: number, initial: string | undef
     lastSavedRef.current = initialText;
     dirtyRef.current = false;
     setStatus({ kind: 'idle' });
-  }, [slideId, index, initialText, persist, cancelTimer]);
+  }, [slideId, index, initialText, persistDetached, cancelTimer]);
 
+  // Unmounting mid-edit writes what was typed instead of dropping it.
   useEffect(() => {
     return () => {
       cancelTimer();
-      inflightRef.current?.abort();
+      if (dirtyRef.current) persistDetached(targetRef.current, valueRef.current);
     };
-  }, [cancelTimer]);
+  }, [cancelTimer, persistDetached]);
+
+  useUnsavedSource({
+    kind: 'autosave',
+    dirty: () => dirtyRef.current,
+    save: async () => {
+      cancelTimer();
+      const error = await persist(targetRef.current, valueRef.current);
+      if (error) throw new Error(error);
+    },
+    discard: () => {
+      cancelTimer();
+      inflightRef.current?.abort();
+      dirtyRef.current = false;
+      setValueState(lastSavedRef.current);
+      setStatus({ kind: 'idle' });
+    },
+  });
 
   const setValue = useCallback(
     (next: string) => {
