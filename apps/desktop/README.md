@@ -17,7 +17,7 @@ The bundled core keeps its Vite cache under the app's user data, syncs its built
 
 ## Telemetry
 
-Packaged builds send anonymous usage events and crash reports to PostHog from the main process (`src/main/telemetry.ts`); renderers forward their errors over IPC. Settings → Privacy turns it off, and `OPEN_SLIDE_TELEMETRY=0` or `DO_NOT_TRACK=1` disables it outright. Unpackaged runs send nothing unless `OPEN_SLIDE_TELEMETRY=1`. On a first launch, events are held until the tour that announces telemetry has ended.
+Packaged builds send anonymous usage events and crash reports to PostHog from the main process (`src/main/telemetry.ts`); renderers forward their errors over IPC. Settings → Privacy turns it off, and `OPEN_SLIDE_TELEMETRY=0` or `DO_NOT_TRACK=1` disables it outright. Unpackaged runs send nothing unless `OPEN_SLIDE_TELEMETRY=1`. On a first launch, events are held until the tour that announces telemetry has ended. Turning it off drops every event that has not been sent yet.
 
 ## Workspace trust
 

@@ -48,6 +48,7 @@ import {
   captureError,
   initTelemetry,
   reportRendererError,
+  setTelemetryEnabled,
   shutdownTelemetry,
   startCrashReporter,
   track,
@@ -796,6 +797,7 @@ function registerIpc() {
       for (const win of shellWindows()) applyMaterial(win);
       tabs?.reloadAll();
     }
+    if (result.telemetry !== previous.telemetry) setTelemetryEnabled(result.telemetry);
     broadcast();
     return result;
   });

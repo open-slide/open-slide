@@ -15,7 +15,9 @@ const TOKEN = import.meta.env.MAIN_VITE_POSTHOG_TOKEN ?? '';
 const SHUTDOWN_TIMEOUT_MS = 2000;
 const ERROR_WINDOW_MS = 60_000;
 const MAX_ERRORS_PER_WINDOW = 10;
-const MAX_HELD = 50;
+const BATCH_SIZE = 20;
+const BATCH_INTERVAL_MS = 30_000;
+const MAX_WAITING = 200;
 
 let client: PostHog | null = null;
 let base: Properties = {};
@@ -30,26 +32,49 @@ function enabled(): boolean {
   return client !== null && settings.get().telemetry;
 }
 
-// The tour is where the user is told about telemetry and how to turn it off,
-// so nothing leaves before it ends: events wait here, and are dropped if the
-// user opts out or quits first.
-const held: ((client: PostHog) => void)[] = [];
+// Events wait here, not inside the SDK, until a batch is due: the SDK has no
+// way to drop what it already queued, and an opt-out has to. The tour is also
+// where the user is told about telemetry and how to turn it off, so nothing
+// leaves before it ends.
+const waiting: ((client: PostHog) => void)[] = [];
+let batchTimer: NodeJS.Timeout | null = null;
 
 function send(deliver: (client: PostHog) => void) {
-  if (!client) return;
-  if (!settings.onboarded()) {
-    if (held.length < MAX_HELD) held.push(deliver);
-    return;
-  }
-  releaseHeld();
-  deliver(client);
+  if (waiting.length >= MAX_WAITING) waiting.shift();
+  waiting.push(deliver);
+  if (waiting.length >= BATCH_SIZE) deliverWaiting();
+  else batchTimer ??= setTimeout(deliverWaiting, BATCH_INTERVAL_MS);
 }
 
-function releaseHeld() {
-  if (!client || !settings.onboarded()) return;
-  const waiting = held.splice(0);
-  if (!enabled()) return;
-  for (const deliver of waiting) deliver(client);
+function clearBatchTimer() {
+  if (batchTimer) clearTimeout(batchTimer);
+  batchTimer = null;
+}
+
+function deliverWaiting() {
+  clearBatchTimer();
+  if (!client || !enabled()) {
+    waiting.length = 0;
+    return;
+  }
+  if (!settings.onboarded()) {
+    if (waiting.length > 0) batchTimer = setTimeout(deliverWaiting, BATCH_INTERVAL_MS);
+    return;
+  }
+  for (const deliver of waiting.splice(0)) deliver(client);
+}
+
+// Turning telemetry off drops everything that has not been sent yet, and the
+// SDK refuses whatever an in-flight capture still tries to queue.
+export function setTelemetryEnabled(on: boolean) {
+  if (!client) return;
+  if (on) {
+    void client.optIn();
+    return;
+  }
+  waiting.length = 0;
+  clearBatchTimer();
+  void client.optOut();
 }
 
 function osName(): string {
@@ -142,12 +167,15 @@ export function initTelemetry() {
     locale: app.getLocale(),
     packaged: app.isPackaged,
   };
+  // Batching happens in `waiting`, so the SDK sends what it is handed at once
+  // and never holds events of its own.
   client = new PostHog(TOKEN, {
     host: HOST,
-    flushAt: 20,
-    flushInterval: 30_000,
+    flushAt: 1,
+    flushInterval: 0,
     before_send: redact,
   });
+  if (!settings.get().telemetry) void client.optOut();
 
   // A monitor observes without taking over, so Electron still shows its own
   // error dialog for an uncaught exception in the main process.
@@ -259,7 +287,9 @@ export function reportRendererError(report: unknown, window: string) {
 }
 
 export async function shutdownTelemetry() {
-  releaseHeld();
+  if (settings.onboarded()) deliverWaiting();
+  waiting.length = 0;
+  clearBatchTimer();
   await client?.shutdown(SHUTDOWN_TIMEOUT_MS).catch(() => {});
 }
 
