@@ -16,7 +16,11 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: ['packages/**/*.test.ts', 'packages/**/*.test.tsx'],
+          include: [
+            'packages/**/*.test.ts',
+            'packages/**/*.test.tsx',
+            'apps/desktop/src/**/*.test.ts',
+          ],
         },
       },
       {

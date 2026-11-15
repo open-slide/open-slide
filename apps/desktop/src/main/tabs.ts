@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   app,
   type BrowserWindow,
+  dialog,
   Menu,
   type MenuItemConstructorOptions,
   shell,
@@ -10,6 +11,8 @@ import {
 } from 'electron';
 import { SPARE_PATH, TAB_STRIP_HEIGHT, type TabInfo } from '../shared/types';
 import type { DeckSession } from './settings';
+import { moveTab } from './tab-order';
+import { isHttpUrl, originOf } from './url';
 
 type Tab = {
   id: string;
@@ -31,10 +34,15 @@ type TabManagerOptions = {
 const DECK_ROOT_RE = /^\/s\/([^/]+)\/?$/;
 const PRESENTER_RE = /^\/s\/[^/]+\/presenter\/?$/;
 const DEFAULT_TITLE = 'open-slide';
-// Each warm tab is a renderer process; past this, restored tabs load on click.
-const MAX_WARM_TABS = 6;
+// Each warm tab is a renderer process running the unbundled dev app; past
+// this, restored tabs load on click.
+const MAX_WARM_TABS = 3;
 const WARM_DELAY_MS = 800;
 const ADOPT_TIMEOUT_MS = 1500;
+// How long a view that was never shown keeps full-speed frames for its warm-up.
+const WARM_SETTLE_MS = 15_000;
+const CRASH_WINDOW_MS = 60_000;
+const MAX_CRASH_RELOADS = 3;
 
 // Controls act like native ones: no pointer cursor, no text selection, and
 // links or images don't tear off as drag ghosts.
@@ -52,7 +60,12 @@ html, body { overscroll-behavior: none; }
 
 function deckIdFromPath(pathname: string): string | null {
   const m = DECK_ROOT_RE.exec(pathname);
-  return m ? decodeURIComponent(m[1]) : null;
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
 }
 
 function isHomePath(pathname: string): boolean {
@@ -73,6 +86,8 @@ export class TabManager {
   private readonly loaded = new WeakSet<WebContents>();
   private readonly adopting = new WeakSet<WebContents>();
   private readonly revealed = new WeakSet<WebContents>();
+  private readonly popups = new Set<BrowserWindow>();
+  private readonly crashes = new WeakMap<Tab, number[]>();
 
   constructor(private readonly opts: TabManagerOptions) {
     const home = this.makeTab('home', null);
@@ -116,19 +131,34 @@ export class TabManager {
     );
   }
 
+  // Everything that carries the host bridge: the tabs plus their presenter
+  // windows.
+  hosts(contents: WebContents): boolean {
+    if (this.owns(contents)) return true;
+    for (const popup of this.popups) {
+      if (!popup.isDestroyed() && popup.webContents === contents) return true;
+    }
+    return false;
+  }
+
+  isServerUrl(url: string): boolean {
+    return this.baseUrl !== null && originOf(url) === originOf(this.baseUrl);
+  }
+
   adopted(contents: WebContents) {
     if (!this.adopting.delete(contents)) return;
     this.layout();
-  }
-
-  isHtmlFullscreen(): boolean {
-    return this.fullscreenTab !== null;
   }
 
   reset(session: DeckSession) {
     for (const tab of this.tabs) this.destroyView(tab);
     this.destroySpare();
     this.cancelWarm();
+    this.closePopups();
+    if (this.ownsFullscreen) {
+      this.ownsFullscreen = false;
+      if (!this.opts.window.isDestroyed()) this.opts.window.setFullScreen(false);
+    }
     const home = this.makeTab('home', null);
     const decks = session.decks.map((d) => ({
       ...this.makeTab('deck', d.slideId),
@@ -150,7 +180,7 @@ export class TabManager {
       for (const tab of this.tabs) {
         if (!tab.view) continue;
         const current = new URL(tab.view.webContents.getURL() || previous);
-        void tab.view.webContents.loadURL(`${url}${current.pathname}${current.search}`);
+        this.load(tab.view.webContents, `${current.pathname}${current.search}`);
       }
     }
     this.layout();
@@ -258,9 +288,8 @@ export class TabManager {
 
   move(id: string, toIndex: number) {
     const from = this.tabs.findIndex((t) => t.id === id);
-    if (from < 1) return;
-    const [tab] = this.tabs.splice(from, 1);
-    this.tabs.splice(Math.max(1, Math.min(toIndex, this.tabs.length)), 0, tab);
+    if (from < 1 || !Number.isInteger(toIndex)) return;
+    this.tabs = moveTab(this.tabs, from, toIndex);
     this.changed();
   }
 
@@ -280,6 +309,19 @@ export class TabManager {
     for (const tab of this.tabs) this.destroyView(tab);
     this.destroySpare();
     this.cancelWarm();
+    this.closePopups();
+  }
+
+  private closePopups() {
+    for (const popup of this.popups) {
+      if (!popup.isDestroyed()) popup.close();
+    }
+    this.popups.clear();
+  }
+
+  // A failed load already reaches the tab through did-fail-load.
+  private load(contents: WebContents, path: string) {
+    contents.loadURL(`${this.baseUrl}${path}`).catch(() => {});
   }
 
   private active(): Tab | undefined {
@@ -359,6 +401,10 @@ export class TabManager {
       this.loaded.add(contents);
       this.layout();
       this.scheduleWarm();
+      setTimeout(() => {
+        if (contents.isDestroyed() || this.revealed.has(contents)) return;
+        if (!this.adopting.has(contents)) contents.setBackgroundThrottling(true);
+      }, WARM_SETTLE_MS);
     };
     contents.on('did-finish-load', markLoaded);
     contents.on('did-fail-load', (_e, _code, _desc, _url, isMainFrame) => {
@@ -377,11 +423,12 @@ export class TabManager {
     tab.view = view;
     this.wire(tab, view.webContents);
     if (spare) this.adopt(spare.webContents, path);
-    else void view.webContents.loadURL(`${this.baseUrl}${path}`);
+    else this.load(view.webContents, path);
   }
 
   private adopt(contents: WebContents, path: string) {
     this.adopting.add(contents);
+    contents.setBackgroundThrottling(false);
     setTimeout(() => this.adopted(contents), ADOPT_TIMEOUT_MS);
     // Back would otherwise land on the spare page and bounce the tab home.
     contents.once('did-navigate-in-page', () => contents.navigationHistory.clear());
@@ -404,7 +451,7 @@ export class TabManager {
       if (this.spare === view) this.destroySpare();
     });
     this.layout();
-    void contents.loadURL(`${this.baseUrl}${SPARE_PATH}`);
+    this.load(contents, SPARE_PATH);
   }
 
   private destroySpare() {
@@ -456,7 +503,42 @@ export class TabManager {
   }
 
   private sameOrigin(url: URL): boolean {
-    return this.baseUrl !== null && url.origin === new URL(this.baseUrl).origin;
+    return this.baseUrl !== null && url.origin === originOf(this.baseUrl);
+  }
+
+  // Presenter windows carry the host bridge, so they stay on the dev server
+  // like the tab that opened them, and close with its workspace.
+  private trackPopup(popup: BrowserWindow) {
+    this.popups.add(popup);
+    popup.on('closed', () => this.popups.delete(popup));
+    const contents = popup.webContents;
+    const guard = (e: Electron.Event, url: string) => {
+      if (this.isServerUrl(url)) return;
+      e.preventDefault();
+      if (isHttpUrl(url)) void shell.openExternal(url);
+    };
+    contents.on('will-navigate', (e) => guard(e, e.url));
+    contents.on('will-redirect', (e) => guard(e, e.url));
+    contents.setWindowOpenHandler(({ url }) => {
+      if (!this.isServerUrl(url) && isHttpUrl(url)) void shell.openExternal(url);
+      return { action: 'deny' };
+    });
+  }
+
+  private async offerReload(tab: Tab, contents: WebContents) {
+    const win = this.opts.window;
+    if (win.isDestroyed()) return;
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      message: `“${tab.title}” keeps crashing`,
+      detail: 'Reloading it did not help. You can try once more or leave it for now.',
+      buttons: ['Reload', tab.kind === 'deck' ? 'Close Tab' : 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (tab.view?.webContents !== contents || contents.isDestroyed()) return;
+    if (response === 0) contents.reload();
+    else if (tab.kind === 'deck') this.close(tab.id);
   }
 
   private wire(tab: Tab, contents: WebContents) {
@@ -482,7 +564,7 @@ export class TabManager {
       const url = new URL(e.url);
       if (!this.sameOrigin(url)) {
         e.preventDefault();
-        if (url.protocol === 'http:' || url.protocol === 'https:') void shell.openExternal(e.url);
+        if (isHttpUrl(e.url)) void shell.openExternal(e.url);
         return;
       }
       const deck = deckIdFromPath(url.pathname);
@@ -498,7 +580,7 @@ export class TabManager {
     contents.setWindowOpenHandler(({ url: raw }) => {
       const url = new URL(raw);
       if (!this.sameOrigin(url)) {
-        if (url.protocol === 'http:' || url.protocol === 'https:') void shell.openExternal(raw);
+        if (isHttpUrl(raw)) void shell.openExternal(raw);
         return { action: 'deny' };
       }
       if (PRESENTER_RE.test(url.pathname)) {
@@ -519,6 +601,7 @@ export class TabManager {
       else if (isHomePath(url.pathname)) this.openHome(url.pathname + url.search);
       return { action: 'deny' };
     });
+    contents.on('did-create-window', (popup) => this.trackPopup(popup));
 
     contents.on('enter-html-full-screen', () => {
       this.fullscreenTab = tab;
@@ -539,7 +622,7 @@ export class TabManager {
       } else if (params.selectionText) {
         items.push({ role: 'copy' });
       }
-      if (params.linkURL && !this.sameOrigin(new URL(params.linkURL))) {
+      if (isHttpUrl(params.linkURL) && !this.isServerUrl(params.linkURL)) {
         items.push({
           label: 'Open Link in Browser',
           click: () => shell.openExternal(params.linkURL),
@@ -556,7 +639,19 @@ export class TabManager {
     });
 
     contents.on('render-process-gone', (_e, details) => {
-      if (details.reason !== 'clean-exit') contents.reload();
+      if (details.reason === 'clean-exit') return;
+      const now = Date.now();
+      const recent = (this.crashes.get(tab) ?? []).filter((at) => now - at < CRASH_WINDOW_MS);
+      recent.push(now);
+      this.crashes.set(tab, recent);
+      if (recent.length <= MAX_CRASH_RELOADS) {
+        contents.reload();
+        return;
+      }
+      this.crashes.delete(tab);
+      // A background tab gives up quietly and loads again when it is clicked.
+      if (tab.id === this.activeId) void this.offerReload(tab, contents);
+      else this.destroyView(tab);
     });
   }
 
@@ -593,6 +688,6 @@ export class TabManager {
 
   private restore(contents: WebContents, path: string) {
     if (contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack();
-    else void contents.loadURL(`${this.baseUrl}${path}`);
+    else this.load(contents, path);
   }
 }
