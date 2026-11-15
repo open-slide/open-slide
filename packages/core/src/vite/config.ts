@@ -11,6 +11,7 @@ import { designPlugin } from './design-plugin.ts';
 import { locTagsPlugin } from './loc-tags-plugin.ts';
 import { notesPlugin } from './notes-plugin.ts';
 import { loadUserConfig, type OpenSlideConfig, openSlidePlugin } from './open-slide-plugin.ts';
+import { MANAGED_CORE_ENV } from './routes/update.ts';
 import { serverInfoPlugin } from './server-info-plugin.ts';
 import { themesPlugin } from './themes-plugin.ts';
 
@@ -74,7 +75,8 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
   const assetsAbs = path.resolve(userCwd, assetsDir);
 
   return {
-    base: config.base ?? '/',
+    // The desktop app addresses every tab from the server root.
+    base: process.env[MANAGED_CORE_ENV] === '1' ? '/' : (config.base ?? '/'),
     root: APP_ROOT,
     configFile: false,
     envDir: userCwd,

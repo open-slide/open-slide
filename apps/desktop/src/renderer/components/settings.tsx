@@ -240,7 +240,10 @@ function WorkspaceSection({
       </SectionCard>
 
       {workspace && (
-        <SectionCard title="Dev server" description="Runs this workspace’s own @open-slide/core.">
+        <SectionCard
+          title="Dev server"
+          description="Runs this workspace on the @open-slide/core built into the app."
+        >
           <div className="flex items-center gap-2 text-[13px]">
             <StatusDot tone={serverTone(server.state)} />
             <span>{SERVER_LABEL[server.state]}</span>
