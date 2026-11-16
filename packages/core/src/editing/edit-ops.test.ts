@@ -1144,3 +1144,70 @@ describe('applyEdit / replace-placeholder-with-image', () => {
     expect(r.error).toMatch(/\.\/assets\//);
   });
 });
+
+describe('applyEdit / remove-element', () => {
+  const remove = [{ kind: 'remove-element' as const }];
+
+  it('drops a JSX child together with its line', () => {
+    const src = [
+      'export default [() => (',
+      '  <div>',
+      '    <h1>Title</h1>',
+      '    <p>Body</p>',
+      '  </div>',
+      ')];',
+      '',
+    ].join('\n');
+    const r = applyEdit(src, 3, 4, remove);
+    if (!r.ok) throw new Error(`expected ok, got ${r.error}`);
+    expect(r.source).toBe(
+      ['export default [() => (', '  <div>', '    <p>Body</p>', '  </div>', ')];', ''].join('\n'),
+    );
+  });
+
+  it('removes a multi-line child', () => {
+    const src = [
+      'export default [() => (',
+      '  <div>',
+      '    <section style={{ color: "red" }}>',
+      '      <span>a</span>',
+      '    </section>',
+      '    <p>Body</p>',
+      '  </div>',
+      ')];',
+      '',
+    ].join('\n');
+    const r = applyEdit(src, 3, 4, remove);
+    if (!r.ok) throw new Error(`expected ok, got ${r.error}`);
+    expect(r.source).toBe(
+      ['export default [() => (', '  <div>', '    <p>Body</p>', '  </div>', ')];', ''].join('\n'),
+    );
+  });
+
+  it('keeps surrounding inline text', () => {
+    const src = 'export default [() => <p>Hello <b>big</b> world</p>];\n';
+    const r = applyEdit(src, 1, 31, remove);
+    if (!r.ok) throw new Error(`expected ok, got ${r.error}`);
+    expect(r.source).toBe('export default [() => <p>Hello  world</p>];\n');
+  });
+
+  it('replaces an expression-position element with null', () => {
+    const src = 'export default [() => (\n  <div>{show && <b>x</b>}</div>\n)];\n';
+    const r = applyEdit(src, 2, 16, remove);
+    if (!r.ok) throw new Error(`expected ok, got ${r.error}`);
+    expect(r.source).toBe('export default [() => (\n  <div>{show && null}</div>\n)];\n');
+  });
+
+  it('refuses to guess an enclosing element for an inexact location', () => {
+    const src = 'export default [() => (\n  <div>{show && <b>x</b>}</div>\n)];\n';
+    const r = applyEdit(src, 2, 15, remove);
+    expect(r.ok).toBe(false);
+  });
+
+  it('replaces a returned root element with null', () => {
+    const src = 'export default [() => (\n  <div>hi</div>\n)];\n';
+    const r = applyEdit(src, 2, 2, remove);
+    if (!r.ok) throw new Error(`expected ok, got ${r.error}`);
+    expect(r.source).toBe('export default [() => (\n  null\n)];\n');
+  });
+});
