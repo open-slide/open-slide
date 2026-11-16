@@ -52,7 +52,8 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
   // A save or discard only reaches `dirty` on the next render, so the draft it
   // settled is remembered to answer in between.
   const settledDraftRef = useRef<DesignSystem | null>(null);
-  const writingRef = useRef(false);
+  const writesRef = useRef(0);
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     if (design) setDraft(clone(design));
@@ -79,22 +80,32 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
     [history],
   );
 
-  const write = useCallback(async (): Promise<string | null> => {
-    const saving = draftRef.current;
-    if (!saving) return null;
+  // One save at a time, each sending the draft as it stands when its turn
+  // comes: two in flight could answer out of order, and the older response
+  // would put its design back over the newer draft.
+  const write = useCallback((): Promise<string | null> => {
+    if (!draftRef.current) return Promise.resolve(null);
+    writesRef.current++;
     setCommitting(true);
-    writingRef.current = true;
-    const r = await save(saving);
-    writingRef.current = false;
-    setCommitting(false);
-    history.clear();
-    if (r.ok) {
-      settledDraftRef.current = saving;
-      return null;
-    }
-    const error = r.error ?? 'Failed to save';
-    toast.error(error);
-    return error;
+    const run = queueRef.current.then(async () => {
+      try {
+        const saving = draftRef.current;
+        if (!saving || saving === settledDraftRef.current) return null;
+        const r = await save(saving);
+        history.clear();
+        if (r.ok) {
+          settledDraftRef.current = saving;
+          return null;
+        }
+        const error = r.error ?? 'Failed to save';
+        toast.error(error);
+        return error;
+      } finally {
+        if (--writesRef.current === 0) setCommitting(false);
+      }
+    });
+    queueRef.current = run.catch(() => {});
+    return run;
   }, [save, history]);
 
   const commit = useCallback(async () => {
@@ -112,7 +123,7 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
   useUnsavedSource({
     kind: 'draft',
     dirty: () =>
-      writingRef.current || (dirtyRef.current && draftRef.current !== settledDraftRef.current),
+      writesRef.current > 0 || (dirtyRef.current && draftRef.current !== settledDraftRef.current),
     save: async () => {
       const error = await write();
       if (error) throw new Error(error);

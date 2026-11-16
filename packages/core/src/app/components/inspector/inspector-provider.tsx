@@ -1144,30 +1144,36 @@ export function InspectorProvider({
     history.clear();
   }, [history]);
 
+  // Rejects while edits are still buffered, whether the write failed outright
+  // or only some of its edits did.
+  const saveEdits = async () => {
+    await commitEdits().catch(() => {});
+    if (hasBufferedOps(pendingRef.current)) {
+      throw new Error(commitFailureRef.current ?? t.inspector.saveFailed);
+    }
+  };
+
   // Auto-flush on inspector close and on route unmount so toggling
   // off or navigating away doesn't drop buffered edits. Failures are
   // surfaced via toast inside `commitEdits`; the catch here only
   // swallows the rethrown rejection.
   const commitRef = useRef(commitEdits);
   commitRef.current = commitEdits;
+  const saveRef = useRef(saveEdits);
+  saveRef.current = saveEdits;
   useEffect(() => {
     if (!active) commitRef.current().catch(() => {});
   }, [active]);
+  // Nothing is left to report the edits once this unmounts, so a flush that
+  // leaves any behind stays tracked as unsaved work, keyed by their buffer.
   useEffect(() => {
-    return () => {
-      trackWrite(commitRef.current()).catch(() => {});
-    };
+    return () => trackWrite(pendingRef, () => saveRef.current());
   }, []);
 
   useUnsavedSource({
     kind: 'draft',
     dirty: () => commitInflightRef.current !== null || hasBufferedOps(pendingRef.current),
-    save: async () => {
-      await commitEdits().catch(() => {});
-      if (hasBufferedOps(pendingRef.current)) {
-        throw new Error(commitFailureRef.current ?? t.inspector.saveFailed);
-      }
-    },
+    save: saveEdits,
     discard: cancelEdits,
   });
 

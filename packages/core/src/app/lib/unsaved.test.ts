@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  forgetWrite,
   registerUnsaved,
   settleUnsaved,
   trackWrite,
@@ -26,9 +27,12 @@ function source(kind: UnsavedSource['kind'], opts: { fail?: string } = {}) {
   return Object.assign(entry, { state });
 }
 
-afterEach(() => {
+afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) cleanup();
+  await settleUnsaved('abandon');
 });
+
+const settled = () => new Promise((resolve) => setTimeout(resolve));
 
 describe('unsaved work registry', () => {
   it('reports drafts apart from autosaved work that is still landing', () => {
@@ -98,24 +102,61 @@ describe('unsaved work registry', () => {
     const write = new Promise<void>((resolve) => {
       land = resolve;
     });
-    void trackWrite(write);
+    trackWrite('notes', () => write);
     expect(unsavedStatus()).toEqual({ drafts: false, pending: true });
 
-    let settled = false;
+    let done = false;
     const outcome = settleUnsaved('save').then((result) => {
-      settled = true;
+      done = true;
       return result;
     });
     await Promise.resolve();
-    expect(settled).toBe(false);
+    expect(done).toBe(false);
     land();
     expect(await outcome).toEqual({ ok: true });
     expect(unsavedStatus().pending).toBe(false);
   });
 
   it('reports a detached write that failed', async () => {
-    trackWrite(Promise.reject(new Error('server went away'))).catch(() => {});
+    trackWrite('notes', () => Promise.reject(new Error('server went away')));
 
     expect(await settleUnsaved('save')).toEqual({ ok: false, error: 'server went away' });
+  });
+
+  it('keeps a failed detached write unsaved and retries it on the next save', async () => {
+    const write = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('server went away'))
+      .mockResolvedValue();
+    trackWrite('notes', write);
+    await settled();
+    expect(unsavedStatus()).toEqual({ drafts: false, pending: true });
+
+    expect(await settleUnsaved('save')).toEqual({ ok: true });
+    expect(write).toHaveBeenCalledTimes(2);
+    expect(unsavedStatus().pending).toBe(false);
+  });
+
+  it('keeps failing until the work is abandoned', async () => {
+    const write = vi.fn(() => Promise.reject(new Error('server went away')));
+    trackWrite('notes', write);
+    await settled();
+
+    expect(await settleUnsaved('save')).toEqual({ ok: false, error: 'server went away' });
+    expect(unsavedStatus().pending).toBe(true);
+    expect(await settleUnsaved('abandon')).toEqual({ ok: true });
+    expect(unsavedStatus().pending).toBe(false);
+    expect(write).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops a failed write once newer work for the same key has landed', async () => {
+    const stale = vi.fn(() => Promise.reject(new Error('server went away')));
+    trackWrite('notes', stale);
+    await settled();
+
+    forgetWrite('notes');
+    expect(unsavedStatus().pending).toBe(false);
+    expect(await settleUnsaved('save')).toEqual({ ok: true });
+    expect(stale).toHaveBeenCalledOnce();
   });
 });

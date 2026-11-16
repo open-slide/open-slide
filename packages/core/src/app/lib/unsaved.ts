@@ -11,8 +11,11 @@ export type UnsavedSource = {
   discard: () => void;
 };
 
+type Write = () => Promise<unknown>;
+
 const sources = new Set<UnsavedSource>();
-const writes = new Set<Promise<unknown>>();
+const writes = new Map<unknown, Promise<unknown>>();
+const failed = new Map<unknown, Write>();
 
 export function registerUnsaved(source: UnsavedSource): () => void {
   sources.add(source);
@@ -22,19 +25,32 @@ export function registerUnsaved(source: UnsavedSource): () => void {
 }
 
 // For a write that outlives the component that started it, such as a flush on
-// unmount: nothing else would still report it as unsaved.
-export function trackWrite<T>(write: Promise<T>): Promise<T> {
-  writes.add(write);
-  const forget = () => {
-    writes.delete(write);
+// unmount: nothing else would still report it as unsaved. One that fails is
+// kept and run again the next time the page is asked to save, until it lands
+// or the work is abandoned. A newer write under the same key takes its place.
+export function trackWrite(key: unknown, write: Write): void {
+  const attempt = write();
+  writes.set(key, attempt);
+  failed.delete(key);
+  const finish = (retry?: Write) => {
+    if (writes.get(key) !== attempt) return;
+    writes.delete(key);
+    if (retry) failed.set(key, retry);
   };
-  write.then(forget, forget);
-  return write;
+  attempt.then(
+    () => finish(),
+    () => finish(write),
+  );
+}
+
+// For work that reached disk some other way since its tracked write failed.
+export function forgetWrite(key: unknown): void {
+  failed.delete(key);
 }
 
 export function unsavedStatus(): UnsavedStatus {
   let drafts = false;
-  let pending = writes.size > 0;
+  let pending = writes.size > 0 || failed.size > 0;
   for (const source of sources) {
     if (!source.dirty()) continue;
     if (source.kind === 'draft') drafts = true;
@@ -61,8 +77,12 @@ export async function settleUnsaved(action: UnsavedAction): Promise<UnsavedOutco
       errors.push(describe(err));
     }
   }
-  if (action === 'abandon') return { ok: true };
-  for (const result of await Promise.allSettled([...writes])) {
+  if (action === 'abandon') {
+    failed.clear();
+    return { ok: true };
+  }
+  for (const [key, write] of [...failed]) trackWrite(key, write);
+  for (const result of await Promise.allSettled([...writes.values()])) {
     if (result.status === 'rejected') errors.push(describe(result.reason));
   }
   if (errors.length > 0) return { ok: false, error: errors.join(' ') };

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { trackWrite, useUnsavedSource } from '@/lib/unsaved';
+import { forgetWrite, trackWrite, useUnsavedSource } from '@/lib/unsaved';
 
 export type NoteSaveStatus =
   | { kind: 'idle' }
@@ -16,6 +16,7 @@ type Target = { slideId: string; index: number };
 // switching slides and back doesn't surface the old value.
 const sessionCache = new Map<string, string>();
 const cacheKey = (slideId: string, index: number) => `${slideId}:${index}`;
+const writeKey = (key: string) => `notes:${key}`;
 
 // Remap the per-target cache after a reorder. `order[i]` is the original
 // page index that lands at new position `i`, matching the contract used by
@@ -42,7 +43,7 @@ export function useNotes(slideId: string, index: number, initial: string | undef
   const lastSavedRef = useRef(initialText);
   const dirtyRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inflightRef = useRef<AbortController | null>(null);
+  const inflightRef = useRef(new Map<string, AbortController>());
   const targetRef = useRef<Target>({ slideId, index });
   const valueRef = useRef(value);
   valueRef.current = value;
@@ -55,12 +56,16 @@ export function useNotes(slideId: string, index: number, initial: string | undef
   }, []);
 
   // Resolves to the failure, or null once the text is on disk or a newer
-  // write has taken over.
+  // write to the same notes has taken over. Only that cancels a write: one
+  // still landing for the slide just left is not cut off by typing on the next.
   const persist = useCallback(async (target: Target, text: string): Promise<string | null> => {
-    inflightRef.current?.abort();
+    const key = cacheKey(target.slideId, target.index);
+    const inflight = inflightRef.current;
+    inflight.get(key)?.abort();
     const ctl = new AbortController();
-    inflightRef.current = ctl;
-    setStatus({ kind: 'saving' });
+    inflight.set(key, ctl);
+    const showing = () => cacheKey(targetRef.current.slideId, targetRef.current.index) === key;
+    if (showing()) setStatus({ kind: 'saving' });
     try {
       const res = await fetch('/__notes', {
         method: 'PUT',
@@ -70,30 +75,32 @@ export function useNotes(slideId: string, index: number, initial: string | undef
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? `PUT /__notes → ${res.status}`);
-      sessionCache.set(cacheKey(target.slideId, target.index), text);
-      if (inflightRef.current !== ctl) return null;
+      sessionCache.set(key, text);
+      forgetWrite(writeKey(key));
+      if (inflight.get(key) !== ctl || !showing()) return null;
       lastSavedRef.current = text;
-      dirtyRef.current = false;
+      // Text typed while this was in flight still waits on its own save.
+      dirtyRef.current = valueRef.current !== text;
       setStatus({ kind: 'saved' });
       return null;
     } catch (err) {
       if ((err as { name?: string }).name === 'AbortError') return null;
       const message = String((err as Error).message ?? err);
-      setStatus({ kind: 'error', message });
+      if (showing()) setStatus({ kind: 'error', message });
       return message;
     } finally {
-      if (inflightRef.current === ctl) inflightRef.current = null;
+      if (inflight.get(key) === ctl) inflight.delete(key);
     }
   }, []);
 
   // For a write nothing here will wait on: the page still counts as unsaved
-  // until it lands.
+  // until it lands, and a failure is retried with the page's other work.
   const persistDetached = useCallback(
     (target: Target, text: string) => {
-      const write = persist(target, text).then((error) => {
+      trackWrite(writeKey(cacheKey(target.slideId, target.index)), async () => {
+        const error = await persist(target, text);
         if (error) throw new Error(error);
       });
-      trackWrite(write).catch(() => {});
     },
     [persist],
   );
@@ -141,7 +148,8 @@ export function useNotes(slideId: string, index: number, initial: string | undef
     },
     discard: () => {
       cancelTimer();
-      inflightRef.current?.abort();
+      const { slideId: id, index: at } = targetRef.current;
+      inflightRef.current.get(cacheKey(id, at))?.abort();
       dirtyRef.current = false;
       setValueState(lastSavedRef.current);
       setStatus({ kind: 'idle' });
@@ -151,6 +159,7 @@ export function useNotes(slideId: string, index: number, initial: string | undef
   const setValue = useCallback(
     (next: string) => {
       setValueState(next);
+      valueRef.current = next;
       dirtyRef.current = next !== lastSavedRef.current;
       cancelTimer();
       if (!dirtyRef.current) {
