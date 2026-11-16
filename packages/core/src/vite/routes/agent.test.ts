@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import type { ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -35,6 +36,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.useRealTimers();
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -77,7 +79,7 @@ function setup() {
         () => {},
       ),
     ).then(() => response);
-    return { end: (body: unknown) => req.end(JSON.stringify(body)), done };
+    return { req, end: (body: unknown) => req.end(JSON.stringify(body)), done };
   };
 
   const post = (url: string, body: unknown) => {
@@ -111,6 +113,41 @@ describe('agent routes on close', () => {
     await closing;
   });
 
+  // The close lands a different number of microtasks after the body each time,
+  // so one of these falls between reading the body and admitting the turn.
+  it.each([0, 1, 2, 3])(
+    'leaves no turn running when the close begins %i ticks after the body',
+    async (ticks) => {
+      const signals: AbortSignal[] = [];
+      fixture.run = async (opts) => {
+        signals.push(opts.signal);
+        await new Promise<void>((resolve) =>
+          opts.signal.addEventListener('abort', () => resolve()),
+        );
+      };
+      const { close, request, post } = setup();
+      const session = (await post('/sessions', { provider: 'claude' })).body;
+
+      const message = request('POST', `/sessions/${session.id}/messages`);
+      const closing = new Promise<void>((resolve) => {
+        message.req.on('end', () => {
+          let left = ticks;
+          const step = () => {
+            if (left-- > 0) queueMicrotask(step);
+            else resolve(close());
+          };
+          queueMicrotask(step);
+        });
+      });
+      message.end({ text: 'go' });
+      const { status } = await message.done;
+      await closing;
+
+      expect(signals).toHaveLength(status === 202 ? 1 : 0);
+      expect(signals.every((signal) => signal.aborted)).toBe(true);
+    },
+  );
+
   it('waits for a stopped turn to end before the final save', async () => {
     fixture.run = async (opts) => {
       await new Promise<void>((resolve) => opts.signal.addEventListener('abort', () => resolve()));
@@ -124,5 +161,34 @@ describe('agent routes on close', () => {
 
     const [stored] = await saved();
     expect(stored?.items.at(-1)).toMatchObject({ kind: 'result', aborted: true });
+  });
+
+  it('leaves a placeholder deck where its session says it is when the turn outlives the close', async () => {
+    let end = () => {};
+    fixture.run = () =>
+      new Promise<void>((resolve) => {
+        end = resolve;
+      });
+    const deck = path.join(dir, 'slides', 'untitled');
+    await mkdir(deck, { recursive: true });
+    await writeFile(
+      path.join(deck, 'index.tsx'),
+      "export const meta = { title: 'Quarterly Review' };\n",
+    );
+    const { close, post, saved } = setup();
+    const session = (await post('/sessions', { provider: 'claude', slideId: 'untitled' })).body;
+    await post(`/sessions/${session.id}/messages`, { text: 'go' });
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const closing = close();
+    await vi.advanceTimersByTimeAsync(2000);
+    vi.useRealTimers();
+    await closing;
+
+    end();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const [stored] = await saved();
+    expect(stored?.slideId).toBe('untitled');
+    expect(existsSync(deck)).toBe(true);
   });
 });

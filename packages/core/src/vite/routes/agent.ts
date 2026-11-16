@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Connect, ViteDevServer } from 'vite';
+import type { ViteDevServer } from 'vite';
 import { extractDeckSlug, stripDeckSlug } from '../../agent/prompt.ts';
 import { createProviders } from '../../agent/providers/index.ts';
 import {
@@ -91,6 +91,7 @@ async function renamePlaceholderDeck(
   ctx: ApiContext,
   store: SessionStore,
   broadcast: (event: AgentStreamEvent) => void,
+  closing: () => boolean,
   turn: TurnEnd,
 ): Promise<void> {
   const session = store.get(turn.sessionId);
@@ -124,6 +125,10 @@ async function renamePlaceholderDeck(
   // A new turn may have started while the file was read; it must not lose the
   // folder it is writing into.
   if (store.list().some((s) => s.slideId === slideId && s.status === 'running')) return;
+  // Nor may it start once the server is closing: the folder's new name could
+  // reach the store after the sessions were last saved, and they would name a
+  // folder that is gone.
+  if (closing()) return;
   recordWrite(entry);
   const renamed = await renameSlideDir(ctx.slidesRoot, slideId, desired);
   if (!renamed.ok) return;
@@ -182,17 +187,18 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
     file: path.join(ctx.userCwd, 'node_modules', '.open-slide', 'agent-sessions.json'),
   });
   const broadcast = createAgentBroadcast(server.ws, ctx.agentEnabled);
+  let closed: Promise<void> | null = null;
 
   const runner: AgentRunner = createAgentRunner({
     userCwd: ctx.userCwd,
     writableRoots: [ctx.slidesRoot, ctx.globalAssetsRoot],
     store,
     providers,
-    onTurnEnd: (turn) => renamePlaceholderDeck(server, ctx, store, broadcast, turn),
+    onTurnEnd: (turn) =>
+      renamePlaceholderDeck(server, ctx, store, broadcast, () => closed !== null, turn),
   });
 
   store.subscribe(broadcast);
-  let closed: Promise<void> | null = null;
   const close = () => {
     closed ??= (async () => {
       // A turn that ignores its abort must not keep the server from closing.
@@ -208,11 +214,10 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
   };
 
   // A request can outlast the start of a close while its body arrives; what it
-  // asks for would run on an agent nothing is listening to any more.
-  const readOpenBody = async (req: Connect.IncomingMessage): Promise<unknown> => {
-    const body = await readBody(req, AGENT_BODY_LIMIT);
+  // asks for would run on an agent nothing is listening to any more. Called in
+  // the same tick as the change it guards, so a close cannot begin in between.
+  const assertOpen = () => {
     if (closed) throw new ClosingError();
-    return body;
   };
 
   const installsInFlight = new Map<string, Promise<void>>();
@@ -235,12 +240,13 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
       }
 
       if (!enabled) return json(res, 404, { error: 'agent panel disabled' });
-      if (closed && method !== 'GET') throw new ClosingError();
+      if (method !== 'GET') assertOpen();
 
       if (method === 'POST' && url.pathname === '/install') {
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
-        const body = (await readOpenBody(req)) as { provider?: unknown };
+        const body = (await readBody(req, AGENT_BODY_LIMIT)) as { provider?: unknown };
+        assertOpen();
         if (!isAgentProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
         const provider = providers[body.provider];
         const pm = await detectPackageManager(ctx.userCwd);
@@ -262,10 +268,11 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
       if (method === 'POST' && url.pathname === '/sessions') {
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
-        const body = (await readOpenBody(req)) as {
+        const body = (await readBody(req, AGENT_BODY_LIMIT)) as {
           provider?: unknown;
           slideId?: unknown;
         };
+        assertOpen();
         if (!isAgentProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
         const slideId =
           typeof body.slideId === 'string' && SLIDE_ID_RE.test(body.slideId) ? body.slideId : null;
@@ -294,7 +301,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
         if (method === 'POST' && action === 'messages') {
           const guard = validateMutationRequest(req, { requireJsonBody: true });
           if (!guard.ok) return json(res, guard.status, { error: guard.error });
-          const body = (await readOpenBody(req)) as {
+          const body = (await readBody(req, AGENT_BODY_LIMIT)) as {
             text?: unknown;
             context?: unknown;
             autoApprove?: unknown;
@@ -302,6 +309,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
             effort?: unknown;
             edit?: unknown;
           };
+          assertOpen();
           if (typeof body.text !== 'string' || !body.text.trim()) {
             return json(res, 400, { error: 'missing text' });
           }
@@ -332,7 +340,8 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
         if (method === 'POST' && action === 'respond') {
           const guard = validateMutationRequest(req, { requireJsonBody: true });
           if (!guard.ok) return json(res, guard.status, { error: guard.error });
-          const body = (await readOpenBody(req)) as Record<string, unknown>;
+          const body = (await readBody(req, AGENT_BODY_LIMIT)) as Record<string, unknown>;
+          assertOpen();
           const payload = parseRespond(body);
           if (typeof body.itemId !== 'string' || !payload) {
             return json(res, 400, { error: 'invalid response' });
