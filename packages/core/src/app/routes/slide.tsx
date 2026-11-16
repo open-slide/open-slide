@@ -976,6 +976,14 @@ export function Slide() {
                     designOpen={designOpen}
                     onCloseDesign={() => setDesignOpen(false)}
                     agentOpen={agentOpen}
+                    page={{
+                      index,
+                      total: pageCount,
+                      component: pages[index],
+                      transition: pages[index]?.transition ?? slide.transition,
+                      inheritedTransition: !pages[index]?.transition && Boolean(slide.transition),
+                      themed: Boolean(slide.design),
+                    }}
                     agent={
                       import.meta.env.DEV && (
                         <SlideAgentDock

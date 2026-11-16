@@ -2,6 +2,7 @@ import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 import { AGENT_DOCK_W } from '@/components/agent/agent-dock';
 import { InspectorPanel } from '@/components/inspector/inspector-panel';
 import { useInspector } from '@/components/inspector/inspector-provider';
+import type { PageInfo } from '@/components/inspector/page-panel';
 import { useDesignPanelState } from '@/components/style-panel/design-provider';
 import { DesignPanel } from '@/components/style-panel/style-panel';
 import { useLocale } from '@/lib/use-locale';
@@ -23,11 +24,13 @@ export function EditorSidebar({
   onCloseDesign,
   agentOpen = false,
   agent,
+  page,
 }: {
   designOpen: boolean;
   onCloseDesign: () => void;
   agentOpen?: boolean;
   agent?: ReactNode;
+  page?: PageInfo;
 }) {
   const t = useLocale();
   const { active, panelOpen } = useInspector();
@@ -118,7 +121,7 @@ export function EditorSidebar({
           {lastEditor === 'design' ? (
             <DesignPanel onClose={onCloseDesign} />
           ) : (
-            <InspectorPanel preferredTab={preferredTab} onTabChange={setPreferredTab} />
+            <InspectorPanel preferredTab={preferredTab} onTabChange={setPreferredTab} page={page} />
           )}
         </SwapPane>
       )}

@@ -205,7 +205,6 @@ export type Locale = {
     previewMode: string;
     closeFormatPanel: string;
     editText: string;
-    emptySelectionTitle: string;
     emptySelectionHint: string;
     textSelectionHint: string;
     elementText: string;
@@ -215,6 +214,17 @@ export type Locale = {
     rotateHandle: string;
     resizeHandle: string;
     arrangeSection: string;
+    pageLabel: string;
+    pageBackground: string;
+    pageBackgroundTheme: string;
+    pageBackgroundShared: string;
+    pageBackgroundComplex: string;
+    pageTransition: string;
+    pageTransitionInherited: string;
+    pageSteps: string;
+    pageStepsCount: Plural;
+    pageNone: string;
+    transitionKinds: Record<'fade' | 'slide' | 'zoom' | 'wipe' | 'morph' | 'custom', string>;
     selectionCount: string;
     positionLabel: string;
     positionX: string;
