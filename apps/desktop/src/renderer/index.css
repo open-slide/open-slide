@@ -185,17 +185,18 @@ html[data-route="intro"] body {
   opacity: 0.6;
 }
 
-/* Light spilling from beneath the stage. */
+/* Light spilling from beneath the stage. The gradient is its own softness: a
+   blur filter here would be redone on every frame the glow breathes. */
 .ob-glow {
-  inset: 30% 6% -14%;
+  inset: 26% 2% -20%;
   border-radius: 9999px;
   background: radial-gradient(
     closest-side,
-    oklch(0.68 0.19 32 / 0.42),
-    oklch(0.62 0.2 25 / 0.08) 60%,
+    oklch(0.68 0.19 32 / 0.4),
+    oklch(0.65 0.195 28 / 0.2) 34%,
+    oklch(0.62 0.2 25 / 0.06) 62%,
     transparent
   );
-  filter: blur(28px);
   animation:
     ob-fade 1.4s ease-out both,
     ob-breathe 7s ease-in-out 1.4s infinite alternate;
@@ -210,7 +211,6 @@ html[data-route="intro"] body {
     0 0 0 1px oklch(0 0 0 / 0.06),
     0 2px 4px -2px oklch(0 0 0 / 0.06),
     0 28px 56px -28px oklch(0 0 0 / 0.3);
-  backdrop-filter: blur(24px) saturate(1.5);
 }
 
 .dark .ob-bezel {
