@@ -188,9 +188,13 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
   });
 
   store.subscribe(broadcast);
-  const close = async () => {
-    runner.stopAll();
-    await store.flush();
+  let closed: Promise<void> | null = null;
+  const close = () => {
+    closed ??= (async () => {
+      runner.stopAll();
+      await store.flush();
+    })();
+    return closed;
   };
 
   const installsInFlight = new Map<string, Promise<void>>();

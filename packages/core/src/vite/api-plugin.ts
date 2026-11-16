@@ -16,11 +16,17 @@ import { registerWatchers } from './routes/watchers.ts';
 // owned by a group, open the matching file under `routes/` — each file
 // leads with a comment-block manifest of its endpoints.
 export function apiPlugin(opts: ApiPluginOptions): Plugin {
-  let closeAgent: (() => Promise<void>) | null = null;
+  // A restart reuses this plugin object and configures the replacement server
+  // before it closes the old one, so each server's agent is found through its
+  // own environments rather than through whichever was configured last.
+  const agents = new WeakMap<object, () => Promise<void>>();
+  let running: (() => Promise<void>) | null = null;
   return {
     name: 'open-slide:api',
     apply: 'serve',
-    configureServer(server) {
+    async configureServer(server) {
+      // The outgoing agent writes its sessions out before the new one reads them.
+      await running?.();
       const ctx = makeContext(opts);
       registerWatchers(server, ctx);
       registerEditRoutes(server, ctx);
@@ -32,11 +38,15 @@ export function apiPlugin(opts: ApiPluginOptions): Plugin {
       registerFolderRoutes(server, ctx);
       registerUpdateRoutes(server, ctx);
       registerRestartRoutes(server);
-      closeAgent = registerAgentRoutes(server, ctx);
+      const closeAgent = registerAgentRoutes(server, ctx);
+      running = closeAgent;
+      for (const environment of Object.values(server.environments)) {
+        agents.set(environment, closeAgent);
+      }
     },
     // Vite waits for this while it closes the server.
     async closeBundle() {
-      await closeAgent?.();
+      await agents.get(this.environment)?.();
     },
   };
 }
