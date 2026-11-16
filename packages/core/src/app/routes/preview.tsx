@@ -1,11 +1,13 @@
-import { Component, type ReactNode, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '@/lib/use-document-title';
 import { PreviewStepHost } from '../components/preview-step-host';
 import { SlideCanvas } from '../components/slide-canvas';
+import { PageErrorBoundary } from '../components/slide-error';
 import { nextPaint, sleep } from '../lib/dom';
 import { SlidePageProvider } from '../lib/page-context';
 import { isFrameAnimationSettled, waitForDataWaitfor, waitForFonts } from '../lib/print-ready';
+import { formatLoadError } from '../lib/slide-errors';
 import { useSlideModule } from '../lib/use-slide-module';
 
 const SETTLE_TIMEOUT_MS = 10_000;
@@ -28,34 +30,6 @@ function decodeImages(root: HTMLElement): Promise<unknown> {
   return Promise.all(images.map((img) => img.decode().catch(() => {})));
 }
 
-type PageErrorBoundaryProps = {
-  resetKey: unknown;
-  onError: (error: unknown) => void;
-  children: ReactNode;
-};
-
-class PageErrorBoundary extends Component<PageErrorBoundaryProps, { failed: boolean }> {
-  state = { failed: false };
-
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-
-  componentDidCatch(error: unknown) {
-    this.props.onError(error);
-  }
-
-  componentDidUpdate(prev: PageErrorBoundaryProps) {
-    if (this.state.failed && prev.resetKey !== this.props.resetKey) {
-      this.setState({ failed: false });
-    }
-  }
-
-  render() {
-    return this.state.failed ? null : this.props.children;
-  }
-}
-
 export function Preview() {
   const { slideId = '' } = useParams();
   const [searchParams] = useSearchParams();
@@ -70,7 +44,7 @@ export function Preview() {
   const pageNumber = pageParam ?? 1;
   const Page = pages[pageNumber - 1];
 
-  let inputError = loadError;
+  let inputError = loadError ? formatLoadError(loadError) : null;
   if (!inputError && slide) {
     if (pages.length === 0) inputError = `Slide "${slideId}" has no pages.`;
     else if (!Page) {

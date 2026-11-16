@@ -3,6 +3,7 @@ import { type DesignSystem, designToCssVars } from '../lib/design';
 import { SlidePageProvider } from '../lib/page-context';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, type Page } from '../lib/sdk';
 import { type StepController, StepHost } from '../lib/step-context';
+import { SafePage } from './slide-error';
 
 const PAGES_PER_FRAME = 2;
 const SETTLE_TIMEOUT_MS = 15_000;
@@ -174,7 +175,7 @@ export function SlidePreloadLayer({ pages, index, design, includeCurrent = false
                 entryDirection="backward"
                 controllerRef={controllerRef}
               >
-                <PageComponent />
+                <SafePage page={PageComponent} />
               </StepHost>
             </SlidePageProvider>
           </div>

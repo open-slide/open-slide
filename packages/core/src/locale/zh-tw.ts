@@ -15,7 +15,6 @@ export const zhTW: Locale = {
     close: '關閉',
     loading: '載入中',
     loadFailed: '載入失敗',
-    failedToLoadSlide: '無法載入投影片',
     home: '首頁',
     add: '新增',
     done: '完成',
@@ -28,6 +27,19 @@ export const zhTW: Locale = {
   notFound: {
     eyebrow: '404 · 找不到頁面',
     title: '找不到頁面',
+  },
+
+  slideError: {
+    compileTitle: '投影片編譯失敗',
+    moduleTitle: '投影片載入時發生錯誤',
+    renderTitle: '第 {n} 頁渲染失敗',
+    pageCrashed: '此頁渲染失敗',
+    staleNotice: '錯誤修正前，先顯示上一個可用的版本。',
+    fixHint: '修正錯誤並存檔，投影片會自動重新載入。',
+    details: '詳細資訊',
+    copyPrompt: '複製修正 Prompt',
+    copied: '已複製',
+    copyFailed: '無法複製到剪貼簿',
   },
 
   home: {

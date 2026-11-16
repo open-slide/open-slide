@@ -10,6 +10,7 @@ import type { Page } from '../lib/sdk';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../lib/sdk';
 import type { SlideTransition } from '../lib/transition';
 import { SlideCanvas } from './slide-canvas';
+import { SafePage } from './slide-error';
 
 const THUMB_W = 320;
 const THUMB_H = (THUMB_W * CANVAS_HEIGHT) / CANVAS_WIDTH;
@@ -244,7 +245,7 @@ function OverviewThumb({
           design={design}
         >
           <SlidePageProvider index={index} total={total}>
-            <PageComp />
+            <SafePage page={PageComp} />
           </SlidePageProvider>
         </SlideCanvas>
         {isCurrent && (
