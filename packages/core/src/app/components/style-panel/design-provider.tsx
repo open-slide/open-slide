@@ -54,9 +54,15 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
   const settledDraftRef = useRef<DesignSystem | null>(null);
   const writesRef = useRef(0);
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+  // The draft a save sent: when its response arrives as the new design, edits
+  // made since are newer than it and stay.
+  const sentRef = useRef<DesignSystem | null>(null);
 
   useEffect(() => {
-    if (design) setDraft(clone(design));
+    const sent = sentRef.current;
+    sentRef.current = null;
+    if (!design || (sent && draftRef.current !== sent)) return;
+    setDraft(clone(design));
   }, [design]);
 
   const dirty = useMemo(() => {
@@ -91,8 +97,10 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
       try {
         const saving = draftRef.current;
         if (!saving || saving === settledDraftRef.current) return null;
+        sentRef.current = saving;
         const r = await save(saving);
-        history.clear();
+        if (!r.ok) sentRef.current = null;
+        if (draftRef.current === saving) history.clear();
         if (r.ok) {
           settledDraftRef.current = saving;
           return null;

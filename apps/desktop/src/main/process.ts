@@ -96,6 +96,9 @@ export function run(cmd: string, args: string[], opts: RunOptions): RunHandle {
   };
   child.stdout?.on('data', onData);
   child.stderr?.on('data', onData);
+  // A write after the child exits fails with EPIPE; the exit code still decides
+  // the outcome, so the failed write is dropped instead of crashing main.
+  child.stdin?.on('error', () => {});
 
   const done = new Promise<RunResult>((resolve) => {
     settle = (code) => {

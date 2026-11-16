@@ -539,10 +539,22 @@ export function performScore(
   playWash(ctx, rack, lands, 3.2);
 }
 
+const SILENT: IntroSound = {
+  ready: Promise.resolve(),
+  start() {},
+  fadeOut: () => Promise.resolve(),
+  dispose() {},
+};
+
 export function createIntroSound(cues: ScoreCues): IntroSound {
-  // Nothing here reacts to input, so a larger buffer is free insurance against
-  // dropouts while the intro's heavy compositing runs.
-  const ctx = new AudioContext({ latencyHint: 'playback' });
+  let ctx: AudioContext;
+  try {
+    // Nothing here reacts to input, so a larger buffer is free insurance
+    // against dropouts while the intro's heavy compositing runs.
+    ctx = new AudioContext({ latencyHint: 'playback' });
+  } catch {
+    return SILENT;
+  }
   const fader = makeGain(ctx, 1);
   fader.connect(ctx.destination);
   const ready = Promise.race([

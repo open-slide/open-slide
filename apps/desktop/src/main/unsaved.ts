@@ -29,7 +29,8 @@ export type Prompt = (options: MessageBoxOptions) => Promise<number>;
 function parseStatus(payload: unknown): UnsavedStatus | null {
   if (typeof payload !== 'object' || payload === null) return null;
   const { drafts, pending } = payload as Record<string, unknown>;
-  return { drafts: drafts === true, pending: pending === true };
+  if (typeof drafts !== 'boolean' || typeof pending !== 'boolean') return null;
+  return { drafts, pending };
 }
 
 function parseOutcome(payload: unknown): UnsavedOutcome {

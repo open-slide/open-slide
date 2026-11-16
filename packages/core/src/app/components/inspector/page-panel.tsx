@@ -227,16 +227,23 @@ function readPageState(
   const target = ownTarget(painted);
   const color = isTransparent(style.backgroundColor) ? null : rgbToHex(style.backgroundColor);
   const complex = style.backgroundImage !== 'none';
+  // A page that writes its own background owns it even when it matches the
+  // theme, so it can still be reset to follow later theme changes.
+  const ownBackground = Boolean(
+    target && (painted.style.background || painted.style.backgroundColor),
+  );
   return {
     color,
     preview: complex ? style.backgroundImage : null,
     source: complex
       ? 'complex'
-      : color && color === themeColor
-        ? 'theme'
-        : target
-          ? 'page'
-          : 'shared',
+      : ownBackground
+        ? 'page'
+        : color && color === themeColor
+          ? 'theme'
+          : target
+            ? 'page'
+            : 'shared',
     target,
     overridden: true,
     steps,

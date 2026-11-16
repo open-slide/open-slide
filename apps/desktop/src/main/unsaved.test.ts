@@ -194,6 +194,16 @@ describe('UnsavedChannel', () => {
     expect(await status).toEqual({ drafts: true, pending: false });
   });
 
+  it('answers null for a reply without a status', async () => {
+    const channel = new UnsavedChannel();
+    const { contents: tab, sent } = contents();
+    const status = channel.page(tab, 'Deck', () => {}).status();
+
+    channel.answer(tab, sent[0][1], { ok: false, error: 'boom' });
+
+    expect(await status).toBeNull();
+  });
+
   it('ignores a reply from any other page', async () => {
     vi.useFakeTimers();
     const channel = new UnsavedChannel();

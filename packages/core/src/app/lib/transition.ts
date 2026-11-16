@@ -50,9 +50,9 @@ export function describeTransition(transition: SlideTransition): {
 } {
   const duration = Math.max(
     transition.duration,
-    phaseLength(transition.enter),
-    phaseLength(transition.exit),
-    typeof transition.morph === 'object' ? phaseLength(transition.morph) : 0,
+    phaseLength(transition.enter, transition.duration),
+    phaseLength(transition.exit, transition.duration),
+    typeof transition.morph === 'object' ? phaseLength(transition.morph, transition.duration) : 0,
   );
   if (transition.morph) return { kind: 'morph', duration };
   const frames = keyframeList(transition.enter?.keyframes ?? transition.exit?.keyframes);
@@ -67,8 +67,11 @@ export function describeTransition(transition: SlideTransition): {
   return { kind, duration };
 }
 
-function phaseLength(phase: { duration?: number; delay?: number } | undefined): number {
-  return phase ? (phase.duration ?? 0) + (phase.delay ?? 0) : 0;
+function phaseLength(
+  phase: { duration?: number; delay?: number } | undefined,
+  fallbackDuration: number,
+): number {
+  return phase ? (phase.duration ?? fallbackDuration) + (phase.delay ?? 0) : 0;
 }
 
 function keyframeList(keyframes: TransitionPhase['keyframes'] | undefined): Keyframe[] {

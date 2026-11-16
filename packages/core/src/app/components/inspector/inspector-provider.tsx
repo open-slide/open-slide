@@ -658,12 +658,16 @@ export function InspectorProvider({
         pendingRef.current.set(key, bucket);
       }
       const style = (anchor?.style ?? {}) as unknown as Record<string, string>;
+      // Every key is read before any is written: clearing a shorthand such as
+      // `background` also clears the longhands a later op in the batch sets.
+      for (const op of ops) {
+        if (op.kind === 'set-style' && anchor && !bucket.origStyle.has(op.key)) {
+          bucket.origStyle.set(op.key, style[op.key] ?? '');
+        }
+      }
       for (const op of ops) {
         const seq = ++pendingSeqRef.current;
         if (op.kind === 'set-style') {
-          if (anchor && !bucket.origStyle.has(op.key)) {
-            bucket.origStyle.set(op.key, style[op.key] ?? '');
-          }
           bucket.styleOps.set(op.key, { value: op.value, prevText: op.prevText, seq });
           if (anchor?.isConnected) style[op.key] = op.value ?? '';
         } else if (op.kind === 'set-text-range-style' || op.kind === 'set-text') {

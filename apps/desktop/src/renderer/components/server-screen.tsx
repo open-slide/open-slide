@@ -2,7 +2,7 @@ import { FolderOpen, Package, RotateCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { AppState } from '../../shared/types';
-import { desktop, useLog } from '../lib/desktop';
+import { desktop, settle, useLog } from '../lib/desktop';
 import { LineLoader, LogView } from './primitives';
 
 export function ServerScreen({
@@ -41,7 +41,7 @@ export function ServerScreen({
             onClick={async () => {
               const root = workspace?.root;
               setFailedInstall(null);
-              const result = await desktop.workspace.install();
+              const result = await settle(desktop.workspace.install());
               if (!result.ok && root) setFailedInstall({ root, error: result.error });
             }}
           >

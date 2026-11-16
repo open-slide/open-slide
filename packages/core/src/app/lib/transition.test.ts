@@ -41,6 +41,16 @@ describe('describeTransition', () => {
     ).toEqual({ kind: 'fade', duration: 320 });
   });
 
+  it('adds a phase delay to the duration it inherits', () => {
+    expect(
+      describeTransition({
+        duration: 300,
+        enter: { delay: 80, keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+      }).duration,
+    ).toBe(380);
+    expect(describeTransition({ duration: 300, morph: { delay: 50 } }).duration).toBe(350);
+  });
+
   it('calls a translating entrance a slide', () => {
     expect(
       describeTransition({

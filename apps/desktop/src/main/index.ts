@@ -260,6 +260,9 @@ const workspaces = new WorkspaceController({
 const quitGate = new QuitGate({
   confirm: async () => (await tabs?.confirmLeave('quit')) ?? true,
   cleanup: async () => {
+    // Work settled during confirm; an edit made while the server stops would be
+    // destroyed with its window without being asked about again.
+    for (const win of BrowserWindow.getAllWindows()) win.setEnabled(false);
     workspaces.persistSession();
     settings.flush();
     logins.cancelAll();

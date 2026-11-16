@@ -23,26 +23,17 @@ vi.mock('./settings', () => ({
   },
 }));
 vi.mock('./workspace', () => ({ bundledCore: () => ({ version: 'test' }) }));
-// The real SDK, with its transport replaced: nothing here reaches the network.
-vi.mock('posthog-node', async (importOriginal) => {
-  const { PostHog } = await importOriginal<typeof import('posthog-node')>();
-  return {
-    PostHog: class extends PostHog {
-      constructor(token: string, options: ConstructorParameters<typeof PostHog>[1]) {
-        super(token, {
-          ...options,
-          fetch: async (_url, init) => {
-            const body = init.body;
-            fixture.requests.push(
-              typeof body === 'string' ? body : gunzipSync(body as Uint8Array).toString(),
-            );
-            return new Response('{"status":"Ok"}', { status: 200 });
-          },
-        });
-      }
-    },
-  };
-});
+// The real SDK, with the global transport replaced: nothing here reaches the
+// network, and the app's own consent gate in front of it stays in place.
+const statuses: number[] = [];
+async function transport(_url: string, init: RequestInit): Promise<Response> {
+  const body = init.body;
+  fixture.requests.push(
+    typeof body === 'string' ? body : gunzipSync(body as Uint8Array).toString(),
+  );
+  const status = statuses.shift() ?? 200;
+  return new Response(status === 200 ? '{"status":"Ok"}' : '', { status });
+}
 
 const BATCH_INTERVAL_MS = 30_000;
 
@@ -66,6 +57,8 @@ describe('telemetry opt-out', () => {
     fixture.telemetry = true;
     fixture.onboarded = true;
     fixture.requests = [];
+    statuses.length = 0;
+    vi.stubGlobal('fetch', transport);
     vi.stubEnv('MAIN_VITE_POSTHOG_TOKEN', 'test-token');
     vi.stubEnv('OPEN_SLIDE_TELEMETRY', '1');
     vi.stubEnv('DO_NOT_TRACK', '0');
@@ -76,6 +69,7 @@ describe('telemetry opt-out', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     delete (process as { getSystemVersion?: unknown }).getSystemVersion;
   });
 
@@ -130,6 +124,22 @@ describe('telemetry opt-out', () => {
     await telemetry.shutdownTelemetry();
 
     expect(fixture.requests).toHaveLength(0);
+  });
+
+  it('never retries a failed batch once telemetry is turned off', async () => {
+    statuses.push(503);
+    const telemetry = await load();
+    telemetry.track('first_attempt_failed');
+    vi.advanceTimersByTime(BATCH_INTERVAL_MS);
+    expect(await sent('first_attempt_failed')).toBe(true);
+
+    fixture.telemetry = false;
+    telemetry.setTelemetryEnabled(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(fixture.requests).toHaveLength(1);
+    vi.useRealTimers();
+    await telemetry.shutdownTelemetry();
   });
 
   it('sends only what was tracked after telemetry is turned back on', async () => {

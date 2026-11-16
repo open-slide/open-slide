@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { forgetWrite, trackWrite, useUnsavedSource } from '@/lib/unsaved';
+import { forgetWrite, onAbandon, trackWrite, useUnsavedSource } from '@/lib/unsaved';
 
 export type NoteSaveStatus =
   | { kind: 'idle' }
@@ -15,28 +15,39 @@ type Target = { slideId: string; index: number };
 // stays stale across navigation. Cache last-saved text per target so
 // switching slides and back doesn't surface the old value.
 const sessionCache = new Map<string, string>();
+// Text left behind on a slide whose write is still landing or failed. Coming
+// back shows it instead of the older text on disk, which a later save would
+// otherwise write over it.
+const detachedText = new Map<string, string>();
+onAbandon(() => detachedText.clear());
 const cacheKey = (slideId: string, index: number) => `${slideId}:${index}`;
 const writeKey = (key: string) => `notes:${key}`;
+
+function remapCache(cache: Map<string, string>, slideId: string, order: number[]): void {
+  const prev = new Map<number, string>();
+  for (let i = 0; i < order.length; i++) {
+    const cached = cache.get(cacheKey(slideId, i));
+    if (cached !== undefined) prev.set(i, cached);
+    cache.delete(cacheKey(slideId, i));
+  }
+  for (let newIdx = 0; newIdx < order.length; newIdx++) {
+    const oldIdx = order[newIdx];
+    const text = prev.get(oldIdx);
+    if (text !== undefined) cache.set(cacheKey(slideId, newIdx), text);
+  }
+}
 
 // Remap the per-target cache after a reorder. `order[i]` is the original
 // page index that lands at new position `i`, matching the contract used by
 // the `/__slides/:id/reorder` endpoint.
 export function remapNotesSessionCacheAfterReorder(slideId: string, order: number[]): void {
-  const prev = new Map<number, string>();
-  for (let i = 0; i < order.length; i++) {
-    const cached = sessionCache.get(cacheKey(slideId, i));
-    if (cached !== undefined) prev.set(i, cached);
-    sessionCache.delete(cacheKey(slideId, i));
-  }
-  for (let newIdx = 0; newIdx < order.length; newIdx++) {
-    const oldIdx = order[newIdx];
-    const text = prev.get(oldIdx);
-    if (text !== undefined) sessionCache.set(cacheKey(slideId, newIdx), text);
-  }
+  remapCache(sessionCache, slideId, order);
+  remapCache(detachedText, slideId, order);
 }
 
 export function useNotes(slideId: string, index: number, initial: string | undefined) {
-  const initialText = sessionCache.get(cacheKey(slideId, index)) ?? initial ?? '';
+  const key = cacheKey(slideId, index);
+  const initialText = detachedText.get(key) ?? sessionCache.get(key) ?? initial ?? '';
   const [value, setValueState] = useState(initialText);
   const [status, setStatus] = useState<NoteSaveStatus>({ kind: 'idle' });
 
@@ -76,6 +87,8 @@ export function useNotes(slideId: string, index: number, initial: string | undef
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? `PUT /__notes → ${res.status}`);
       sessionCache.set(key, text);
+      // Writes to one key never overlap, so this one is the newest text.
+      detachedText.delete(key);
       forgetWrite(writeKey(key));
       if (!showing()) return null;
       lastSavedRef.current = text;
@@ -98,7 +111,9 @@ export function useNotes(slideId: string, index: number, initial: string | undef
   // until it lands, and a failure is retried with the page's other work.
   const persistDetached = useCallback(
     (target: Target, text: string) => {
-      trackWrite(writeKey(cacheKey(target.slideId, target.index)), async () => {
+      const key = cacheKey(target.slideId, target.index);
+      detachedText.set(key, text);
+      trackWrite(writeKey(key), async () => {
         const error = await persist(target, text);
         if (error) throw new Error(error);
       });

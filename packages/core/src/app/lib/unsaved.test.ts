@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   forgetWrite,
+  onAbandon,
   registerUnsaved,
   settleUnsaved,
   trackWrite,
@@ -85,6 +86,18 @@ describe('unsaved work registry', () => {
     expect(draft.save).not.toHaveBeenCalled();
     expect(notes.save).not.toHaveBeenCalled();
     expect(unsavedStatus()).toEqual({ drafts: false, pending: false });
+  });
+
+  it('tells abandon listeners only when the work is abandoned', async () => {
+    const listener = vi.fn();
+    cleanups.push(onAbandon(listener));
+
+    await settleUnsaved('save');
+    await settleUnsaved('discard');
+    expect(listener).not.toHaveBeenCalled();
+
+    await settleUnsaved('abandon');
+    expect(listener).toHaveBeenCalledOnce();
   });
 
   it('refuses to report success when more work appeared while saving', async () => {

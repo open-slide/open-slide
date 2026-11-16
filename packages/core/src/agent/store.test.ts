@@ -143,6 +143,18 @@ describe('createSessionStore', () => {
     expect(createSessionStore({ file }).get(s.id)?.title).toBe('Before');
   });
 
+  it('leaves out a change made while it is still closing', async () => {
+    const file = path.join(dir, 'sessions.json');
+    const store = createSessionStore({ file });
+    const s = store.create('claude', 'deck');
+    store.patch(s.id, { title: 'Before' });
+    const closing = store.close();
+    store.patch(s.id, { title: 'After' });
+    await closing;
+
+    expect(createSessionStore({ file }).get(s.id)?.title).toBe('Before');
+  });
+
   it('removes sessions and caps the idle backlog', () => {
     const store = createSessionStore({ file: null });
     for (let i = 0; i < 35; i++) store.create('claude', null);

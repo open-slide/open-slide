@@ -64,8 +64,9 @@ function deliverWaiting() {
   for (const deliver of waiting.splice(0)) deliver(client);
 }
 
-// Turning telemetry off drops everything that has not been sent yet, and the
-// SDK refuses whatever an in-flight capture still tries to queue.
+// Turning telemetry off drops everything that has not been sent yet, the SDK
+// refuses whatever an in-flight capture still tries to queue, and the transport
+// refuses retries of a batch that was already handed over.
 export function setTelemetryEnabled(on: boolean) {
   if (!client) return;
   if (on) {
@@ -179,6 +180,10 @@ export function initTelemetry() {
     flushAt: 1,
     flushInterval: 0,
     before_send: redact,
+    // The SDK retries a failed batch without checking consent again, so every
+    // attempt is gated here: a retry after an opt-out never leaves.
+    fetch: (url, options) =>
+      enabled() ? fetch(url, options) : Promise.reject(new Error('Telemetry is turned off.')),
   });
   if (!settings.get().telemetry) void client.optOut();
 

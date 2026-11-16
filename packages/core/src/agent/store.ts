@@ -93,15 +93,19 @@ export function createSessionStore(opts: { file: string | null }) {
     }, SAVE_DEBOUNCE_MS);
   };
 
-  const writeSnapshot = async (file: string) => {
+  const snapshot = (): string => {
     const body: PersistedShape = {
       version: 1,
       sessions: list().flatMap((s) => sessions.get(s.id) ?? []),
     };
+    return JSON.stringify(body);
+  };
+
+  const writeSnapshot = async (file: string, body: string) => {
     const tmp = `${file}.tmp`;
     try {
       await fs.mkdir(path.dirname(file), { recursive: true });
-      await fs.writeFile(tmp, JSON.stringify(body), { encoding: 'utf8', mode: 0o600 });
+      await fs.writeFile(tmp, body, { encoding: 'utf8', mode: 0o600 });
       await fs.rename(tmp, file);
     } catch (err) {
       console.error('[open-slide] failed to save agent sessions:', err);
@@ -110,12 +114,15 @@ export function createSessionStore(opts: { file: string | null }) {
   };
 
   // Saves share one temp file, so a flush racing a debounced save must wait
-  // for it rather than interleave writes and renames.
+  // for it rather than interleave writes and renames. The snapshot is taken
+  // when the save is queued, so the last one a closing store writes holds
+  // nothing changed after close.
   let saving: Promise<void> = Promise.resolve();
   const save = () => {
     const file = opts.file;
     if (!file || closed) return saving;
-    saving = saving.then(() => writeSnapshot(file));
+    const body = snapshot();
+    saving = saving.then(() => writeSnapshot(file, body));
     return saving;
   };
 

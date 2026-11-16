@@ -16,6 +16,7 @@ type Write = () => Promise<unknown>;
 const sources = new Set<UnsavedSource>();
 const writes = new Map<unknown, Promise<unknown>>();
 const failed = new Map<unknown, Write>();
+const abandonListeners = new Set<() => void>();
 
 export function registerUnsaved(source: UnsavedSource): () => void {
   sources.add(source);
@@ -41,6 +42,15 @@ export function trackWrite(key: unknown, write: Write): void {
     () => finish(),
     () => finish(write),
   );
+}
+
+// For state kept on behalf of tracked writes, which goes with them when the
+// work is abandoned.
+export function onAbandon(listener: () => void): () => void {
+  abandonListeners.add(listener);
+  return () => {
+    abandonListeners.delete(listener);
+  };
 }
 
 // For work that reached disk some other way since its tracked write failed.
@@ -81,6 +91,7 @@ export async function settleUnsaved(action: UnsavedAction): Promise<UnsavedOutco
     // Dropped while still in flight too, so one that fails later is not kept.
     writes.clear();
     failed.clear();
+    for (const listener of abandonListeners) listener();
     return { ok: true };
   }
   for (const [key, write] of [...failed]) trackWrite(key, write);

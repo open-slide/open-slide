@@ -114,7 +114,11 @@ function MainWindow() {
             />
           )}
           {screen === 'server' && (
-            <ServerScreen state={state} onChooseWorkspace={chooseWorkspace} />
+            <ServerScreen
+              key={state.workspace?.root}
+              state={state}
+              onChooseWorkspace={chooseWorkspace}
+            />
           )}
         </main>
       </div>
