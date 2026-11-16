@@ -149,6 +149,25 @@ describe('unsaved work registry', () => {
     expect(write).toHaveBeenCalledTimes(2);
   });
 
+  it('forgets a write abandoned in flight, even if it fails afterwards', async () => {
+    let fail: (error: Error) => void = () => {};
+    const write = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          fail = reject;
+        }),
+    );
+    trackWrite('notes', write);
+
+    expect(await settleUnsaved('abandon')).toEqual({ ok: true });
+    expect(unsavedStatus().pending).toBe(false);
+    fail(new Error('server went away'));
+    await settled();
+    expect(unsavedStatus().pending).toBe(false);
+    expect(await settleUnsaved('save')).toEqual({ ok: true });
+    expect(write).toHaveBeenCalledOnce();
+  });
+
   it('drops a failed write once newer work for the same key has landed', async () => {
     const stale = vi.fn(() => Promise.reject(new Error('server went away')));
     trackWrite('notes', stale);

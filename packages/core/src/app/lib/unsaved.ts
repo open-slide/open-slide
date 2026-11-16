@@ -78,6 +78,8 @@ export async function settleUnsaved(action: UnsavedAction): Promise<UnsavedOutco
     }
   }
   if (action === 'abandon') {
+    // Dropped while still in flight too, so one that fails later is not kept.
+    writes.clear();
     failed.clear();
     return { ok: true };
   }

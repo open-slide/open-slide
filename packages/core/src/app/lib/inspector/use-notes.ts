@@ -77,8 +77,9 @@ export function useNotes(slideId: string, index: number, initial: string | undef
       if (!res.ok) throw new Error(body.error ?? `PUT /__notes → ${res.status}`);
       sessionCache.set(key, text);
       forgetWrite(writeKey(key));
-      if (inflight.get(key) !== ctl || !showing()) return null;
+      if (!showing()) return null;
       lastSavedRef.current = text;
+      if (inflight.get(key) !== ctl) return null;
       // Text typed while this was in flight still waits on its own save.
       dirtyRef.current = valueRef.current !== text;
       setStatus({ kind: 'saved' });
@@ -123,6 +124,10 @@ export function useNotes(slideId: string, index: number, initial: string | undef
       if (lastSavedRef.current !== pending) persistDetached(prev, pending);
     }
     targetRef.current = { slideId, index };
+    // A save here updates the cache `initialText` reads from. That is this
+    // editor's own text coming back, not new text to adopt: taking it would
+    // drop whatever was typed while the save was in flight.
+    if (!targetChanged && initialText === lastSavedRef.current) return;
     cancelTimer();
     setValueState(initialText);
     lastSavedRef.current = initialText;
