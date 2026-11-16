@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 // macOS reads the Dock, menu bar, and app switcher identity from the bundle,
 // even after app.setName(), so dev runs a renamed copy of Electron.app. The
 // copy keeps the stock node_modules bundle and its signature untouched.
-function prepareMacBundle() {
+function prepareMacBundle(electronBinary) {
   const electronDir = path.dirname(require.resolve('electron/package.json'));
   const icon = path.join(root, 'build/icon-dev.icns');
   const hash = createHash('sha256')
@@ -34,7 +34,7 @@ function prepareMacBundle() {
 
   fs.rmSync(path.dirname(cache), { recursive: true, force: true });
   fs.mkdirSync(cache, { recursive: true });
-  execFileSync('ditto', [path.join(electronDir, 'dist/Electron.app'), bundle]);
+  execFileSync('ditto', [path.resolve(electronBinary, '../../..'), bundle]);
 
   const plist = path.join(bundle, 'Contents/Info.plist');
   for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
@@ -50,8 +50,12 @@ function prepareMacBundle() {
 
 buildNative();
 
+// Electron 42+ no longer downloads its binary at install time.
+execFileSync(process.execPath, [require.resolve('electron/install.js')], { stdio: 'inherit' });
+const electronBinary = require('electron');
+
 const env = { ...process.env };
-if (process.platform === 'darwin') env.ELECTRON_EXEC_PATH = prepareMacBundle();
+if (process.platform === 'darwin') env.ELECTRON_EXEC_PATH = prepareMacBundle(electronBinary);
 
 const child = spawn('electron-vite', ['dev', ...process.argv.slice(2)], {
   cwd: root,
