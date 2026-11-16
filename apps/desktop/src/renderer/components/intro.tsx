@@ -8,21 +8,81 @@ const SWIFT = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const SOFT_OUT = 'cubic-bezier(0.16, 1, 0.3, 1)';
 const IN_OUT = 'cubic-bezier(0.65, 0, 0.35, 1)';
 const DRIFT_IN = 'cubic-bezier(0.2, 0.55, 0.25, 1)';
+const FLOAT = 'cubic-bezier(0.37, 0, 0.63, 1)';
 const SETTLE = 'cubic-bezier(0.42, 0, 0.18, 1)';
 // The negative control point pulls the window back a little before it commits.
 const COLLAPSE = 'cubic-bezier(0.7, -0.1, 0.1, 1)';
-// The veil stays translucent so the desktop shows through, dimming in steps as
-// the story narrows down to the mark.
+// The veil stays translucent so the desktop shows through. A second sheet over
+// it deepens the dark in steps, to 0.68 and then 0.82, as the story narrows
+// down to the mark; fading a sheet costs nothing, repainting the veil does.
 const VEIL = 'rgb(11 9 8 / 0.58)';
-const VEIL_MID = 'rgb(11 9 8 / 0.68)';
-const VEIL_DEEP = 'rgb(11 9 8 / 0.82)';
+const DIM = { mid: 0.24, deep: 0.57 };
 const WORDMARK = 'open-slide';
 const WINDOW_RATIO = 1.7;
 const WINDOW_RADIUS = 14;
 const VISIBLE_SLOTS = 4;
-const CARD_COUNT = 18;
-const OUTER_RING = 11;
-const PLAIN_SKETCHES: SketchVariant[] = ['title', 'chart', 'image', 'quote', 'grid'];
+const STAGE_WIDTH = 1512;
+
+type Seat = {
+  variant: SketchVariant;
+  x: number;
+  y: number;
+  width: number;
+  depth: number;
+  twist: number;
+  blur: number;
+  entry: number;
+};
+
+// Listed in landing order, nearest the rail first. Each is where a card rests
+// on screen: x and width in units of the stage's span, y of its height. Focus
+// sits on the middle depth, and the centre stays clear for the window.
+const SEATS: Seat[] = [
+  {
+    variant: 'chart',
+    x: -0.285,
+    y: -0.24,
+    width: 0.185,
+    depth: 0.24,
+    twist: -7,
+    blur: 0,
+    entry: 2,
+  },
+  {
+    variant: 'quote',
+    x: -0.03,
+    y: -0.335,
+    width: 0.122,
+    depth: 0.1,
+    twist: 5,
+    blur: 1.4,
+    entry: 0,
+  },
+  { variant: 'title', x: -0.37, y: 0.06, width: 0.16, depth: 0.28, twist: 4, blur: 0, entry: 4 },
+  {
+    variant: 'image',
+    x: -0.165,
+    y: 0.295,
+    width: 0.235,
+    depth: 0.46,
+    twist: -5,
+    blur: 2.2,
+    entry: 6,
+  },
+  { variant: 'list', x: 0.3, y: -0.255, width: 0.23, depth: 0.42, twist: 6, blur: 2.2, entry: 5 },
+  {
+    variant: 'grid',
+    x: 0.175,
+    y: 0.305,
+    width: 0.128,
+    depth: 0.12,
+    twist: -8,
+    blur: 1.4,
+    entry: 1,
+  },
+  { variant: 'cover', x: 0.37, y: 0.085, width: 0.178, depth: 0.22, twist: -4, blur: 0, entry: 3 },
+];
+const CARD_COUNT = SEATS.length;
 const TILT = { angle: 30, zoom: 1.6, topWidth: 0.515, topY: 0.535 };
 const RIG_REST_Z = -0.25;
 const RIG_START_Z = -0.45;
@@ -30,8 +90,10 @@ const FLAT_ZOOM = 0.8;
 
 const TILE_FILL = 'linear-gradient(180deg, #ffffff 0%, #efebe6 100%)';
 const TILE_BEVEL = 'inset 0 1px 0 rgb(255 255 255 / 0.9), inset 0 -2px 0 rgb(0 0 0 / 0.06)';
-const WINDOW_SHADOW = `${TILE_BEVEL}, 0 60px 120px -30px rgb(254 82 38 / 0), 0 40px 80px -24px rgb(0 0 0 / 0.65)`;
-const TILE_SHADOW = `${TILE_BEVEL}, 0 40px 90px -24px rgb(254 82 38 / 0.55), 0 18px 40px -12px rgb(0 0 0 / 0.6)`;
+// Shadows this soft are costly to repaint, and the window changes size on every
+// frame of its collapse. Each lives on a layer of its own that only moves and fades.
+const WINDOW_SHADOW = '0 40px 80px -24px rgb(0 0 0 / 0.65)';
+const TILE_SHADOW = '0 40px 90px -24px rgb(254 82 38 / 0.55), 0 18px 40px -12px rgb(0 0 0 / 0.6)';
 
 const at = {
   glow: 200,
@@ -42,11 +104,14 @@ const at = {
   word: 10750,
   exit: 12900,
 };
-const ENTER_MS = 1500;
-const ENTER_STAGGER = 45;
-const RISE_MS = 2000;
+const ENTER_MS = 1700;
+const ENTER_STAGGER = 110;
 const FLIGHT_MS = 1700;
-const ROLL_MS = 2800;
+// The window is seated as the first card docks, and the last docks on the
+// score's next hit, as the camera pulls back.
+const RISE_MS = FLIGHT_MS;
+const ROLL_MS = at.flatten - at.gather - FLIGHT_MS;
+const FOCUS_MS = 800;
 const FLIGHT_SAMPLES = 24;
 const FLATTEN_MS = 2200;
 const MORPH_MS = 1350;
@@ -82,14 +147,6 @@ const settle = (progress: number) => {
 };
 
 const lerp = (from: number, to: number, amount: number) => from + (to - from) * amount;
-
-function random(seed: number) {
-  let t = seed;
-  return () => {
-    t = (t * 1664525 + 1013904223) % 4294967296;
-    return t / 4294967296;
-  };
-}
 
 const SCORE_CUES: ScoreCues = {
   glow: at.glow,
@@ -138,9 +195,13 @@ const sketchFrame = (width: number): React.CSSProperties => {
   };
 };
 
+// A gradient this smooth survives being drawn small and stretched, which keeps a
+// layer wider than the screen out of memory.
+const GLOW_STRETCH = 4;
+
 const halo = (opacity: number, scale: number): Keyframe => ({
   opacity,
-  transform: `translate(-50%, -50%) scale(${scale})`,
+  transform: `translate(-50%, -50%) scale(${scale * GLOW_STRETCH})`,
 });
 
 function track(el: Element | null | undefined, stops: Stop[]) {
@@ -157,20 +218,20 @@ function layoutStage(w: number, h: number) {
   const width = height * WINDOW_RATIO;
   const win: Rect = { x: (w - width) / 2, y: (h - height) / 2, width, height };
 
-  const pad = width * 0.046;
+  const inset = width * 0.03;
+  const top = width * 0.05;
+  const margin = width * 0.036;
   const thumbWidth = width * 0.16;
   const thumbHeight = (thumbWidth * 9) / 16;
   // The fifth thumbnail is cut in half by the window's edge, so the rail reads as scrollable.
-  const pitch = (height - pad - thumbHeight / 2) / VISIBLE_SLOTS;
-  const canvasLeft = pad + thumbWidth + width * 0.035;
+  const pitch = (height - top - thumbHeight / 2) / VISIBLE_SLOTS;
+  const rail: Rect = { x: win.x, y: win.y, width: inset * 2 + thumbWidth, height };
   const canvas: Rect = {
-    x: win.x + canvasLeft,
-    y: win.y + pad,
-    width: width - canvasLeft - pad,
-    height: height - pad * 2,
+    x: rail.x + rail.width + margin,
+    y: win.y + margin,
+    width: width - rail.width - margin * 2,
+    height: height - margin * 2,
   };
-
-  const rail: Rect = { x: win.x, y: win.y, width: canvasLeft, height };
 
   const perspective = width * 0.84;
   const radians = (TILT.angle * Math.PI) / 180;
@@ -182,80 +243,70 @@ function layoutStage(w: number, h: number) {
   };
 
   const dock = {
-    x: win.x + pad + thumbWidth / 2 - w / 2,
-    y: win.y + pad + thumbHeight / 2 - h / 2,
+    x: win.x + inset + thumbWidth / 2 - w / 2,
+    y: win.y + top + thumbHeight / 2 - h / 2,
   };
-  const rand = random(7);
-  const baseWidth = Math.min(300, Math.max(150, w * 0.15));
-  const entryOrders = Array.from({ length: CARD_COUNT }, (_, i) => i).sort(() => rand() - 0.5);
-  const ring = Array.from({ length: CARD_COUNT }, (_, i) => {
-    const outer = i < OUTER_RING;
-    const ringIndex = outer ? i : i - OUTER_RING;
-    const ringSize = outer ? OUTER_RING : CARD_COUNT - OUTER_RING;
-    const angle = (ringIndex / ringSize) * Math.PI * 2 + (outer ? 0.2 : 0.62) + rand() * 0.18;
-    const x = Math.cos(angle) * (outer ? 0.41 : 0.18) * w;
-    const y = Math.sin(angle) * (outer ? 0.36 : 0.16) * h;
-    return {
-      angle,
-      outer,
-      x,
-      y,
-      // A card's turn dips its corners by up to 0.08 of the perspective. Staying above
-      // that keeps them from slicing through the window's plane as they fly over it.
-      depth: outer ? 0.2 + rand() * 0.28 : 0.1 + rand() * 0.08,
-      twist: (rand() - 0.5) * 16,
-      entryOrder: entryOrders[i] ?? i,
-      reach: Math.hypot(x - dock.x, y - dock.y),
-    };
-  });
-  // Cards leave nearest-first, a wave sweeping toward the rail's single entry point.
-  const byReach = ring.map((card) => card.reach).sort((a, b) => a - b);
+  const span = Math.min(w, h * 1.6);
 
-  const cards = ring.map((card) => {
-    const z = card.depth * perspective;
+  const cards = SEATS.map((seat, order) => {
+    // A card's turn dips its corners by up to 0.08 of the perspective. Seats sit
+    // deeper than that, so no corner slices through the window's plane in flight.
+    const z = seat.depth * perspective;
     // Undo the projection at rest, so depth reads as parallax in motion without
     // pulling a card off its place in the composition.
     const fit = (perspective - z - RIG_REST_Z * perspective) / perspective;
-    const cardWidth = baseWidth * (card.outer ? 1 : 0.7) * fit;
-    const x = card.x * fit;
-    const y = card.y * fit;
+    const cardWidth = seat.width * span * fit;
+    const x = seat.x * span * fit;
+    const y = seat.y * h * fit;
     const side = x < 0 ? -1 : 1;
-    const pitchTurn = Math.sin(card.angle) * 14;
-    const yawTurn = Math.cos(card.angle) * -22;
-    const order = byReach.indexOf(card.reach);
-    const slot = CARD_COUNT - 1 - order;
-    const variant: SketchVariant =
-      slot % 9 === 0 ? 'cover' : (PLAIN_SKETCHES[slot % PLAIN_SKETCHES.length] ?? 'title');
-    const pose: Pose = { x, y, z, pitch: pitchTurn, yaw: yawTurn, roll: card.twist, scale: 1 };
+    const angle = Math.atan2(seat.y, seat.x);
+    const pitchTurn = Math.sin(angle) * 12;
+    const yawTurn = Math.cos(angle) * -20;
+    const pose: Pose = { x, y, z, pitch: pitchTurn, yaw: yawTurn, roll: seat.twist, scale: 1 };
     return {
-      variant,
-      slot,
-      entryOrder: card.entryOrder,
+      variant: seat.variant,
+      slot: CARD_COUNT - 1 - order,
+      enter: at.cards + seat.entry * ENTER_STAGGER,
       land: landAt(order),
       cardWidth,
-      blur: card.outer ? (card.depth > 0.38 ? 2 : 0) : 1.4,
+      blur: (seat.blur * fit * span) / STAGE_WIDTH,
       from: {
-        x: x * 0.12,
-        y: y * 0.12,
-        z: -1.87 * perspective,
-        pitch: pitchTurn * 3,
-        yaw: yawTurn * 3,
-        roll: card.twist * 4,
+        x: x * 0.4,
+        y: y * 0.4,
+        z: z - 1.5 * perspective,
+        pitch: pitchTurn * 2.5,
+        yaw: yawTurn * 2.5,
+        roll: seat.twist * 3,
         scale: 1,
       } satisfies Pose,
       pose,
       drift: {
         ...pose,
-        x: x + side * w * 0.007,
-        y: y - h * 0.006,
+        x: x + side * span * 0.008,
+        y: y - h * 0.007,
         z: z + perspective * 0.03,
-        roll: card.twist + side * 1.4,
+        roll: seat.twist + side * 1.2,
       } satisfies Pose,
       dockScale: thumbWidth / cardWidth,
     };
   });
 
-  return { win, rail, canvas, cards, perspective, tilt, pad, pitch, thumbWidth, dock };
+  return {
+    win,
+    rail,
+    canvas,
+    cards,
+    perspective,
+    tilt,
+    inset,
+    top,
+    pitch,
+    thumbWidth,
+    thumbHeight,
+    dock,
+    light: width * 0.0115,
+    ring: thumbWidth * 0.03,
+  };
 }
 
 export function Intro() {
@@ -263,13 +314,18 @@ export function Intro() {
   const contentRef = useRef<HTMLDivElement>(null);
   const glowRef = useRef<HTMLDivElement>(null);
   const rigRef = useRef<HTMLDivElement>(null);
+  const dimRef = useRef<HTMLDivElement>(null);
+  const windowShadowRef = useRef<HTMLDivElement>(null);
+  const tileShadowRef = useRef<HTMLDivElement>(null);
   const chromeRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLSpanElement>(null);
   const sheenRef = useRef<HTMLSpanElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLSpanElement>(null);
   const iconRef = useRef<HTMLDivElement>(null);
   const wordRef = useRef<HTMLHeadingElement>(null);
   const hintRef = useRef<HTMLDivElement>(null);
@@ -351,6 +407,11 @@ export function Intro() {
             easing: 'ease-out',
           });
         }
+        animate(dimRef.current, [{ opacity: 0 }], {
+          duration: fast ? 760 : 1300,
+          easing: IN_OUT,
+          fill: 'forwards',
+        });
         const fold = animate(
           scene,
           [
@@ -391,14 +452,16 @@ export function Intro() {
       const gatherEnd = at.gather + RISE_MS;
       const flattenEnd = at.flatten + FLATTEN_MS;
       const morphEnd = at.morph + MORPH_MS;
+      const lastDock = FIRST_DOCK + ROLL_MS;
+      const below = h * 1.1;
 
       if (!exiting) sound.start();
       animate(scene, [{ opacity: 0 }, { opacity: 1 }], { duration: 1200, easing: 'ease-out' });
-      track(scene, [
-        [at.gather, { backgroundColor: VEIL, easing: IN_OUT }],
-        [gatherEnd, { backgroundColor: VEIL_MID, easing: 'linear' }],
-        [at.morph, { backgroundColor: VEIL_MID, easing: IN_OUT }],
-        [morphEnd + 300, { backgroundColor: VEIL_DEEP }],
+      track(dimRef.current, [
+        [at.gather, { opacity: 0, easing: IN_OUT }],
+        [gatherEnd, { opacity: DIM.mid, easing: 'linear' }],
+        [at.morph, { opacity: DIM.mid, easing: IN_OUT }],
+        [morphEnd + 300, { opacity: DIM.deep }],
       ]);
       // The light rises behind the tilted window like a sunrise, tightens as the
       // window collapses, then blooms once the mark lands.
@@ -431,28 +494,50 @@ export function Intro() {
         [morphEnd, { transform: aim(0, 0, 0, 0, 0, 1) }],
       ]);
 
-      track(chromeRef.current, [
-        [at.gather, { transform: `translate3d(0px, ${h * 1.1}px, 0px)`, easing: SETTLE }],
-        [gatherEnd, { transform: 'translate3d(0px, 0px, 0px)' }],
-      ]);
-      track(chromeRef.current, [
+      const rise: Stop[] = [
         [at.gather, { opacity: 0, easing: 'linear' }],
         [at.gather + 80, { opacity: 1 }],
-      ]);
+      ];
       track(chromeRef.current, [
+        [at.gather, { transform: `translate3d(0px, ${below}px, 0px)`, easing: SETTLE }],
+        [gatherEnd, { transform: 'translate3d(0px, 0px, 0px)' }],
+      ]);
+      track(chromeRef.current, rise);
+      track(chromeRef.current, [
+        [at.morph, { ...rectStyle(win), borderRadius: `${WINDOW_RADIUS}px`, easing: COLLAPSE }],
+        [morphEnd, { ...rectStyle(tile), borderRadius: `${tileSize * 0.233}px` }],
+      ]);
+
+      // Scaled to the same frame the window is laid out at, so the shadow stays
+      // under it through the collapse, then hands over to the tile's own.
+      track(windowShadowRef.current, [
         [
-          at.morph,
-          {
-            ...rectStyle(win),
-            borderRadius: `${WINDOW_RADIUS}px`,
-            boxShadow: WINDOW_SHADOW,
-            easing: COLLAPSE,
-          },
+          at.gather,
+          { transform: `translate3d(0px, ${below}px, -1px) scale(1, 1)`, easing: SETTLE },
         ],
+        [gatherEnd, { transform: 'translate3d(0px, 0px, -1px) scale(1, 1)', easing: 'linear' }],
+        [at.morph, { transform: 'translate3d(0px, 0px, -1px) scale(1, 1)', easing: COLLAPSE }],
         [
           morphEnd,
-          { ...rectStyle(tile), borderRadius: `${tileSize * 0.233}px`, boxShadow: TILE_SHADOW },
+          {
+            transform: `translate3d(${tileCenterX - winCenterX}px, ${tileCenterY - winCenterY}px, -1px) scale(${shrink}, ${tileSize / win.height})`,
+          },
         ],
+      ]);
+      track(windowShadowRef.current, [
+        ...rise,
+        [at.morph + MORPH_MS * 0.3, { opacity: 1, easing: 'ease-out' }],
+        [at.morph + MORPH_MS * 0.8, { opacity: 0 }],
+      ]);
+      const tileShadow = tileShadowRef.current;
+      if (tileShadow) {
+        Object.assign(tileShadow.style, rectStyle(tile), {
+          borderRadius: `${tileSize * 0.233}px`,
+        });
+      }
+      track(tileShadow, [
+        [at.morph + MORPH_MS * 0.5, { opacity: 0, easing: 'ease-out' }],
+        [morphEnd, { opacity: 1 }],
       ]);
 
       track(scrollerRef.current, [
@@ -463,13 +548,15 @@ export function Intro() {
             easing: ROLL_EASING,
           },
         ],
-        [FIRST_DOCK + ROLL_MS, { transform: 'translateY(0px)' }],
+        [lastDock, { transform: 'translateY(0px)' }],
       ]);
       const railCenterX = rail.x + rail.width / 2 - w / 2;
       const railCenterY = rail.y + rail.height / 2 - h / 2;
       const railTravelX = tileCenterX + (railCenterX - winCenterX) * shrink - railCenterX;
       const railTravelY = tileCenterY + (railCenterY - winCenterY) * shrink - railCenterY;
       track(railRef.current, [
+        [at.gather, { transform: `translate3d(0px, ${below}px, 1px) scale(1)`, easing: SETTLE }],
+        [gatherEnd, { transform: 'translate3d(0px, 0px, 1px) scale(1)', easing: 'linear' }],
         [at.morph, { transform: 'translate3d(0px, 0px, 1px) scale(1)', easing: COLLAPSE }],
         [
           morphEnd,
@@ -477,15 +564,29 @@ export function Intro() {
         ],
       ]);
       track(railRef.current, [
+        ...rise,
         [at.morph + MORPH_MS * 0.2, { opacity: 1, easing: 'ease-out' }],
         [at.morph + MORPH_MS * 0.6, { opacity: 0 }],
+      ]);
+      // The rail shrinks evenly while the window does not, so its tint would come
+      // away from the window's edges. It is gone before the collapse gets going.
+      track(sidebarRef.current, [
+        [at.morph, { opacity: 1, easing: 'ease-out' }],
+        [at.morph + MORPH_MS * 0.25, { opacity: 0 }],
+      ]);
+      track(ringRef.current, [
+        [lastDock, { opacity: 0, easing: 'ease-out' }],
+        [lastDock + 450, { opacity: 1, easing: 'linear' }],
+        [at.morph, { opacity: 1, easing: 'ease-out' }],
+        [at.morph + MORPH_MS * 0.25, { opacity: 0 }],
       ]);
 
       const cardEls = cardsRef.current?.children ?? [];
       const thumbEls = scrollerRef.current?.children ?? [];
       cards.forEach((card, i) => {
         const el = cardEls[i];
-        const enter = at.cards + card.entryOrder * ENTER_STAGGER;
+        const sharp = el?.lastElementChild;
+        const soft = card.blur > 0 ? el?.firstElementChild : null;
         const depart = card.land - FLIGHT_MS;
         const flight = Array.from({ length: FLIGHT_SAMPLES }, (_, sample): Stop => {
           const progress = (sample + 1) / FLIGHT_SAMPLES;
@@ -510,38 +611,47 @@ export function Intro() {
           ];
         });
         track(el, [
-          [enter, { transform: place(card.from), easing: SOFT_OUT }],
-          [enter + ENTER_MS, { transform: place(card.pose), easing: 'linear' }],
+          [card.enter, { transform: place(card.from), easing: SOFT_OUT }],
+          [card.enter + ENTER_MS, { transform: place(card.pose), easing: FLOAT }],
           [depart, { transform: place(card.drift) }],
           ...flight,
         ]);
-        track(el, [
-          [enter, { opacity: 0, easing: 'ease-out' }],
-          [enter + ENTER_MS * 0.35, { opacity: 1, easing: 'linear' }],
+        const appear: Stop[] = [
+          [card.enter, { opacity: 0, easing: 'ease-out' }],
+          [card.enter + ENTER_MS * 0.35, { opacity: 1, easing: 'linear' }],
+        ];
+        const land: Stop[] = [
           [card.land - 1, { opacity: 1, easing: 'linear' }],
           [card.land, { opacity: 0 }],
-        ]);
+        ];
+        if (soft) {
+          // Rack focus: a card off the focal plane sits soft until it leaves for
+          // the window. The blur is painted once into a second copy and the two
+          // cross-fade, the sharp one first so the card never thins out between.
+          track(soft, [
+            ...appear,
+            [depart + FOCUS_MS * 0.5, { opacity: 1, easing: 'ease-out' }],
+            [depart + FOCUS_MS, { opacity: 0 }],
+          ]);
+          track(sharp, [
+            [depart, { opacity: 0, easing: 'ease-out' }],
+            [depart + FOCUS_MS * 0.6, { opacity: 1, easing: 'linear' }],
+            ...land,
+          ]);
+        } else {
+          track(sharp, [...appear, ...land]);
+        }
         track(thumbEls[i], [
           [card.land - 1, { opacity: 0, easing: 'linear' }],
           [card.land, { opacity: 1 }],
         ]);
-        // Rack focus: out-of-plane cards sit soft until they gather into the window.
-        track(el, [
-          [enter, { filter: 'blur(12px)', easing: SOFT_OUT }],
-          [enter + ENTER_MS, { filter: `blur(${card.blur}px)`, easing: 'linear' }],
-          [depart, { filter: `blur(${card.blur}px)`, easing: IN_OUT }],
-          [depart + 800, { filter: 'blur(0px)' }],
-        ]);
       });
 
       track(canvasRef.current, [
-        [at.gather, { transform: `translate3d(0px, ${h * 1.1}px, 1px)`, easing: SETTLE }],
+        [at.gather, { transform: `translate3d(0px, ${below}px, 1px)`, easing: SETTLE }],
         [gatherEnd, { transform: 'translate3d(0px, 0px, 1px)' }],
       ]);
-      track(canvasRef.current, [
-        [at.gather, { opacity: 0, easing: 'linear' }],
-        [at.gather + 80, { opacity: 1 }],
-      ]);
+      track(canvasRef.current, rise);
       track(canvasRef.current, [
         [at.morph, { ...rectStyle(canvas), borderRadius: '10px', easing: COLLAPSE }],
         [
@@ -574,21 +684,24 @@ export function Intro() {
         animate(
           letter,
           [
-            {
-              opacity: 0,
-              transform: `translate(${offset * 0.16}em, 0.12em)`,
-              filter: 'blur(12px)',
-            },
-            { opacity: 1, transform: 'translate(0em, 0em)', filter: 'blur(0px)' },
+            { opacity: 0, transform: `translate(${offset * 0.16}em, 0.12em)` },
+            { opacity: 1, transform: 'translate(0em, 0em)' },
           ],
           { delay: at.word + Math.abs(offset) * 60, duration: 1300, easing: SOFT_OUT },
         );
       });
-      animate(hintRef.current, [{ opacity: 0 }, { opacity: 1 }], {
-        delay: 1600,
-        duration: 900,
-        easing: 'ease-out',
+      animate(wordRef.current, [{ filter: 'blur(12px)' }, { filter: 'blur(0px)' }], {
+        delay: at.word,
+        duration: 1300,
+        easing: SOFT_OUT,
       });
+      // The hint has done its job by the time the window comes up over it.
+      track(hintRef.current, [
+        [1600, { opacity: 0, easing: 'ease-out' }],
+        [2500, { opacity: 1, easing: 'linear' }],
+        [at.gather, { opacity: 1, easing: 'ease-out' }],
+        [at.gather + 500, { opacity: 0 }],
+      ]);
 
       // Keep a held frame from reading as stalled: everything breathes a touch.
       animate(content, [{ transform: 'scale(1)' }, { transform: 'scale(1.03)' }], {
@@ -630,12 +743,20 @@ export function Intro() {
       className="fixed inset-0 overflow-hidden text-white opacity-0"
       style={{ backgroundColor: VEIL }}
     >
+      <div
+        ref={dimRef}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-0"
+        style={{ backgroundColor: 'rgb(11 9 8)' }}
+      />
       <div ref={contentRef} className="absolute inset-0">
         <div
           ref={glowRef}
           aria-hidden
-          className="absolute top-1/2 left-1/2 aspect-square w-[130vmax] rounded-full opacity-0"
+          className="absolute top-1/2 left-1/2 aspect-square rounded-full opacity-0"
           style={{
+            width: `${130 / GLOW_STRETCH}vmax`,
+            willChange: 'transform',
             background:
               'radial-gradient(closest-side, rgb(255 160 110 / 0.34), rgb(254 82 38 / 0.26) 22%, rgb(238 67 22 / 0.1) 48%, transparent 72%)',
           }}
@@ -657,25 +778,71 @@ export function Intro() {
         <div className="absolute inset-0" style={{ perspective: `${stage.perspective}px` }}>
           <div ref={rigRef} className="absolute inset-0" style={{ transformStyle: 'preserve-3d' }}>
             <div
+              ref={windowShadowRef}
+              aria-hidden
+              className="absolute opacity-0"
+              style={{
+                ...rectStyle(stage.win),
+                borderRadius: WINDOW_RADIUS,
+                boxShadow: WINDOW_SHADOW,
+              }}
+            />
+            <div
+              ref={tileShadowRef}
+              aria-hidden
+              className="absolute opacity-0"
+              style={{ boxShadow: TILE_SHADOW, transform: 'translateZ(-1px)' }}
+            />
+            <div
               ref={chromeRef}
-              className="absolute overflow-hidden opacity-0"
+              className="absolute opacity-0"
               style={{
                 ...rectStyle(stage.win),
                 borderRadius: WINDOW_RADIUS,
                 background: TILE_FILL,
-                boxShadow: WINDOW_SHADOW,
+                boxShadow: TILE_BEVEL,
               }}
             />
 
             <div
               ref={railRef}
-              className="absolute overflow-hidden"
+              className="absolute overflow-hidden opacity-0"
               style={{
                 ...rectStyle(stage.rail),
                 borderRadius: `${WINDOW_RADIUS}px 0 0 ${WINDOW_RADIUS}px`,
                 transform: 'translate3d(0px, 0px, 1px)',
               }}
             >
+              <div
+                ref={sidebarRef}
+                aria-hidden
+                className="absolute inset-0"
+                style={{
+                  background: 'rgb(24 22 20 / 0.035)',
+                  boxShadow: 'inset -1px 0 0 rgb(24 22 20 / 0.07)',
+                }}
+              >
+                <div
+                  className="absolute flex"
+                  style={{
+                    left: stage.inset * 0.62,
+                    top: stage.inset * 0.62,
+                    gap: stage.light * 0.62,
+                  }}
+                >
+                  {['close', 'minimize', 'zoom'].map((light) => (
+                    <span
+                      key={light}
+                      className="rounded-full"
+                      style={{
+                        width: stage.light,
+                        height: stage.light,
+                        background: 'rgb(24 22 20 / 0.12)',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
               <div
                 ref={scrollerRef}
                 className="absolute inset-0"
@@ -686,8 +853,8 @@ export function Intro() {
                     key={card.slot}
                     className="absolute opacity-0"
                     style={{
-                      left: stage.pad,
-                      top: stage.pad + card.slot * stage.pitch,
+                      left: stage.inset,
+                      top: stage.top + card.slot * stage.pitch,
                       width: stage.thumbWidth,
                     }}
                   >
@@ -695,6 +862,19 @@ export function Intro() {
                   </div>
                 ))}
               </div>
+              <span
+                ref={ringRef}
+                aria-hidden
+                className="absolute opacity-0"
+                style={{
+                  left: stage.inset - stage.ring,
+                  top: stage.top - stage.ring,
+                  width: stage.thumbWidth + stage.ring * 2,
+                  height: stage.thumbHeight + stage.ring * 2,
+                  borderRadius: stage.thumbWidth * 0.065 + stage.ring,
+                  boxShadow: `inset 0 0 0 ${stage.ring * 0.45}px #fe5226`,
+                }}
+              />
             </div>
 
             <div
@@ -705,15 +885,28 @@ export function Intro() {
               {stage.cards.map((card) => (
                 <div
                   key={card.slot}
-                  className="absolute top-1/2 left-1/2 opacity-0"
+                  className="absolute top-1/2 left-1/2"
                   style={{
                     width: card.cardWidth,
                     marginLeft: -card.cardWidth / 2,
                     marginTop: (-card.cardWidth * 9) / 32,
-                    willChange: 'transform, opacity, filter',
+                    willChange: 'transform',
                   }}
                 >
-                  <SlideSketch variant={card.variant} style={sketchFrame(card.cardWidth)} />
+                  {card.blur > 0 && (
+                    <div className="absolute inset-0 opacity-0">
+                      <SlideSketch
+                        variant={card.variant}
+                        style={{
+                          ...sketchFrame(card.cardWidth),
+                          filter: `blur(${card.blur}px)`,
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className="relative opacity-0">
+                    <SlideSketch variant={card.variant} style={sketchFrame(card.cardWidth)} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -780,7 +973,7 @@ export function Intro() {
 
         <div
           ref={hintRef}
-          className="absolute inset-x-0 bottom-[5vh] text-center text-[11px] font-medium tracking-[0.18em] text-white/35 uppercase opacity-0 mix-blend-difference"
+          className="absolute inset-x-0 bottom-[5vh] text-center text-[11px] font-medium tracking-[0.18em] text-white/45 uppercase opacity-0"
         >
           Press any key to skip
         </div>

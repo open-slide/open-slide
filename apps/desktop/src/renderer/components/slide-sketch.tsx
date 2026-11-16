@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-export type SketchVariant = 'title' | 'chart' | 'image' | 'quote' | 'cover' | 'grid';
+export type SketchVariant = 'title' | 'chart' | 'image' | 'quote' | 'cover' | 'grid' | 'list';
 
 const PAPER = {
   '--sk-bg': '#fdfcfa',
@@ -106,6 +106,27 @@ export function SlideSketch({
           <span className="absolute top-[38%] left-[9%] h-[12%] w-[58%] rounded-full bg-white" />
           <span className="absolute top-[55%] left-[9%] h-[12%] w-[40%] rounded-full bg-white" />
           <span className="absolute -right-[10%] -bottom-[30%] aspect-square w-[46%] rounded-full bg-white/15" />
+        </>
+      )}
+      {variant === 'list' && (
+        <>
+          <Ink className="top-[17%] left-[9%] h-[9%] w-[42%]" />
+          {[54, 44, 50].map((width, i) => (
+            <span
+              key={width}
+              className="absolute left-[9%] flex h-[6%] items-center gap-[5%]"
+              style={{ top: `${41 + i * 15}%`, width: `${width}%` }}
+            >
+              <span
+                className="aspect-square h-full rounded-full"
+                style={{ background: 'var(--sk-accent)' }}
+              />
+              <span
+                className="h-[72%] flex-1 rounded-full"
+                style={{ background: 'var(--sk-faint)' }}
+              />
+            </span>
+          ))}
         </>
       )}
       {variant === 'grid' && (
