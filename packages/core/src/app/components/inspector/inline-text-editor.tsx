@@ -26,11 +26,7 @@ const RANGE_STYLE_KEYS = new Set(['fontSize', 'fontWeight', 'fontStyle', 'fontFa
 const TOOLBAR_GAP = 8;
 const TOOLBAR_HEIGHT = 36;
 
-function pickEditableAnchor(
-  x: number,
-  y: number,
-  slideId: string,
-): SlideSourceHit | null {
+function pickEditableAnchor(x: number, y: number, slideId: string): SlideSourceHit | null {
   const el = pickInspectorTarget(pickElement(x, y));
   if (!el) return null;
   const hit = findSlideSource(el, slideId, { hostOnly: true });
@@ -179,7 +175,13 @@ function ActiveInlineEditor({
     const prevText = previousTextRef.current;
     if (value === prevText) return;
     previousTextRef.current = value;
-    bufferOps(target.line, target.column, anchor, [{ kind: 'set-text', value, prevText }], target.file);
+    bufferOps(
+      target.line,
+      target.column,
+      anchor,
+      [{ kind: 'set-text', value, prevText }],
+      target.file,
+    );
   }, [anchor, target.line, target.column, target.file, bufferOps]);
 
   const applyStyleOps = useCallback(

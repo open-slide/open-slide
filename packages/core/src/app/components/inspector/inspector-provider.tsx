@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { TooltipTrigger } from '@/components/ui/tooltip';
 import { findSlideSource } from '@/lib/inspector/fiber';
-import { formatSlideLoc, slideLocSelector } from '@/lib/inspector/slide-loc';
+import { formatSlideLoc, parseSlideLoc, slideLocSelector } from '@/lib/inspector/slide-loc';
 import {
   appendTextEdit,
   type TextEditOp,
@@ -552,6 +552,7 @@ export function InspectorProvider({
   const [pendingCount, setPendingCount] = useState(0);
   const [committing, setCommitting] = useState(false);
   const [cropTarget, setCropTarget] = useState<{
+    file?: string | null;
     line: number;
     column: number;
     anchor: HTMLImageElement;
@@ -563,6 +564,7 @@ export function InspectorProvider({
     initialRect: ImageCropRect | null;
   } | null>(null);
   const [replaceTarget, setReplaceTarget] = useState<{
+    file?: string | null;
     line: number;
     column: number;
     anchor: HTMLElement;
@@ -598,7 +600,9 @@ export function InspectorProvider({
         const byInstance = root.querySelector<HTMLElement>(`[${INSTANCE_ID_ATTR}="${instanceId}"]`);
         if (byInstance) return byInstance;
       }
-      return root.querySelector<HTMLElement>(slideLocSelector({ file: file ?? null, line, column }));
+      return root.querySelector<HTMLElement>(
+        slideLocSelector({ file: file ?? null, line, column }),
+      );
     },
     [],
   );
@@ -667,7 +671,13 @@ export function InspectorProvider({
   // Mutate bucket + DOM without recording history. Shared by `bufferOps`
   // (the public, history-recording entry point) and by `redo` closures.
   const applyOpsRaw = useCallback(
-    (line: number, column: number, anchor: HTMLElement | null, ops: EditOp[], file?: string | null) => {
+    (
+      line: number,
+      column: number,
+      anchor: HTMLElement | null,
+      ops: EditOp[],
+      file?: string | null,
+    ) => {
       const key = locKey(line, column, file);
       let bucket = pendingRef.current.get(key);
       if (!bucket) {
@@ -764,7 +774,13 @@ export function InspectorProvider({
   type Snap = StyleSnap | TextSnap | AttrSnap;
 
   const snapshotForOps = useCallback(
-    (line: number, column: number, anchor: HTMLElement, ops: EditOp[], file?: string | null): Snap[] => {
+    (
+      line: number,
+      column: number,
+      anchor: HTMLElement,
+      ops: EditOp[],
+      file?: string | null,
+    ): Snap[] => {
       const key = locKey(line, column, file);
       const bucket = pendingRef.current.get(key);
       const style = anchor.style as unknown as Record<string, string>;
@@ -936,7 +952,8 @@ export function InspectorProvider({
               target.file,
             );
           }
-          if (textAfter.length) restoreSnapshot(target.line, target.column, textAfter, true, target.file);
+          if (textAfter.length)
+            restoreSnapshot(target.line, target.column, textAfter, true, target.file);
           revealTargets(reveal, pageIndex);
         },
       });
@@ -964,7 +981,8 @@ export function InspectorProvider({
       const snapshots = edits.map((edit) =>
         snapshotForOps(edit.line, edit.column, edit.anchor, edit.ops, edit.file),
       );
-      for (const edit of edits) applyOpsRaw(edit.line, edit.column, edit.anchor, edit.ops, edit.file);
+      for (const edit of edits)
+        applyOpsRaw(edit.line, edit.column, edit.anchor, edit.ops, edit.file);
       const reveal = edits.map(captureRevealTarget);
       history.record({
         coalesceKey,
@@ -1097,12 +1115,12 @@ export function InspectorProvider({
         pending.push({
           bucket,
           seq: op.seq,
-            edit: {
-              ...located,
-              line,
-              column,
-              ops: [{ kind: 'set-style', key: k, value: op.value, prevText: op.prevText }],
-            },
+          edit: {
+            ...located,
+            line,
+            column,
+            ops: [{ kind: 'set-style', key: k, value: op.value, prevText: op.prevText }],
+          },
           onSuccess: (b) => {
             b.styleOps.delete(k);
             b.origStyle.delete(k);
@@ -1113,11 +1131,11 @@ export function InspectorProvider({
         pending.push({
           bucket,
           seq: op.seq,
-            edit: {
-              ...located,
-              line,
-              column,
-              ops: [
+          edit: {
+            ...located,
+            line,
+            column,
+            ops: [
               {
                 kind: 'set-attr-asset',
                 attr,
@@ -1474,11 +1492,9 @@ export function InspectorProvider({
   const openReplace = useCallback((anchor: HTMLElement) => {
     const loc = anchor.dataset.slideLoc;
     if (!loc) return;
-    const [lineStr, columnStr] = loc.split(':');
-    const line = Number(lineStr);
-    const column = Number(columnStr);
-    if (!Number.isFinite(line) || !Number.isFinite(column)) return;
-    setReplaceTarget({ line, column, anchor });
+    const parsed = parseSlideLoc(loc);
+    if (!parsed) return;
+    setReplaceTarget({ ...parsed, anchor });
   }, []);
 
   useEffect(() => {
@@ -1517,14 +1533,11 @@ export function InspectorProvider({
   const openCrop = useCallback((anchor: HTMLImageElement) => {
     const loc = anchor.dataset.slideLoc;
     if (!loc) return;
-    const [lineStr, columnStr] = loc.split(':');
-    const line = Number(lineStr);
-    const column = Number(columnStr);
-    if (!Number.isFinite(line) || !Number.isFinite(column)) return;
+    const parsed = parseSlideLoc(loc);
+    if (!parsed) return;
     const cs = window.getComputedStyle(anchor);
     setCropTarget({
-      line,
-      column,
+      ...parsed,
       anchor,
       src: anchor.currentSrc || anchor.src,
       targetWidth: anchor.offsetWidth || anchor.getBoundingClientRect().width,

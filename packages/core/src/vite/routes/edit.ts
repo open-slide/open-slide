@@ -136,7 +136,10 @@ export function registerEditRoutes(server: ViteDevServer, ctx: ApiContext): void
             continue;
           }
           const localOf = new Map<number, number>();
-          group.forEach((item, local) => localOf.set(item.index, local));
+          for (let local = 0; local < group.length; local++) {
+            const item = group[local];
+            if (item) localOf.set(item.index, local);
+          }
           const localEdits: BatchEdit[] = group.map((item, local) => {
             const { file: _file, dependsOn, ...rest } = item.edit;
             const mapped = dependsOn === undefined ? undefined : localOf.get(dependsOn);

@@ -81,7 +81,10 @@ type RangeStylePreview = {
 function resolveSelectedTarget(target: SelectedTarget, slideId: string): SelectedTarget {
   const hit = findSlideSource(target.anchor, slideId, { hostOnly: true });
   if (!hit) return target;
-  if (sameSlideLoc(hit, target) && hit.anchor === target.anchor) {
+  if (
+    sameSlideLoc(hit, { file: target.file ?? null, line: target.line, column: target.column }) &&
+    hit.anchor === target.anchor
+  ) {
     return target;
   }
   return { file: hit.file, line: hit.line, column: hit.column, anchor: hit.anchor };
