@@ -12,13 +12,14 @@ export function joinPath(parent: string, name: string, platform: string): string
 }
 
 // Mirrors the CLI's sanitizeDirName: it refuses names a shell would trip on.
+// A name of only dots is the parent folder itself or one above it, not a child.
 export function sanitizeName(value: string): string {
   const safe = value
     .trim()
     .replace(/[^\p{L}\p{N}._-]+/gu, '-')
     .replace(/-{2,}/g, '-')
     .replace(/^-+|-+$/g, '');
-  return safe || 'my-slides';
+  return safe && !/^\.+$/.test(safe) ? safe : 'my-slides';
 }
 
 export function tildify(full: string): string {

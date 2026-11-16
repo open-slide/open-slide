@@ -9,12 +9,21 @@ function page(
   status: UnsavedStatus | null,
   outcomes: Partial<Record<UnsavedAction, UnsavedOutcome>> = {},
 ) {
+  let current = status;
   return {
     title,
-    status: vi.fn(async () => status),
-    settle: vi.fn(async (action: UnsavedAction) => outcomes[action] ?? { ok: true as const }),
+    status: vi.fn(async () => current),
+    // Work that was settled is gone, as it is on a real page.
+    settle: vi.fn(async (action: UnsavedAction) => {
+      const outcome = outcomes[action] ?? { ok: true as const };
+      if (outcome.ok) current = CLEAN;
+      return outcome;
+    }),
     reveal: vi.fn(),
-  } satisfies UnsavedPage;
+    edit: (next: UnsavedStatus) => {
+      current = next;
+    },
+  } satisfies UnsavedPage & { edit: (next: UnsavedStatus) => void };
 }
 
 // Answers each dialog with the label of the button to press.
@@ -119,6 +128,24 @@ describe('UnsavedGuard', () => {
     expect(shown[0].message).toBe('Save changes to 2 tabs before quitting?');
     expect(shown[0].detail).toContain('One\nThree');
     expect(pages[1].settle).not.toHaveBeenCalled();
+  });
+
+  it('asks again about a page that picked up work while another was being settled', async () => {
+    const { prompt, shown } = prompts('Close Anyway', 'Save');
+    const frozen = page('Frozen', null);
+    const deck = page('Roadmap', CLEAN);
+    frozen.status.mockImplementationOnce(async () => {
+      deck.edit(DRAFT);
+      return null;
+    });
+
+    expect(await new UnsavedGuard(prompt).confirm([deck, frozen], 'close')).toBe(true);
+    expect(shown.map((options) => options.message)).toEqual([
+      '“Frozen” isn’t responding',
+      'Save changes to “Roadmap” before closing?',
+    ]);
+    expect(deck.settle).toHaveBeenCalledExactlyOnceWith('save');
+    expect(frozen.status).toHaveBeenCalledOnce();
   });
 
   it('refuses a second decision while one is on screen', async () => {

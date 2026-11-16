@@ -533,10 +533,12 @@ function playIntro() {
     if (!win.isDestroyed()) win.close();
   };
   let stalled = setTimeout(close, INTRO_TIMEOUT);
+  let released = false;
   // Kept open but clear and click-through, not hidden, so nothing can suspend the
   // score's audio while it rings out over the revealed main window.
   releaseIntro = () => {
     releaseIntro = null;
+    released = true;
     clearTimeout(stalled);
     stalled = setTimeout(close, INTRO_TAIL_TIMEOUT);
     if (win.isDestroyed()) return;
@@ -556,7 +558,8 @@ function playIntro() {
     }
     settings.setIntroSeen();
     revealMain();
-    window?.focus();
+    // A released intro already handed focus over; whatever holds it now keeps it.
+    if (!released) window?.focus();
   });
   broadcast();
   loadShell(win, 'intro');
@@ -966,4 +969,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('before-quit', (e) => quitGate.beforeQuit(e));
+
+  // Windows record their bounds as they close, after the quit gate has flushed.
+  app.on('will-quit', () => settings.flush());
 }

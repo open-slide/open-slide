@@ -256,6 +256,7 @@ async function download(
       process.platform === 'win32'
         ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
         : 'tar';
+    signal.throwIfAborted();
     const extract = run(tar, ['-xzf', tarball, '-C', staging], {
       cwd: agentDir,
       env: process.env,

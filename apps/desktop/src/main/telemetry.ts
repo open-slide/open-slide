@@ -109,9 +109,12 @@ function redact(event: EventMessage): EventMessage {
 }
 
 const LOCAL_URL_RE = /(https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?)[^\s"'`)]*/g;
-const QUOTED_PATH_RE = /(['"`])(?:\/|[A-Za-z]:[\\/])[^'"`\n]*\1/g;
-const POSIX_PATH_RE = /(?<![\w.:/<])\/(?:[^\s/'":]+\/)+[^\s/'":]*/g;
-const WINDOWS_PATH_RE = /\b[A-Za-z]:[\\/][^\s'":]+/g;
+const QUOTED_PATH_RE = /(['"`])(?:\/|[A-Za-z]:[\\/]|\\\\)[^'"`\n]*\1/g;
+// An unquoted path has no end of its own once folder names carry spaces, so
+// it is taken to run to the next quote, colon or line end: losing the rest of
+// a sentence is cheaper than sending half a folder name.
+const POSIX_PATH_RE = /(?<![\w.:/<])\/(?:[^\s/'":]+\/)+[^'":\n]*/g;
+const WINDOWS_PATH_RE = /(?:\b[A-Za-z]:[\\/]|(?<![\w\\])\\\\)[^'":\n]+/g;
 
 // Error messages quote whatever the failing call was given: a save path named
 // after a deck, a dev-server URL ending in a deck id. Neither leaves the
@@ -124,12 +127,14 @@ function scrubMessage(text: string): string {
     .replace(WINDOWS_PATH_RE, '<path>');
 }
 
-function scrubError(error: unknown): Error {
+export function scrubError(error: unknown): Error {
   if (!(error instanceof Error)) return new Error(scrubMessage(String(error)));
   const message = scrubMessage(error.message);
   const clean = new Error(message);
   clean.name = error.name;
-  clean.stack = error.stack?.replace(error.message, message) ?? `${error.name}: ${message}`;
+  // A function, so `$&` and the like in the message are not expanded back
+  // into the text that was just scrubbed.
+  clean.stack = error.stack?.replace(error.message, () => message) ?? `${error.name}: ${message}`;
   return clean;
 }
 

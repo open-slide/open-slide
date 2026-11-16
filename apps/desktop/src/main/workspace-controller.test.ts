@@ -206,6 +206,17 @@ describe('default workspace trust', () => {
     expect(started()).toEqual([]);
   });
 
+  it('raises a scaffold that throws instead of failing silently', async () => {
+    writeFileSync(path.join(fixture.home, '.open-slide'), '');
+    const { controller } = setup();
+
+    const result = await controller.createDefault();
+
+    expect(result.ok).toBe(false);
+    expect(controller.error?.message).toMatch(/EEXIST|ENOTDIR/);
+    expect(started()).toEqual([]);
+  });
+
   it('asks about a workspace created through the dialog only if it was not created', async () => {
     const { controller } = setup();
     const parent = path.join(fixture.home, 'Documents');

@@ -124,65 +124,71 @@ export class UnsavedGuard {
 
   private async decide(pages: UnsavedPage[], intent: LeaveIntent): Promise<boolean> {
     const { doing, anyway } = INTENTS[intent];
-    const statuses = await Promise.all(pages.map((page) => page.status()));
-    const silent = pages.filter((_page, i) => statuses[i] === null);
-    const drafted = pages.filter((_page, i) => statuses[i]?.drafts);
-    const landing = pages.filter((_page, i) => statuses[i]?.pending && !statuses[i]?.drafts);
+    // A page that answered clean can pick up work while another is being asked
+    // about or saved, so they are all asked again until none has any left.
+    let asking = pages;
+    for (;;) {
+      const statuses = await Promise.all(asking.map((page) => page.status()));
+      const silent = asking.filter((_page, i) => statuses[i] === null);
+      const drafted = asking.filter((_page, i) => statuses[i]?.drafts);
+      const landing = asking.filter((_page, i) => statuses[i]?.pending && !statuses[i]?.drafts);
+      if (silent.length + drafted.length + landing.length === 0) return true;
 
-    if (silent.length > 0) {
-      silent[0].reveal();
-      const choice = await this.prompt({
-        type: 'warning',
-        message: `${quoted(silent)} ${silent.length === 1 ? 'isn’t' : 'aren’t'} responding`,
-        detail: `${titles(silent)}Any changes that haven’t been saved there will be lost.`,
-        buttons: [anyway, 'Cancel'],
-        defaultId: 1,
-        cancelId: 1,
-      });
-      if (choice !== 0) return false;
-    }
+      if (silent.length > 0) {
+        silent[0].reveal();
+        const choice = await this.prompt({
+          type: 'warning',
+          message: `${quoted(silent)} ${silent.length === 1 ? 'isn’t' : 'aren’t'} responding`,
+          detail: `${titles(silent)}Any changes that haven’t been saved there will be lost.`,
+          buttons: [anyway, 'Cancel'],
+          defaultId: 1,
+          cancelId: 1,
+        });
+        if (choice !== 0) return false;
+        asking = asking.filter((page) => !silent.includes(page));
+      }
 
-    let save = true;
-    if (drafted.length > 0) {
-      drafted[0].reveal();
+      let save = true;
+      if (drafted.length > 0) {
+        drafted[0].reveal();
+        const choice = await this.prompt({
+          type: 'question',
+          message: `Save changes to ${quoted(drafted)} before ${doing}?`,
+          detail: `${titles(drafted)}Changes that aren’t saved will be lost.`,
+          buttons: ['Save', 'Don’t Save', 'Cancel'],
+          defaultId: 0,
+          cancelId: 2,
+        });
+        if (choice === 2) return false;
+        save = choice === 0;
+      }
+
+      const settling = [
+        ...drafted.map((page) => ({ page, action: save ? 'save' : 'discard' }) as const),
+        ...landing.map((page) => ({ page, action: 'save' }) as const),
+      ];
+      const outcomes = await Promise.all(settling.map(({ page, action }) => page.settle(action)));
+      const failed = settling
+        .map(({ page }, i) => ({ page, outcome: outcomes[i] }))
+        .filter(({ outcome }) => !outcome.ok);
+      if (failed.length === 0) continue;
+
+      failed[0].page.reveal();
+      const reasons = failed
+        .map(({ page, outcome }) =>
+          outcome.ok ? '' : failed.length === 1 ? outcome.error : `${page.title}: ${outcome.error}`,
+        )
+        .join('\n');
       const choice = await this.prompt({
-        type: 'question',
-        message: `Save changes to ${quoted(drafted)} before ${doing}?`,
-        detail: `${titles(drafted)}Changes that aren’t saved will be lost.`,
-        buttons: ['Save', 'Don’t Save', 'Cancel'],
+        type: 'error',
+        message: `Couldn’t save changes to ${quoted(failed.map(({ page }) => page))}`,
+        detail: `${reasons}\n\nGo back to try again, or discard the changes.`,
+        buttons: ['Go Back', 'Discard Changes'],
         defaultId: 0,
-        cancelId: 2,
+        cancelId: 0,
       });
-      if (choice === 2) return false;
-      save = choice === 0;
+      if (choice !== 1) return false;
+      await Promise.all(failed.map(({ page }) => page.settle('abandon')));
     }
-
-    const settling = [
-      ...drafted.map((page) => ({ page, action: save ? 'save' : 'discard' }) as const),
-      ...landing.map((page) => ({ page, action: 'save' }) as const),
-    ];
-    const outcomes = await Promise.all(settling.map(({ page, action }) => page.settle(action)));
-    const failed = settling
-      .map(({ page }, i) => ({ page, outcome: outcomes[i] }))
-      .filter(({ outcome }) => !outcome.ok);
-    if (failed.length === 0) return true;
-
-    failed[0].page.reveal();
-    const reasons = failed
-      .map(({ page, outcome }) =>
-        outcome.ok ? '' : failed.length === 1 ? outcome.error : `${page.title}: ${outcome.error}`,
-      )
-      .join('\n');
-    const choice = await this.prompt({
-      type: 'error',
-      message: `Couldn’t save changes to ${quoted(failed.map(({ page }) => page))}`,
-      detail: `${reasons}\n\nGo back to try again, or discard the changes.`,
-      buttons: ['Go Back', 'Discard Changes'],
-      defaultId: 0,
-      cancelId: 0,
-    });
-    if (choice !== 1) return false;
-    await Promise.all(failed.map(({ page }) => page.settle('abandon')));
-    return true;
   }
 }

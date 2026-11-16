@@ -49,6 +49,8 @@ export class DevServer extends EventEmitter<ServerEvents> {
   private child: ChildProcess | null = null;
   private exited: Promise<void> | null = null;
   private root: string | null = null;
+  // The workspace last asked for, which the queue may not have reached yet.
+  private wanted: string | null = null;
   private port: number | null = null;
   private logText = '';
   private generation = 0;
@@ -72,24 +74,30 @@ export class DevServer extends EventEmitter<ServerEvents> {
   }
 
   start(root: string): Promise<void> {
+    this.wanted = root;
     return this.enqueue(async (latest) => {
-      if (!latest()) return;
-      await this.halt();
-      this.root = root;
-      this.port = null;
-      this.logText = '';
-      await this.spawn();
+      if (latest()) await this.launch(root, true);
     });
   }
 
+  // Restarts whatever was last asked for, so a start still waiting in the
+  // queue is restarted into rather than dropped for the workspace before it.
   restart(): Promise<void> {
+    if (!this.wanted) return Promise.resolve();
     return this.enqueue(async (latest) => {
-      const root = this.root;
-      if (!root || !latest()) return;
-      await this.halt();
-      this.root = root;
-      await this.spawn();
+      const root = this.wanted;
+      if (root && latest()) await this.launch(root, root !== this.root);
     });
+  }
+
+  private async launch(root: string, fresh: boolean): Promise<void> {
+    await this.halt();
+    this.root = root;
+    if (fresh) {
+      this.port = null;
+      this.logText = '';
+    }
+    await this.spawn();
   }
 
   markInstalling() {
@@ -97,6 +105,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
   }
 
   stop(): Promise<void> {
+    this.wanted = null;
     return this.enqueue(async (latest) => {
       if (latest()) await this.halt();
     });

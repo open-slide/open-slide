@@ -163,3 +163,45 @@ describe('telemetry opt-out', () => {
     expect(fixture.requests).toHaveLength(0);
   });
 });
+
+describe('error scrubbing', () => {
+  async function scrub(message: string) {
+    const { scrubError } = await import('./telemetry');
+    return scrubError(new Error(message));
+  }
+
+  it('removes a whole unquoted path even when its folders have spaces', async () => {
+    const { message } = await scrub('Cannot load /Volumes/Client Alpha/Board Review.pdf');
+    expect(message).toBe('Cannot load <path>');
+  });
+
+  it('removes Windows drive and network share paths', async () => {
+    expect((await scrub('Cannot open C:\\Users\\Ann Lee\\Board Deck\\index.tsx')).message).toBe(
+      'Cannot open <path>',
+    );
+    expect((await scrub('Cannot open \\\\fileserver\\team\\ConfidentialDeck')).message).toBe(
+      'Cannot open <path>',
+    );
+    expect((await scrub('ENOENT: open "\\\\fileserver\\team\\Deck"')).message).toBe(
+      'ENOENT: open "<path>"',
+    );
+  });
+
+  it('keeps what follows a path on its line, and text that only looks like one', async () => {
+    expect((await scrub("ENOENT: no such file, open '/Users/ann/My Deck/a.tsx'")).message).toBe(
+      "ENOENT: no such file, open '<path>'",
+    );
+    expect((await scrub('/srv/decks/a.tsx: Unexpected token')).message).toBe(
+      '<path>: Unexpected token',
+    );
+    expect((await scrub('Expected application/json and/or text')).message).toBe(
+      'Expected application/json and/or text',
+    );
+  });
+
+  it('does not expand replacement patterns from the message into the stack', async () => {
+    const { stack } = await scrub("Cannot open /Volumes/Client/Deck $& $'");
+    expect(stack).toContain('Cannot open <path>');
+    expect(stack).not.toContain('/Volumes/Client');
+  });
+});

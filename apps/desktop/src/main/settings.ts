@@ -128,11 +128,17 @@ function current(): Stored {
 function flush() {
   if (writeTimer) clearTimeout(writeTimer);
   writeTimer = null;
-  const target = file();
-  mkdirSync(path.dirname(target), { recursive: true });
-  const tmp = `${target}.tmp`;
-  writeFileSync(tmp, JSON.stringify(current(), null, 2));
-  renameSync(tmp, target);
+  // Runs from a timer and on quit, where a throw would take the app down
+  // over a full disk; the settings stay in memory and the next save retries.
+  try {
+    const target = file();
+    mkdirSync(path.dirname(target), { recursive: true });
+    const tmp = `${target}.tmp`;
+    writeFileSync(tmp, JSON.stringify(current(), null, 2));
+    renameSync(tmp, target);
+  } catch (err) {
+    console.error('Could not save settings:', err);
+  }
 }
 
 function save() {

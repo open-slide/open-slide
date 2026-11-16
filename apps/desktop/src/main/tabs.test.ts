@@ -39,6 +39,10 @@ class FakeContents extends EventEmitter {
     const [request, action] = args as [number, 'query' | UnsavedAction];
     const payload =
       action === 'query' ? this.script.status : (this.script.outcomes?.[action] ?? { ok: true });
+    // Work that was settled is gone, as it is on a real page.
+    if (action !== 'query' && 'ok' in payload && payload.ok) {
+      this.script = { ...this.script, status: { drafts: false, pending: false } };
+    }
     queueMicrotask(() => fixture.deliver(this, request, payload));
   }
   close() {
@@ -158,7 +162,8 @@ describe('TabManager unsaved work', () => {
 
     expect(shown[0].message).toBe('Save changes to “roadmap” before closing?');
     const actions = deck.contents.sent.filter(([c]) => c === 'host:unsaved').map(([, , a]) => a);
-    expect(actions).toEqual(['query', 'save']);
+    // Asked once more after saving, in case more work appeared meanwhile.
+    expect(actions).toEqual(['query', 'save', 'query']);
     expect(deck.contents.closed).toBe(true);
   });
 
@@ -208,9 +213,9 @@ describe('TabManager unsaved work', () => {
     expect(shown).toHaveLength(1);
     const asked = (c: FakeContents) =>
       c.sent.filter(([channel]) => channel === 'host:unsaved').map(([, , action]) => action);
-    expect(asked(first.contents)).toEqual(['query', 'discard']);
-    expect(asked(second.contents)).toEqual(['query']);
-    expect(asked(third.contents)).toEqual(['query', 'save']);
+    expect(asked(first.contents)).toEqual(['query', 'discard', 'query']);
+    expect(asked(second.contents)).toEqual(['query', 'query']);
+    expect(asked(third.contents)).toEqual(['query', 'save', 'query']);
     // Asking destroys nothing; the caller does that once it has the answer.
     expect(first.contents.closed).toBe(false);
   });

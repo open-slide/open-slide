@@ -243,6 +243,9 @@ describe('main window lifecycle', () => {
   });
 
   it('opens a recent workspace into a new window when none is left', async () => {
+    fixture.leave = true;
+    for (const open of fixture.windows) if (!open.dead) open.close();
+    await tick();
     expect(liveWindows()).toBe(0);
     fixture.events = [];
 

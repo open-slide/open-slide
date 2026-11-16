@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { AGENT_IDS, type AgentId, type AgentInfo, type LoginState } from '../../shared/types';
-import { desktop, useLogins } from '../lib/desktop';
+import { desktop, settle, useLogins } from '../lib/desktop';
 import { tildify } from '../lib/paths';
 import { LineLoader, LogView, ProgressLine, SectionCard, StatusDot } from './primitives';
 
@@ -68,20 +68,30 @@ export function useAgents() {
   const logins: Partial<Record<AgentId, Login>> = {};
   for (const id of AGENT_IDS) logins[id] = toLogin(states[id]);
 
-  const signIn = (id: AgentId) => void desktop.agents.login(id).catch(() => {});
+  const [signOutErrors, setSignOutErrors] = useState<Partial<Record<AgentId, string>>>({});
+  const setSignOutError = (id: AgentId, error: string | undefined) =>
+    setSignOutErrors((prev) => ({ ...prev, [id]: error }));
+
+  const signIn = (id: AgentId) => {
+    setSignOutError(id, undefined);
+    void desktop.agents.login(id).catch(() => {});
+  };
 
   const signOut = async (id: AgentId) => {
-    await desktop.agents.logout(id);
+    setSignOutError(id, undefined);
+    const result = await settle(desktop.agents.logout(id));
+    if (!result.ok) setSignOutError(id, result.error);
     await refresh();
   };
 
   const dismiss = (id: AgentId) => desktop.agents.dismissLogin(id);
 
-  return { agents, refreshing, logins, refresh, signIn, signOut, dismiss };
+  return { agents, refreshing, logins, signOutErrors, refresh, signIn, signOut, dismiss };
 }
 
 export function AgentsSection() {
-  const { agents, refreshing, logins, refresh, signIn, signOut, dismiss } = useAgents();
+  const { agents, refreshing, logins, signOutErrors, refresh, signIn, signOut, dismiss } =
+    useAgents();
 
   return (
     <>
@@ -102,6 +112,7 @@ export function AgentsSection() {
             key={agent.id}
             agent={agent}
             login={logins[agent.id] ?? IDLE_LOGIN}
+            signOutError={signOutErrors[agent.id] ?? null}
             onSignIn={() => signIn(agent.id)}
             onSignOut={() => signOut(agent.id)}
             onDismiss={() => dismiss(agent.id)}
@@ -128,12 +139,14 @@ export function AgentsSection() {
 function AgentCard({
   agent,
   login,
+  signOutError,
   onSignIn,
   onSignOut,
   onDismiss,
 }: {
   agent: AgentInfo;
   login: Login;
+  signOutError: string | null;
   onSignIn: () => void;
   onSignOut: () => void;
   onDismiss: () => void;
@@ -205,6 +218,12 @@ function AgentCard({
               : 'not found'}
         </dd>
       </dl>
+
+      {signOutError && (
+        <p className="selectable mt-3 text-[12.5px] text-destructive">
+          Couldn’t sign out: {signOutError}
+        </p>
+      )}
 
       {(login.running || login.output || login.error) && (
         <div className="mt-4 flex flex-col gap-2.5 border-t border-hairline pt-4">

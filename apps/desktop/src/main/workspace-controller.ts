@@ -97,14 +97,21 @@ export class WorkspaceController {
     return this.transition(() => this.switchTo(created.root, 'created'));
   }
 
-  async createDefault(): Promise<TaskResult> {
-    const created = await this.scaffold('default', undefined, async () =>
-      createDefaultWorkspace(await this.opts.env(), (chunk) => this.opts.log('create', chunk)),
+  // Nothing else shows how a quick start went, so every way it can fail,
+  // a scaffold that throws included, is raised on the shell.
+  createDefault(): Promise<TaskResult> {
+    return this.report(
+      (async () => {
+        const created = await this.scaffold('default', undefined, async () =>
+          createDefaultWorkspace(await this.opts.env(), (chunk) => this.opts.log('create', chunk)),
+        );
+        if (!created.ok) return created;
+        // A project that was already at the default location is not this app's
+        // work: it is opened like any other folder, and asked about first.
+        const source = created.created ? 'created' : 'shell';
+        return this.transition(() => this.switchTo(created.root, source));
+      })(),
     );
-    if (!created.ok) return this.report(Promise.resolve(created));
-    // A project that was already at the default location is not this app's
-    // work: it is opened like any other folder, and asked about first.
-    return this.open(created.root, created.created ? 'created' : 'shell');
   }
 
   async install(): Promise<TaskResult> {

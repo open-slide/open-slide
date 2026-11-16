@@ -15,7 +15,8 @@ export function ServerScreen({
   const { server, workspace } = state;
   const [installLog] = useLog('install');
   const [serverLog, setServerLog] = useLog('server');
-  const [installError, setInstallError] = useState<string | null>(null);
+  const [failedInstall, setFailedInstall] = useState<{ root: string; error: string } | null>(null);
+  const installError = failedInstall?.root === workspace?.root ? failedInstall?.error : null;
 
   useEffect(() => {
     if (server.state === 'error') void desktop.server.log().then(setServerLog);
@@ -38,9 +39,10 @@ export function ServerScreen({
         <div className="mt-5 flex gap-2">
           <Button
             onClick={async () => {
-              setInstallError(null);
+              const root = workspace?.root;
+              setFailedInstall(null);
               const result = await desktop.workspace.install();
-              if (!result.ok) setInstallError(result.error);
+              if (!result.ok && root) setFailedInstall({ root, error: result.error });
             }}
           >
             Install dependencies
