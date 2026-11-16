@@ -11,7 +11,8 @@ type FakeSession = {
   cancelled: boolean;
 };
 
-function setup() {
+// `slowExit` stands in for a CLI that takes a moment to exit after it is cancelled.
+function setup({ slowExit = false } = {}) {
   const sessions: FakeSession[] = [];
   const changes: LoginState[] = [];
   const reports: LoginReport[] = [];
@@ -29,7 +30,7 @@ function setup() {
         write: (text) => session.written.push(text),
         cancel: () => {
           session.cancelled = true;
-          finish({ ok: false, error: 'Sign-in exited with code null' });
+          if (!slowExit) finish({ ok: false, error: 'Sign-in exited with code null' });
         },
       };
     },
@@ -134,35 +135,24 @@ describe('AgentLogins', () => {
   });
 
   it('starts a retry as a new operation, after the cancelled one has ended', async () => {
-    // A CLI that takes a moment to exit after it is cancelled.
-    const pending: ((result: TaskResult) => void)[] = [];
-    const start = vi.fn(() => ({
-      done: new Promise<TaskResult>((resolve) => {
-        pending.push(resolve);
-      }),
-      write: () => {},
-      cancel: () => {},
-    }));
-    const logins = new AgentLogins({ start, openUrl: () => {}, onChange: () => {} });
-    const state = () => logins.snapshot().find((s) => s.id === 'claude') as LoginState;
-
+    const { logins, sessions, state, started } = setup({ slowExit: true });
     const first = logins.login('claude');
-    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    const cancelled = await started();
     logins.cancel('claude');
     const retry = logins.login('claude');
-    expect(state()).toMatchObject({ operation: 2, phase: 'signing-in' });
+    expect(state('claude')).toMatchObject({ operation: 2, phase: 'signing-in' });
     await new Promise((resolve) => setImmediate(resolve));
-    expect(start).toHaveBeenCalledOnce();
+    expect(sessions).toHaveLength(1);
 
     // The stale completion of the first attempt must not end the retry.
-    pending[0]({ ok: false, error: 'Sign-in exited with code null' });
+    cancelled.finish({ ok: false, error: 'Sign-in exited with code null' });
     await first;
-    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
-    expect(state()).toMatchObject({ operation: 2, phase: 'signing-in', error: null });
+    await vi.waitFor(() => expect(sessions).toHaveLength(2));
+    expect(state('claude')).toMatchObject({ operation: 2, phase: 'signing-in', error: null });
 
-    pending[1]({ ok: true });
+    sessions[1].finish({ ok: true });
     expect(await retry).toEqual({ ok: true });
-    expect(state().phase).toBe('succeeded');
+    expect(state('claude').phase).toBe('succeeded');
   });
 
   it('passes typed input to the running sign-in only', async () => {

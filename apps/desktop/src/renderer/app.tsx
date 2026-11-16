@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -16,9 +16,9 @@ import { SettingsWindow } from './components/settings';
 import { TabStrip } from './components/tab-strip';
 import { Welcome } from './components/welcome';
 import { desktop, useAppState, useWindowAppearance } from './lib/desktop';
-import { useWorkspaceActions } from './lib/workspace-actions';
+import { openWorkspace, useWorkspaceActions } from './lib/workspace-actions';
 
-// First-run only, so the everyday windows never parse them.
+// First-run only, so everyday windows never parse them.
 const Intro = lazy(() => import('./components/intro').then((m) => ({ default: m.Intro })));
 const Onboarding = lazy(() =>
   import('./components/onboarding').then((m) => ({ default: m.Onboarding })),
@@ -45,17 +45,14 @@ function Shell() {
 function MainWindow() {
   const state = useAppState();
   const [createTarget, setCreateTarget] = useState<CreateTarget | null>(null);
-  const actions = useWorkspaceActions(setCreateTarget);
-
-  const chooseWorkspace = useCallback(() => void actions.choose(), [actions.choose]);
+  const { starting, choose, createNew, quickStart } = useWorkspaceActions(setCreateTarget);
 
   useEffect(
     () =>
       desktop.onCommand((command) => {
-        if (command === 'open-workspace') chooseWorkspace();
-        else void actions.createNew();
+        void (command === 'open-workspace' ? choose() : createNew());
       }),
-    [chooseWorkspace, actions.createNew],
+    [choose, createNew],
   );
 
   const screen = !state
@@ -68,23 +65,28 @@ function MainWindow() {
           ? 'server'
           : 'tabs';
 
-  // Welcome and the tour show a failure in place; every other screen has no
-  // room for it, so it is raised as a sheet.
+  // Welcome and the tour show failures inline; elsewhere they are raised as a sheet.
   const error = state?.workspaceError ?? null;
   const inlineError = screen === 'welcome' || screen === 'onboarding';
   const raisedError = inlineError || createTarget !== null ? null : error;
 
-  // Tab contents are native views stacked above this page, so anything the
-  // shell draws in the content area (screens, dialogs) needs them hidden.
+  // Tab contents are native views stacked above this page; hide them while the shell draws over them.
   const overlay = screen !== 'tabs' || createTarget !== null || raisedError !== null;
   useEffect(() => desktop.setOverlay(overlay), [overlay]);
 
   if (!state) return null;
 
-  // The restored tabs are known before the server is up, so they show while
-  // it boots and can already be switched, closed, and reordered.
+  // Restored tabs stay usable while the server boots.
   const booting =
     screen === 'server' && (state.server.state === 'idle' || state.server.state === 'starting');
+  const choices = {
+    state,
+    error: error?.message ?? null,
+    starting,
+    onChoose: () => void choose(),
+    onStart: () => void quickStart(),
+    onOpenRecent: openWorkspace,
+  };
 
   return (
     <TooltipProvider delay={200}>
@@ -93,40 +95,20 @@ function MainWindow() {
         <main className="relative min-h-0 flex-1">
           {screen === 'onboarding' && (
             <Suspense>
-              <Onboarding
-                state={state}
-                error={error?.message ?? null}
-                starting={actions.starting}
-                onChoose={chooseWorkspace}
-                onStart={() => void actions.quickStart()}
-                onOpenRecent={actions.open}
-              />
+              <Onboarding {...choices} />
             </Suspense>
           )}
-          {screen === 'welcome' && (
-            <Welcome
-              state={state}
-              error={error?.message ?? null}
-              starting={actions.starting}
-              onChoose={chooseWorkspace}
-              onStart={() => void actions.quickStart()}
-              onOpenRecent={actions.open}
-            />
-          )}
+          {screen === 'welcome' && <Welcome {...choices} />}
           {screen === 'server' && (
             <ServerScreen
               key={state.workspace?.root}
               state={state}
-              onChooseWorkspace={chooseWorkspace}
+              onChooseWorkspace={choices.onChoose}
             />
           )}
         </main>
       </div>
-      <CreateWorkspaceDialog
-        target={createTarget}
-        onClose={() => setCreateTarget(null)}
-        onCreated={() => setCreateTarget(null)}
-      />
+      <CreateWorkspaceDialog target={createTarget} onClose={() => setCreateTarget(null)} />
       <WorkspaceErrorDialog error={raisedError} />
     </TooltipProvider>
   );

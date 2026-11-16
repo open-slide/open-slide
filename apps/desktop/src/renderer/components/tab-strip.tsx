@@ -4,9 +4,6 @@ import { cn } from '@/lib/utils';
 import type { AppState, TabInfo } from '../../shared/types';
 import { desktop } from '../lib/desktop';
 
-const iconButton =
-  'no-drag flex size-7 shrink-0 items-center justify-center rounded-[7px] text-foreground/60 outline-none transition-[background-color,color,scale] duration-100 hover:bg-foreground/[0.06] hover:text-foreground active:scale-95 focus-visible:ring-2 focus-visible:ring-ring/50';
-
 const EDGE_FADE = 20;
 
 function tabElement(list: HTMLElement | null, id: string | null): HTMLElement | null {
@@ -19,21 +16,22 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ start: false, end: false });
-  // One tab is in the Tab order at a time: the one the arrow keys last
-  // reached, or the active one.
+  // Roving tabindex: the tab the arrow keys last reached, else the active one.
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const rovingId = state.tabs.some((tab) => tab.id === focusedId) ? focusedId : state.activeTabId;
   const { activeTabId } = state;
   const tabCount = state.tabs.length;
 
-  const onDrop = () => {
-    if (dragging && dropIndex !== null) desktop.tabs.move(dragging, dropIndex);
+  const endDrag = () => {
     setDragging(null);
     setDropIndex(null);
   };
 
-  // More tabs than fit scroll instead of sliding under the controls beside
-  // them, and the active one is always brought back into view.
+  const onDrop = () => {
+    if (dragging && dropIndex !== null) desktop.tabs.move(dragging, dropIndex);
+    endDrag();
+  };
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: tabs opening or closing moves the active one
   useLayoutEffect(() => {
     const list = listRef.current;
@@ -63,7 +61,6 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
-    // A mouse wheel only scrolls vertically, which a single row cannot use.
     const onWheel = (e: WheelEvent) => {
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || list.scrollWidth <= list.clientWidth) return;
       e.preventDefault();
@@ -73,29 +70,20 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
     return () => list.removeEventListener('wheel', onWheel);
   }, [showTabs]);
 
-  // Arrow keys move focus only. Activating a tab hands focus to its page, so
-  // following focus would end keyboard navigation after one step.
+  // Arrow keys only move focus: activating hands focus to the page, ending keyboard navigation.
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const from = e.target as HTMLElement;
     if (from.getAttribute('role') !== 'tab') return;
     const at = state.tabs.findIndex((tab) => tab.id === from.dataset.tabId);
     if (at < 0) return;
     const last = state.tabs.length - 1;
-    const to =
-      e.key === 'ArrowRight'
-        ? at === last
-          ? 0
-          : at + 1
-        : e.key === 'ArrowLeft'
-          ? at === 0
-            ? last
-            : at - 1
-          : e.key === 'Home'
-            ? 0
-            : e.key === 'End'
-              ? last
-              : -1;
-    if (to < 0) return;
+    const to: number | undefined = {
+      ArrowRight: at === last ? 0 : at + 1,
+      ArrowLeft: at === 0 ? last : at - 1,
+      Home: 0,
+      End: last,
+    }[e.key];
+    if (to === undefined) return;
     e.preventDefault();
     tabElement(listRef.current, state.tabs[to].id)?.focus();
   };
@@ -134,10 +122,7 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
               dropBefore={dragging !== null && dropIndex === index && dragging !== tab.id}
               onFocus={() => setFocusedId(tab.id)}
               onDragStart={() => setDragging(tab.id)}
-              onDragEnd={() => {
-                setDragging(null);
-                setDropIndex(null);
-              }}
+              onDragEnd={endDrag}
               onDragOver={(after) => {
                 if (!dragging) return;
                 const next = Math.max(1, after ? index + 1 : index);
@@ -170,7 +155,7 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
         aria-label="Settings"
         title="Settings"
         onClick={() => desktop.window.openSettings()}
-        className={iconButton}
+        className="no-drag flex size-7 shrink-0 items-center justify-center rounded-[7px] text-foreground/60 outline-none transition-[background-color,color,scale] duration-100 hover:bg-foreground/[0.06] hover:text-foreground active:scale-95 focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         <Settings className="size-4" />
       </button>
@@ -197,31 +182,32 @@ function TabButton({
   onDragEnd: () => void;
   onDragOver: (after: boolean) => void;
 }) {
-  const isHome = tab.kind === 'home';
-  const surface = active
-    ? 'bg-background text-foreground shadow-edge ring-1 ring-foreground/[0.06]'
-    : 'text-foreground/60 hover:bg-foreground/[0.05] hover:text-foreground';
+  const activate = () => desktop.tabs.activate(tab.id);
+  const showMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    desktop.tabs.showMenu(tab.id);
+  };
+  const surface = cn(
+    'no-drag h-7 items-center rounded-[7px] outline-none transition-[background-color,color,box-shadow] duration-100 focus-visible:ring-2 focus-visible:ring-ring/50',
+    active
+      ? 'bg-background text-foreground shadow-edge ring-1 ring-foreground/[0.06]'
+      : 'text-foreground/60 hover:bg-foreground/[0.05] hover:text-foreground',
+  );
 
-  if (isHome) {
+  if (tab.kind === 'home') {
     return (
       <button
         type="button"
         role="tab"
         data-tab-id={tab.id}
         aria-selected={active}
+        tabIndex={roving ? 0 : -1}
         aria-label="Home"
         title="Home"
-        tabIndex={roving ? 0 : -1}
         onFocus={onFocus}
-        onClick={() => desktop.tabs.activate(tab.id)}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          desktop.tabs.showMenu(tab.id);
-        }}
-        className={cn(
-          'no-drag flex h-7 w-8 shrink-0 items-center justify-center rounded-[7px] outline-none transition-[background-color,color,box-shadow] duration-100 focus-visible:ring-2 focus-visible:ring-ring/50',
-          surface,
-        )}
+        onClick={activate}
+        onContextMenu={showMenu}
+        className={cn('flex w-8 shrink-0 justify-center', surface)}
       >
         <LayoutGrid className="size-3.5" />
       </button>
@@ -247,20 +233,15 @@ function TabButton({
       onFocus={(e) => {
         if (e.target === e.currentTarget) onFocus();
       }}
-      onClick={() => desktop.tabs.activate(tab.id)}
+      onClick={activate}
+      onContextMenu={showMenu}
       onAuxClick={(e) => {
         if (e.button === 1) desktop.tabs.close(tab.id);
       }}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        desktop.tabs.showMenu(tab.id);
-      }}
       onKeyDown={(e) => {
-        // Keys pressed on the close button inside are its own.
-        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          desktop.tabs.activate(tab.id);
+          activate();
         } else if (e.key === 'Delete' || e.key === 'Backspace') {
           e.preventDefault();
           desktop.tabs.close(tab.id);
@@ -276,7 +257,7 @@ function TabButton({
         onDragOver(e.clientX > rect.left + rect.width / 2);
       }}
       className={cn(
-        'no-drag group relative flex h-7 min-w-[96px] max-w-[160px] flex-1 basis-[140px] items-center gap-1.5 rounded-[7px] pr-1 pl-2 text-[12.5px] font-medium outline-none transition-[background-color,color,box-shadow] duration-100 focus-visible:ring-2 focus-visible:ring-ring/50',
+        'group relative flex min-w-[96px] max-w-[160px] flex-1 basis-[140px] gap-1.5 pr-1 pl-2 text-[12.5px] font-medium',
         surface,
       )}
     >

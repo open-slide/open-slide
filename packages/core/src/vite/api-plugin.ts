@@ -16,9 +16,8 @@ import { registerWatchers } from './routes/watchers.ts';
 // owned by a group, open the matching file under `routes/` — each file
 // leads with a comment-block manifest of its endpoints.
 export function apiPlugin(opts: ApiPluginOptions): Plugin {
-  // A restart reuses this plugin object and configures the replacement server
-  // before it closes the old one, so each server's agent is found through its
-  // own environments rather than through whichever was configured last.
+  // A restart reuses this plugin object and configures the new server before
+  // closing the old one, so each server's agent is keyed by its environments.
   const agents = new WeakMap<object, () => Promise<void>>();
   let running: (() => Promise<void>) | null = null;
   return {

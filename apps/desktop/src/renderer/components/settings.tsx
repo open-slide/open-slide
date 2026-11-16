@@ -1,13 +1,13 @@
 import { Bot, FolderClosed, Palette, ShieldCheck } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import type { AppState, DesktopSettings, PackageManager } from '../../shared/types';
-import { desktop, settle, TELEMETRY_DOCS_URL, useAppState, useLog } from '../lib/desktop';
-import { splitPath, tildify } from '../lib/paths';
+import { desktop, TELEMETRY_DOCS_URL, useAppState, useLog } from '../lib/desktop';
+import { baseName, tildify } from '../lib/paths';
+import { openWorkspace } from '../lib/workspace-actions';
 import { AgentsSection } from './agents-section';
-import { LogView, SectionCard, StatusDot } from './primitives';
+import { LogView, SectionCard, Segmented, StatusDot } from './primitives';
 
 type SectionId = 'workspace' | 'agents' | 'appearance' | 'privacy';
 
@@ -37,7 +37,7 @@ export function SettingsWindow() {
   const label = SECTIONS.find((s) => s.id === section)?.label ?? 'Settings';
   const ready = state !== null;
 
-  // Creating a workspace in the main window changes the package manager.
+  // The main window's create dialog can change the saved package manager.
   useEffect(() => {
     const load = () => void desktop.settings.get().then(setPrefs);
     load();
@@ -61,8 +61,7 @@ export function SettingsWindow() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Settings windows size themselves to the pane, so the window follows the
-  // content's natural height instead of scrolling inside a fixed frame.
+  // The window follows the pane's natural height instead of scrolling a fixed frame.
   useLayoutEffect(() => {
     const header = headerRef.current;
     const body = bodyRef.current;
@@ -80,6 +79,7 @@ export function SettingsWindow() {
   const isMac = state.platform === 'darwin';
   const update = async (patch: Partial<DesktopSettings>) =>
     setPrefs(await desktop.settings.update(patch));
+  const sectionProps = { state, prefs, onUpdate: update };
 
   return (
     <div className="flex h-full flex-col text-foreground">
@@ -127,62 +127,41 @@ export function SettingsWindow() {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div ref={bodyRef} className="flex flex-col gap-3 px-5 pt-4 pb-5">
-          {section === 'workspace' && (
-            <WorkspaceSection
-              state={state}
-              error={state.workspaceError?.message ?? null}
-              prefs={prefs}
-              onUpdate={update}
-              onChoose={() => desktop.sendCommand('open-workspace')}
-              onCreate={() => desktop.sendCommand('new-workspace')}
-              onOpenRecent={(path) => void settle(desktop.workspace.open(path))}
-            />
-          )}
+          {section === 'workspace' && <WorkspaceSection {...sectionProps} />}
           {section === 'agents' && <AgentsSection />}
-          {section === 'appearance' && (
-            <AppearanceSection state={state} prefs={prefs} onUpdate={update} />
-          )}
-          {section === 'privacy' && <PrivacySection prefs={prefs} onUpdate={update} />}
+          {section === 'appearance' && <AppearanceSection {...sectionProps} />}
+          {section === 'privacy' && <PrivacySection {...sectionProps} />}
         </div>
       </div>
     </div>
   );
 }
 
-function serverTone(state: AppState['server']['state']) {
-  if (state === 'ready') return 'ok' as const;
-  if (state === 'error' || state === 'not-installed') return 'warn' as const;
-  if (state === 'idle') return 'off' as const;
-  return 'busy' as const;
-}
-
-const SERVER_LABEL: Record<AppState['server']['state'], string> = {
-  idle: 'Stopped',
-  'not-installed': 'Dependencies not installed',
-  installing: 'Installing dependencies…',
-  starting: 'Starting…',
-  ready: 'Running',
-  error: 'Stopped with an error',
-};
-
-function WorkspaceSection({
-  state,
-  error,
-  prefs,
-  onUpdate,
-  onChoose,
-  onCreate,
-  onOpenRecent,
-}: {
+type SectionProps = {
   state: AppState;
-  error: string | null;
   prefs: DesktopSettings | null;
   onUpdate: (patch: Partial<DesktopSettings>) => void;
-  onChoose: () => void;
-  onCreate: () => void;
-  onOpenRecent: (path: string) => void;
-}) {
+};
+
+const SERVER_STATUS: Record<
+  AppState['server']['state'],
+  { tone: React.ComponentProps<typeof StatusDot>['tone']; label: string }
+> = {
+  idle: { tone: 'off', label: 'Stopped' },
+  'not-installed': { tone: 'warn', label: 'Dependencies not installed' },
+  installing: { tone: 'busy', label: 'Installing dependencies…' },
+  starting: { tone: 'busy', label: 'Starting…' },
+  ready: { tone: 'ok', label: 'Running' },
+  error: { tone: 'warn', label: 'Stopped with an error' },
+};
+
+const chooseWorkspace = () => desktop.sendCommand('open-workspace');
+const createWorkspace = () => desktop.sendCommand('new-workspace');
+
+function WorkspaceSection({ state, prefs, onUpdate }: SectionProps) {
   const { workspace, server } = state;
+  const error = state.workspaceError?.message;
+  const status = SERVER_STATUS[server.state];
   const [showLog, setShowLog] = useState(false);
   const [log, setLog] = useLog('server');
   const [managers, setManagers] = useState<PackageManager[]>([]);
@@ -215,10 +194,10 @@ function WorkspaceSection({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={onChoose}>
+              <Button size="sm" variant="outline" onClick={chooseWorkspace}>
                 Change…
               </Button>
-              <Button size="sm" variant="outline" onClick={onCreate}>
+              <Button size="sm" variant="outline" onClick={createWorkspace}>
                 New workspace…
               </Button>
               <Button size="sm" variant="ghost" onClick={() => desktop.workspace.reveal()}>
@@ -228,10 +207,10 @@ function WorkspaceSection({
           </div>
         ) : (
           <div className="flex gap-2">
-            <Button size="sm" onClick={onChoose}>
+            <Button size="sm" onClick={chooseWorkspace}>
               Open workspace…
             </Button>
-            <Button size="sm" variant="outline" onClick={onCreate}>
+            <Button size="sm" variant="outline" onClick={createWorkspace}>
               New workspace…
             </Button>
           </div>
@@ -245,8 +224,8 @@ function WorkspaceSection({
           description="Runs this workspace on the @open-slide/core built into the app."
         >
           <div className="flex items-center gap-2 text-[13px]">
-            <StatusDot tone={serverTone(server.state)} />
-            <span>{SERVER_LABEL[server.state]}</span>
+            <StatusDot tone={status.tone} />
+            <span>{status.label}</span>
             {server.state === 'ready' && (
               <button
                 type="button"
@@ -278,12 +257,12 @@ function WorkspaceSection({
                 className="flex items-center gap-2 rounded-[6px] px-1.5 py-1 hover:bg-muted/60"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium">{splitPath(path).name}</p>
+                  <p className="text-[13px] font-medium">{baseName(path)}</p>
                   <p className="truncate font-mono text-[11px] text-muted-foreground">
                     {tildify(path)}
                   </p>
                 </div>
-                <Button size="xs" variant="outline" onClick={() => onOpenRecent(path)}>
+                <Button size="xs" variant="outline" onClick={() => openWorkspace(path)}>
                   Open
                 </Button>
                 <Button size="xs" variant="ghost" onClick={() => desktop.workspace.forget(path)}>
@@ -299,34 +278,18 @@ function WorkspaceSection({
         title="New workspaces"
         description="The package manager new workspaces install with. Existing workspaces keep the one their lockfile names."
       >
-        <ToggleGroup
-          variant="outline"
-          size="sm"
-          value={prefs?.packageManager ? [prefs.packageManager] : []}
-          onValueChange={(value: string[]) =>
-            onUpdate({ packageManager: (value[0] as PackageManager | undefined) ?? null })
-          }
-        >
-          {managers.map((pm) => (
-            <ToggleGroupItem key={pm} value={pm} className="font-mono">
-              {pm}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+        <Segmented
+          mono
+          value={prefs?.packageManager ?? null}
+          options={managers}
+          onChange={(packageManager) => onUpdate({ packageManager })}
+        />
       </SectionCard>
     </>
   );
 }
 
-function AppearanceSection({
-  state,
-  prefs,
-  onUpdate,
-}: {
-  state: AppState;
-  prefs: DesktopSettings | null;
-  onUpdate: (patch: Partial<DesktopSettings>) => void;
-}) {
+function AppearanceSection({ state, prefs, onUpdate }: SectionProps) {
   const supported = state.platform === 'darwin' || state.platform === 'win32';
   return (
     <SectionCard
@@ -337,47 +300,31 @@ function AppearanceSection({
           : 'Translucent windows need macOS or Windows 11.'
       }
     >
-      <ToggleGroup
-        variant="outline"
-        size="sm"
+      <Segmented
         disabled={!supported || !prefs}
-        value={[prefs?.translucent && supported ? 'translucent' : 'solid']}
-        onValueChange={(value: string[]) => {
-          if (value[0]) onUpdate({ translucent: value[0] === 'translucent' });
-        }}
-      >
-        <ToggleGroupItem value="translucent">Translucent</ToggleGroupItem>
-        <ToggleGroupItem value="solid">Solid</ToggleGroupItem>
-      </ToggleGroup>
+        value={prefs?.translucent && supported ? 'translucent' : 'solid'}
+        options={['translucent', 'solid']}
+        labels={{ translucent: 'Translucent', solid: 'Solid' }}
+        onChange={(next) => next && onUpdate({ translucent: next === 'translucent' })}
+      />
     </SectionCard>
   );
 }
 
-function PrivacySection({
-  prefs,
-  onUpdate,
-}: {
-  prefs: DesktopSettings | null;
-  onUpdate: (patch: Partial<DesktopSettings>) => void;
-}) {
+function PrivacySection({ prefs, onUpdate }: SectionProps) {
   return (
     <SectionCard
       title="Usage & crash reports"
       description="Send anonymous usage events and crash reports to help improve open-slide. Nothing from your decks, file paths, or agent conversations is included."
     >
       <div className="flex flex-wrap items-center gap-3">
-        <ToggleGroup
-          variant="outline"
-          size="sm"
+        <Segmented
           disabled={!prefs}
-          value={[prefs?.telemetry === false ? 'off' : 'on']}
-          onValueChange={(value: string[]) => {
-            if (value[0]) onUpdate({ telemetry: value[0] === 'on' });
-          }}
-        >
-          <ToggleGroupItem value="on">On</ToggleGroupItem>
-          <ToggleGroupItem value="off">Off</ToggleGroupItem>
-        </ToggleGroup>
+          value={prefs?.telemetry === false ? 'off' : 'on'}
+          options={['on', 'off']}
+          labels={{ on: 'On', off: 'Off' }}
+          onChange={(next) => next && onUpdate({ telemetry: next === 'on' })}
+        />
         <Button size="sm" variant="ghost" onClick={() => desktop.openExternal(TELEMETRY_DOCS_URL)}>
           What’s collected
         </Button>

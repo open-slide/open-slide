@@ -25,24 +25,17 @@ import {
   Type,
   X,
 } from 'lucide-react';
-import {
-  type ReactNode,
-  type RefObject,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ProviderLogo } from '@/components/agent/provider-logo';
 import { cn } from '@/lib/utils';
+import { MARK_HERO, MARK_TILE } from '../lib/mark';
 import { type SketchVariant, SlideSketch } from './slide-sketch';
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-// Milliseconds since mount, in ~30ms steps, frozen at `until`. Scenes are
-// scripted off this one clock, and reduced motion lands on the final frame.
+// Ms since mount in ~30ms steps, frozen at `until`; reduced motion starts on the final frame.
 function useElapsed(until: number): number {
   const [elapsed, setElapsed] = useState(() => (prefersReducedMotion() ? until : 0));
   useEffect(() => {
@@ -69,6 +62,10 @@ const reveal = (shown: boolean) =>
     shown ? 'opacity-100 blur-[0px]' : 'translate-y-[0.6cqw] opacity-0 blur-[3px]',
   );
 
+const EYEBROW = 'text-[0.8cqw] font-semibold tracking-[0.12em] text-muted-foreground uppercase';
+const PRESENTER_LABEL =
+  'mb-[0.8cqw] text-[0.8cqw] font-semibold tracking-[0.14em] text-white/40 uppercase';
+
 type Look = { bg: string; ink: string; accent: string; font: string };
 
 const GEIST = 'var(--font-heading)';
@@ -94,6 +91,7 @@ function lookStyle(look: Look): React.CSSProperties {
 
 const TITLE = 'Ship it beautifully.';
 const CHART_TITLE = 'Up and to the right.';
+const GROWTH_TITLE = 'Up 38% this quarter.';
 const BARS = [28, 36, 33, 48, 57, 72, 92];
 const STATS = [
   { value: '+38%', label: 'Activation' },
@@ -113,12 +111,11 @@ type SlideProps = {
   titleScale?: number;
   barAccent?: boolean;
   mini?: boolean;
-  marks?: Partial<Record<Part, ReactNode>>;
+  marks?: Partial<Record<'title' | 'chart', ReactNode>>;
   className?: string;
 };
 
-// Sized in its own container units, so the same slide reads right as a
-// thumbnail in the rail and full size on the canvas.
+// Sized in container units, so one slide reads right as a rail thumbnail and on the canvas.
 function Slide({
   look = EMBER,
   page = 'cover',
@@ -204,7 +201,6 @@ function Slide({
               <p className="mt-[0.9cqw] text-[1.5cqw] opacity-50">{stat.label}</p>
             </div>
           ))}
-          {!mini && marks?.stats}
         </div>
       ) : (
         <div
@@ -266,28 +262,26 @@ function offsetWithin(el: HTMLElement, root: HTMLElement) {
   return { x, y, w: el.offsetWidth, h: el.offsetHeight };
 }
 
-// A scripted pointer that glides between `data-target` elements. It measures
-// layout offsets rather than client rects so the stage's tilt can't skew it.
+// Measures its parent's layout offsets rather than client rects, so the stage's tilt can't skew it.
 function Cursor({
-  scene,
   elapsed,
   moves,
   clicks = [],
   laser = false,
 }: {
-  scene: RefObject<HTMLDivElement | null>;
   elapsed: number;
   moves: Move[];
   clicks?: number[];
   laser?: boolean;
 }) {
+  const self = useRef<HTMLDivElement>(null);
   let index = -1;
   for (const [i, move] of moves.entries()) if (elapsed >= move.at) index = i;
   const move = moves[Math.max(0, index)];
   const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
 
   useLayoutEffect(() => {
-    const host = scene.current;
+    const host = self.current?.parentElement;
     if (!host || !move) return;
     const place = () => {
       const el = host.querySelector<HTMLElement>(`[data-target="${move.to}"]`);
@@ -299,14 +293,15 @@ function Cursor({
     const observer = new ResizeObserver(place);
     observer.observe(host);
     return () => observer.disconnect();
-  }, [scene, move]);
+  }, [move]);
 
-  if (!point) return null;
+  if (!point) return <div ref={self} hidden />;
   const pressed = clicks.some((at) => elapsed >= at && elapsed < at + 180);
   const ripple = clicks.find((at) => elapsed >= at && elapsed < at + 600);
 
   return (
     <div
+      ref={self}
       aria-hidden
       className={cn(
         'pointer-events-none absolute top-0 left-0 z-30 motion-reduce:hidden',
@@ -353,7 +348,13 @@ const MODES = [
   { id: 'comment', icon: MessageSquare },
 ] as const;
 
-type PanelKind = 'agent' | 'design' | 'format' | 'comments';
+const TOOLS = [
+  { id: 'agent', label: 'Agent', icon: <ProviderLogo provider="claude" /> },
+  { id: 'design', label: 'Design', icon: <Palette /> },
+  { id: 'format', label: 'Format', icon: <PanelRight /> },
+] as const;
+
+type PanelKind = (typeof TOOLS)[number]['id'] | 'comments';
 
 const MORE_PAGES: SketchVariant[] = ['image', 'quote', 'grid', 'title'];
 
@@ -415,13 +416,7 @@ function EditorFrame({
           ))}
         </div>
         <span className="h-[1.8cqw] w-px bg-hairline" />
-        {(
-          [
-            { id: 'agent', label: 'Agent', icon: <ProviderLogo provider="claude" /> },
-            { id: 'design', label: 'Design', icon: <Palette /> },
-            { id: 'format', label: 'Format', icon: <PanelRight /> },
-          ] as const
-        ).map((tool) => (
+        {TOOLS.map((tool) => (
           <span
             key={tool.id}
             className={cn(
@@ -440,7 +435,7 @@ function EditorFrame({
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="flex w-[12.5%] shrink-0 flex-col gap-[1cqw] overflow-hidden border-r border-hairline px-[1cqw] py-[1.3cqw]">
-          <p className="flex justify-between text-[0.8cqw] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+          <p className={cn('flex justify-between', EYEBROW)}>
             Pages
             <span className="nums tracking-normal">{pageCount}</span>
           </p>
@@ -498,12 +493,28 @@ function PanelHeader({
   );
 }
 
+function PanelEmpty({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-[1cqw] px-[3cqw] text-center text-[1.05cqw] leading-relaxed text-muted-foreground [&>svg]:size-[2cqw] [&>svg]:text-foreground/30">
+      {icon}
+      {children}
+    </div>
+  );
+}
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-[0.8cqw] border-b border-hairline px-[1.6cqw] py-[1.4cqw]">
-      <p className="text-[0.8cqw] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
-        {title}
-      </p>
+      <p className={EYEBROW}>{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between text-[1.02cqw]">
+      <span className="text-muted-foreground">{label}</span>
       {children}
     </div>
   );
@@ -523,46 +534,24 @@ function Field({ className, children, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-function Swatch({ color, className }: { color: string; className?: string }) {
+function Select({ className, children, ...props }: React.ComponentProps<'div'>) {
   return (
-    <span
-      className={cn(
-        'size-[1.5cqw] shrink-0 rounded-[0.35cqw] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.12)] transition-colors duration-700',
-        className,
-      )}
-      style={{ backgroundColor: color }}
-    />
-  );
-}
-
-function PanelEmpty({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-[1cqw] px-[3cqw] text-center text-[1.05cqw] leading-relaxed text-muted-foreground [&>svg]:size-[2cqw] [&>svg]:text-foreground/30">
-      {icon}
+    <Field className={cn('justify-between', className)} {...props}>
       {children}
-    </div>
+      <ChevronDown className="size-[1cqw] text-muted-foreground" />
+    </Field>
   );
 }
 
-function Composer() {
+function ColorField({ color, className }: { color: string; className?: string }) {
   return (
-    <div className="m-[1.4cqw] flex items-center justify-between rounded-[1cqw] border border-border px-[1.3cqw] py-[1cqw] text-[1.05cqw] text-muted-foreground">
-      Ask for a change…
-      <span className="flex size-[2cqw] items-center justify-center rounded-full bg-brand text-brand-foreground">
-        <ArrowUp className="size-[1.1cqw]" />
-      </span>
-    </div>
-  );
-}
-
-function LogLine({ label }: { label: string }) {
-  return (
-    <div className="ob-pop flex items-center gap-[0.8cqw]">
-      <span className="flex size-[1.6cqw] shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-        <Check className="size-[1cqw]" strokeWidth={3} />
-      </span>
-      <span className="truncate text-[1.02cqw] text-muted-foreground">{label}</span>
-    </div>
+    <Field className={className}>
+      <span
+        className="size-[1.5cqw] shrink-0 rounded-[0.35cqw] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.12)] transition-colors duration-700"
+        style={{ backgroundColor: color }}
+      />
+      <span className="nums uppercase">{color}</span>
+    </Field>
   );
 }
 
@@ -611,28 +600,31 @@ export function CreateScene() {
         {thinking && <span className="ob-shimmer self-start font-medium">Thinking…</span>}
         <div className="flex flex-col gap-[0.8cqw]">
           {CREATE_LOG.filter((step) => elapsed >= step.at).map((step) => (
-            <LogLine key={step.label} label={step.label} />
+            <div key={step.label} className="ob-pop flex items-center gap-[0.8cqw]">
+              <span className="flex size-[1.6cqw] shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                <Check className="size-[1cqw]" strokeWidth={3} />
+              </span>
+              <span className="truncate text-[1.02cqw] text-muted-foreground">{step.label}</span>
+            </div>
           ))}
         </div>
         {elapsed >= 4900 && (
           <p className="ob-pop text-foreground/85">Done — six slides, ready for your edits.</p>
         )}
       </div>
-      <Composer />
+      <div className="m-[1.4cqw] flex items-center justify-between rounded-[1cqw] border border-border px-[1.3cqw] py-[1cqw] text-[1.05cqw] text-muted-foreground">
+        Ask for a change…
+        <span className="flex size-[2cqw] items-center justify-center rounded-full bg-brand text-brand-foreground">
+          <ArrowUp className="size-[1.1cqw]" />
+        </span>
+      </div>
     </EditorFrame>
   );
 }
 
-const HANDLES = [
-  [0, 0],
-  [50, 0],
-  [100, 0],
-  [0, 50],
-  [100, 50],
-  [0, 100],
-  [50, 100],
-  [100, 100],
-];
+const HANDLES = [0, 50, 100]
+  .flatMap((y) => [0, 50, 100].map((x) => [x, y]))
+  .filter(([x, y]) => x !== 50 || y !== 50);
 
 function Selection() {
   return (
@@ -652,6 +644,15 @@ function Selection() {
 }
 
 const SWATCHES = ['#1c1917', '#fe5226', '#3b82f6', '#16a34a', '#a8a29e'];
+const TEXT_STYLES = [
+  { id: 'bold', Icon: Bold },
+  { id: 'italic', Icon: Italic },
+];
+const ALIGNS = [
+  { id: 'left', Icon: AlignLeft },
+  { id: 'center', Icon: AlignCenter },
+  { id: 'right', Icon: AlignRight },
+];
 
 const EDIT_MOVES: Move[] = [
   { at: 0, to: 'stats', ax: 1.2, ay: 2 },
@@ -662,7 +663,6 @@ const EDIT_MOVES: Move[] = [
 const EDIT_CLICKS = [1400, 2950, 4150, 4500];
 
 export function EditScene() {
-  const scene = useRef<HTMLDivElement>(null);
   const elapsed = useElapsed(5200);
   const selected = elapsed >= 1400;
   const accent = elapsed >= 2950;
@@ -670,7 +670,7 @@ export function EditScene() {
   const color = accent ? '#fe5226' : '#1c1917';
 
   return (
-    <div ref={scene} className="relative h-full">
+    <div className="relative h-full">
       <EditorFrame
         mode="edit"
         panel="format"
@@ -697,10 +697,7 @@ export function EditScene() {
             </div>
             <Section title="Typography">
               <div className="flex gap-[0.6cqw]">
-                <Field className="flex-1 justify-between">
-                  Geist
-                  <ChevronDown className="size-[1cqw] text-muted-foreground" />
-                </Field>
+                <Select className="flex-1">Geist</Select>
                 <Field className="gap-0 px-0">
                   <span className="px-[0.7cqw] text-muted-foreground">−</span>
                   <span className="nums w-[2.4cqw] text-center">{size}</span>
@@ -710,10 +707,7 @@ export function EditScene() {
                 </Field>
               </div>
               <div className="flex gap-[0.6cqw] [&_svg]:size-[1.1cqw]">
-                {[
-                  { id: 'bold', Icon: Bold },
-                  { id: 'italic', Icon: Italic },
-                ].map(({ id, Icon }, i) => (
+                {TEXT_STYLES.map(({ id, Icon }, i) => (
                   <span
                     key={id}
                     className={cn(
@@ -725,11 +719,7 @@ export function EditScene() {
                   </span>
                 ))}
                 <span className="flex-1" />
-                {[
-                  { id: 'left', Icon: AlignLeft },
-                  { id: 'center', Icon: AlignCenter },
-                  { id: 'right', Icon: AlignRight },
-                ].map(({ id, Icon }, i) => (
+                {ALIGNS.map(({ id, Icon }, i) => (
                   <span
                     key={id}
                     className={cn(
@@ -757,10 +747,7 @@ export function EditScene() {
                   />
                 ))}
               </div>
-              <Field>
-                <Swatch color={color} />
-                <span className="nums uppercase">{color}</span>
-              </Field>
+              <ColorField color={color} />
             </Section>
             <Section title="Content">
               <div className="rounded-[0.6cqw] border border-border px-[0.9cqw] py-[0.7cqw] text-[1.02cqw]">
@@ -774,7 +761,7 @@ export function EditScene() {
           </PanelEmpty>
         )}
       </EditorFrame>
-      <Cursor scene={scene} elapsed={elapsed} moves={EDIT_MOVES} clicks={EDIT_CLICKS} />
+      <Cursor elapsed={elapsed} moves={EDIT_MOVES} clicks={EDIT_CLICKS} />
     </div>
   );
 }
@@ -821,14 +808,14 @@ function CommentDraft({ text, className }: { text: string; className: string }) 
   );
 }
 
-function Outline() {
-  return (
-    <span className="ob-pop pointer-events-none absolute -inset-[1cqw] rounded-[0.6cqw] border-[0.2cqw] border-brand" />
-  );
-}
-
-const NOTE_ONE = 'Make the last bar pop.';
-const NOTE_TWO = 'Lead with the number.';
+const DRAFT_PLACEMENT = {
+  chart: 'right-0 bottom-[calc(100%+2cqw)]',
+  title: 'top-[calc(100%+2cqw)] left-0',
+};
+const COMMENTS = [
+  { n: 1, part: 'chart', text: 'Make the last bar pop.', opens: 1400, saves: 2900, applied: 6900 },
+  { n: 2, part: 'title', text: 'Lead with the number.', opens: 3950, saves: 5350, applied: 7450 },
+] as const;
 const COMMENT_MOVES: Move[] = [
   { at: 0, to: 'chart', ax: 0.3, ay: 1.2 },
   { at: 450, to: 'chart', ax: 0.93, ay: 0.5, dur: 850 },
@@ -840,59 +827,46 @@ const COMMENT_MOVES: Move[] = [
 const COMMENT_CLICKS = [1400, 2900, 3950, 5350, 6350];
 
 export function CommentScene() {
-  const scene = useRef<HTMLDivElement>(null);
   const elapsed = useElapsed(7900);
-  const draftOne = elapsed >= 1400 && elapsed < 2900;
-  const draftTwo = elapsed >= 3950 && elapsed < 5350;
-  const savedOne = elapsed >= 2900;
-  const savedTwo = elapsed >= 5350;
   const applying = elapsed >= 6350;
-  const doneOne = elapsed >= 6900;
-  const doneTwo = elapsed >= 7450;
-
-  const notes = [
-    { n: 1, text: NOTE_ONE, where: 'On the chart', saved: savedOne, done: doneOne },
-    { n: 2, text: NOTE_TWO, where: 'On the title', saved: savedTwo, done: doneTwo },
-  ].filter((note) => note.saved);
+  const comments = COMMENTS.map((comment) => ({
+    ...comment,
+    drafting: elapsed >= comment.opens && elapsed < comment.saves,
+    saved: elapsed >= comment.saves,
+    done: elapsed >= comment.applied,
+  }));
+  const saved = comments.filter((comment) => comment.saved);
+  const allDone = comments.every((comment) => comment.done);
+  const chart = { barAccent: comments[0]?.done, title: allDone ? GROWTH_TITLE : CHART_TITLE };
 
   return (
-    <div ref={scene} className="relative h-full">
+    <div className="relative h-full">
       <EditorFrame
         mode="comment"
         panel="comments"
-        chart={{ barAccent: doneOne, title: doneTwo ? 'Up 38% this quarter.' : CHART_TITLE }}
+        chart={chart}
         canvas={
           <>
             <Slide
               page="chart"
-              barAccent={doneOne}
-              title={doneTwo ? 'Up 38% this quarter.' : CHART_TITLE}
-              marks={{
-                chart: (
+              {...chart}
+              marks={Object.fromEntries(
+                comments.map((comment) => [
+                  comment.part,
                   <>
-                    {draftOne && <Outline />}
-                    {draftOne && (
-                      <CommentDraft
-                        text={typed(NOTE_ONE, elapsed, 1550, 32)}
-                        className="right-0 bottom-[calc(100%+2cqw)]"
-                      />
+                    {comment.drafting && (
+                      <>
+                        <span className="ob-pop pointer-events-none absolute -inset-[1cqw] rounded-[0.6cqw] border-[0.2cqw] border-brand" />
+                        <CommentDraft
+                          text={typed(comment.text, elapsed, comment.opens + 150, 32)}
+                          className={DRAFT_PLACEMENT[comment.part]}
+                        />
+                      </>
                     )}
-                    {savedOne && <CommentPin n={1} done={doneOne} />}
-                  </>
-                ),
-                title: (
-                  <>
-                    {draftTwo && <Outline />}
-                    {draftTwo && (
-                      <CommentDraft
-                        text={typed(NOTE_TWO, elapsed, 4100, 32)}
-                        className="top-[calc(100%+2cqw)] left-0"
-                      />
-                    )}
-                    {savedTwo && <CommentPin n={2} done={doneTwo} />}
-                  </>
-                ),
-              }}
+                    {comment.saved && <CommentPin n={comment.n} done={comment.done} />}
+                  </>,
+                ]),
+              )}
             />
             {elapsed < 1400 && (
               <span className="ob-fade absolute bottom-[2.2cqw] left-1/2 -translate-x-1/2 rounded-full border border-border bg-card px-[1.3cqw] py-[0.5cqw] text-[1cqw] whitespace-nowrap text-muted-foreground shadow-edge">
@@ -905,32 +879,32 @@ export function CommentScene() {
         <PanelHeader
           icon={<MessageSquare />}
           title="Comments"
-          meta={notes.length ? String(notes.length) : undefined}
+          meta={saved.length ? String(saved.length) : undefined}
         />
-        {notes.length ? (
+        {saved.length ? (
           <div className="flex flex-1 flex-col gap-[0.9cqw] px-[1.4cqw] py-[1.4cqw]">
-            {notes.map((note) => (
+            {saved.map((comment) => (
               <div
-                key={note.n}
+                key={comment.n}
                 className="ob-pop flex gap-[0.9cqw] rounded-[0.8cqw] border border-border p-[1cqw]"
               >
                 <span
                   className={cn(
                     'flex size-[1.9cqw] shrink-0 items-center justify-center rounded-full rounded-bl-[0.3cqw] text-[0.95cqw] font-semibold text-white transition-colors duration-500',
-                    note.done ? 'bg-emerald-500' : 'bg-brand',
+                    comment.done ? 'bg-emerald-500' : 'bg-brand',
                   )}
                 >
-                  {note.done ? <Check className="size-[1cqw]" strokeWidth={3} /> : note.n}
+                  {comment.done ? <Check className="size-[1cqw]" strokeWidth={3} /> : comment.n}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[1.05cqw] leading-snug">{note.text}</p>
+                  <p className="text-[1.05cqw] leading-snug">{comment.text}</p>
                   <p className="mt-[0.3cqw] text-[0.9cqw] text-muted-foreground">
-                    {note.done ? (
+                    {comment.done ? (
                       'Applied'
                     ) : applying ? (
                       <span className="ob-shimmer">Applying…</span>
                     ) : (
-                      note.where
+                      `On the ${comment.part}`
                     )}
                   </p>
                 </div>
@@ -946,13 +920,13 @@ export function CommentScene() {
           data-target="apply"
           className={cn(
             'm-[1.4cqw] flex items-center justify-center gap-[0.6cqw] rounded-[0.8cqw] py-[1cqw] text-[1.05cqw] font-medium transition-[opacity,background-color] duration-500',
-            doneTwo
+            allDone
               ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400'
               : 'bg-foreground text-background',
-            !savedTwo && 'opacity-35',
+            saved.length < comments.length && 'opacity-35',
           )}
         >
-          {doneTwo ? (
+          {allDone ? (
             <>
               <Check className="size-[1.1cqw]" strokeWidth={3} />
               All applied
@@ -960,12 +934,12 @@ export function CommentScene() {
           ) : (
             <>
               <Sparkles className="size-[1.1cqw]" />
-              {applying ? 'Applying…' : `Apply ${notes.length} with agent`}
+              {applying ? 'Applying…' : `Apply ${saved.length} with agent`}
             </>
           )}
         </div>
       </EditorFrame>
-      <Cursor scene={scene} elapsed={elapsed} moves={COMMENT_MOVES} clicks={COMMENT_CLICKS} />
+      <Cursor elapsed={elapsed} moves={COMMENT_MOVES} clicks={COMMENT_CLICKS} />
     </div>
   );
 }
@@ -981,7 +955,6 @@ const DESIGN_MOVES: Move[] = [
 const DESIGN_CLICKS = [1400, 2300, 3900, 5000];
 
 export function DesignScene() {
-  const scene = useRef<HTMLDivElement>(null);
   const elapsed = useElapsed(5800);
   const base = elapsed >= 2300 ? SAGE : elapsed >= 1400 ? MIDNIGHT : EMBER;
   const serif = elapsed >= 5000;
@@ -989,7 +962,7 @@ export function DesignScene() {
   const open = elapsed >= 3900 && elapsed < 5000;
 
   return (
-    <div ref={scene} className="relative h-full">
+    <div className="relative h-full">
       <EditorFrame mode="edit" panel="design" look={look} canvas={<Slide look={look} />}>
         <PanelHeader
           icon={<Palette />}
@@ -1011,23 +984,17 @@ export function DesignScene() {
               ['Accent', look.accent],
             ] as const
           ).map(([label, value]) => (
-            <div key={label} className="flex items-center justify-between text-[1.02cqw]">
-              <span className="text-muted-foreground">{label}</span>
-              <Field className="w-[58%]">
-                <Swatch color={value} />
-                <span className="nums uppercase">{value}</span>
-              </Field>
-            </div>
+            <Row key={label} label={label}>
+              <ColorField className="w-[58%]" color={value} />
+            </Row>
           ))}
         </Section>
         <Section title="Typography">
-          <div className="flex items-center justify-between text-[1.02cqw]">
-            <span className="text-muted-foreground">Display</span>
+          <Row label="Display">
             <div className="relative w-[58%]">
-              <Field data-target="font" className="justify-between">
+              <Select data-target="font">
                 <span style={{ fontFamily: look.font }}>{serif ? 'Georgia' : 'Geist'}</span>
-                <ChevronDown className="size-[1cqw] text-muted-foreground" />
-              </Field>
+              </Select>
               {open && (
                 <div className="ob-pop absolute top-[calc(100%+0.4cqw)] right-0 left-0 z-10 rounded-[0.7cqw] border border-border bg-popover p-[0.4cqw] shadow-floating">
                   {FONTS.map((font) => (
@@ -1046,26 +1013,21 @@ export function DesignScene() {
                 </div>
               )}
             </div>
-          </div>
-          <div className="flex items-center justify-between text-[1.02cqw]">
-            <span className="text-muted-foreground">Body</span>
-            <Field className="w-[58%] justify-between">
-              Geist
-              <ChevronDown className="size-[1cqw] text-muted-foreground" />
-            </Field>
-          </div>
+          </Row>
+          <Row label="Body">
+            <Select className="w-[58%]">Geist</Select>
+          </Row>
         </Section>
         <Section title="Shape">
-          <div className="flex items-center justify-between text-[1.02cqw]">
-            <span className="text-muted-foreground">Radius</span>
+          <Row label="Radius">
             <span className="relative h-[0.4cqw] w-[58%] rounded-full bg-foreground/10">
               <span className="absolute inset-y-0 left-0 w-[40%] rounded-full bg-foreground/60" />
               <span className="absolute top-1/2 left-[40%] size-[1.4cqw] -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-card shadow-edge" />
             </span>
-          </div>
+          </Row>
         </Section>
       </EditorFrame>
-      <Cursor scene={scene} elapsed={elapsed} moves={DESIGN_MOVES} clicks={DESIGN_CLICKS} />
+      <Cursor elapsed={elapsed} moves={DESIGN_MOVES} clicks={DESIGN_CLICKS} />
     </div>
   );
 }
@@ -1083,7 +1045,6 @@ const LASER_MOVES: Move[] = [
 ];
 
 export function PresentScene() {
-  const scene = useRef<HTMLDivElement>(null);
   const elapsed = useElapsed(5800);
   const index = elapsed >= 2600 ? 1 : 0;
   const exporting = elapsed >= 4200 && elapsed < 4400;
@@ -1091,7 +1052,6 @@ export function PresentScene() {
 
   return (
     <div
-      ref={scene}
       className="relative flex h-full flex-col bg-[#0c0c0d] text-[1.1cqw] text-white"
       style={{ fontFamily: 'var(--font-sans)' }}
     >
@@ -1112,33 +1072,23 @@ export function PresentScene() {
       </div>
       <div className="flex min-h-0 flex-1 gap-[1.8cqw] px-[1.8cqw] py-[1.4cqw]">
         <div className="flex min-w-0 flex-1 flex-col">
-          <p className="mb-[0.8cqw] text-[0.8cqw] font-semibold tracking-[0.14em] text-white/40 uppercase">
-            Now showing
-          </p>
+          <p className={PRESENTER_LABEL}>Now showing</p>
           <div className="flex flex-1 items-center justify-center rounded-[0.8cqw] bg-black px-[1.6cqw]">
             <div key={index} className="ob-scene-in w-full">
-              {index === 0 ? (
-                <Slide />
-              ) : (
-                <Slide page="chart" barAccent title="Up 38% this quarter." />
-              )}
+              {index === 0 ? <Slide /> : <Slide page="chart" barAccent title={GROWTH_TITLE} />}
             </div>
           </div>
         </div>
         <div className="flex w-[32%] shrink-0 flex-col">
-          <p className="mb-[0.8cqw] text-[0.8cqw] font-semibold tracking-[0.14em] text-white/40 uppercase">
-            Up next
-          </p>
+          <p className={PRESENTER_LABEL}>Up next</p>
           <div key={index} className="ob-scene-in">
             {index === 0 ? (
-              <Slide mini page="chart" barAccent title="Up 38% this quarter." />
+              <Slide mini page="chart" barAccent title={GROWTH_TITLE} />
             ) : (
               <SlideSketch variant="quote" className="rounded-[0.6cqw]" />
             )}
           </div>
-          <p className="mt-[1.6cqw] mb-[0.8cqw] text-[0.8cqw] font-semibold tracking-[0.14em] text-white/40 uppercase">
-            Speaker notes
-          </p>
+          <p className={cn('mt-[1.6cqw]', PRESENTER_LABEL)}>Speaker notes</p>
           <p
             key={`notes-${index}`}
             className="ob-fade flex-1 rounded-[0.8cqw] border border-white/[0.08] p-[1.2cqw] text-[1.1cqw] leading-relaxed text-white/85"
@@ -1183,7 +1133,7 @@ export function PresentScene() {
           </span>
         </div>
       )}
-      <Cursor scene={scene} elapsed={elapsed} moves={LASER_MOVES} laser />
+      <Cursor elapsed={elapsed} moves={LASER_MOVES} laser />
     </div>
   );
 }
@@ -1232,17 +1182,14 @@ export function AgentsScene() {
       <div
         className="ob-pop absolute top-[23.5cqw] left-1/2 size-[12cqw] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-[23.3%]"
         style={{
-          background: 'linear-gradient(180deg, #ffffff 0%, #efebe6 100%)',
+          background: MARK_TILE,
           boxShadow:
             'inset 0 1px 0 rgb(255 255 255 / 0.9), 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 3cqw 6cqw -1.6cqw rgb(254 82 38 / 0.55)',
         }}
       >
         <span
           className="absolute top-1/2 left-1/2 h-[35%] w-[60%] -translate-x-1/2 -translate-y-1/2 rounded-[11.8%/20.2%]"
-          style={{
-            background:
-              'radial-gradient(120% 90% at 30% 10%, rgb(255 255 255 / 0.28), transparent 60%), linear-gradient(180deg, #ff8a5e 0%, #fe5226 45%, #ee4316 100%)',
-          }}
+          style={{ background: MARK_HERO }}
         />
       </div>
       {AGENT_NODES.map((node, i) => (
@@ -1290,6 +1237,12 @@ const DECKS: { variant: SketchVariant; title: string }[] = [
   { variant: 'title', title: 'Onboarding' },
 ];
 
+const WORKSPACE_NAV = [
+  { icon: Layers, label: 'Decks' },
+  { icon: Palette, label: 'Themes' },
+  { icon: Image, label: 'Assets' },
+];
+
 export function WorkspaceScene() {
   const elapsed = useElapsed(1800);
   return (
@@ -1299,11 +1252,7 @@ export function WorkspaceScene() {
           <FolderClosed className="size-[1.5cqw] text-brand" />
           my-slides
         </div>
-        {[
-          { icon: Layers, label: 'Decks' },
-          { icon: Palette, label: 'Themes' },
-          { icon: Image, label: 'Assets' },
-        ].map(({ icon: Icon, label }, i) => (
+        {WORKSPACE_NAV.map(({ icon: Icon, label }, i) => (
           <div
             key={label}
             className={cn(

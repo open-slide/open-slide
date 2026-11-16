@@ -10,81 +10,78 @@ import {
   type TaskResult,
   type WorkspaceInspection,
 } from '../shared/types';
-import { run, runNodeScript } from './process';
+import { type RunResult, run, runNodeScript } from './process';
 import { findOnPath } from './shell-env';
 
 const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 const IGNORED_ENTRIES = new Set(['.DS_Store', '.git', 'Thumbs.db']);
+const PROVIDED_DEPENDENCIES = new Set(['@open-slide/core', 'react', 'react-dom']);
+const LOCKFILES: [string, PackageManager][] = [
+  ['pnpm-lock.yaml', 'pnpm'],
+  ['bun.lock', 'bun'],
+  ['bun.lockb', 'bun'],
+  ['yarn.lock', 'yarn'],
+  ['package-lock.json', 'npm'],
+];
 
-// Packages the app ships that something outside its own bundle runs or
-// imports. They live unpacked next to app.asar so other processes can read
-// them as ordinary files.
+// Unpacked next to app.asar, since the processes that load these cannot read inside it.
 export function modulesDir(): string {
   return path.join(app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked'), 'node_modules');
 }
 
-// Every workspace runs on the core this app ships, whatever version (if any)
-// the workspace installed. The workspace only supplies slides, themes, assets
-// and its config.
+let core: { bin: string; version: string } | null = null;
+
 export function bundledCore(): { bin: string; version: string } {
-  core ??= readBundledCore();
+  if (!core) {
+    const dir = path.join(modulesDir(), '@open-slide', 'core');
+    const version = readPackageJson(dir)?.version;
+    core = {
+      bin: path.join(dir, 'bin.js'),
+      version: typeof version === 'string' ? version : '0.0.0',
+    };
+  }
   return core;
 }
 
-let core: { bin: string; version: string } | null = null;
-
-function readBundledCore(): { bin: string; version: string } {
-  const dir = path.join(modulesDir(), '@open-slide', 'core');
-  const version = readPackageJson(dir)?.version;
-  return {
-    bin: path.join(dir, 'bin.js'),
-    version: typeof version === 'string' ? version : '0.0.0',
-  };
-}
-
-// What the bundled core already resolves for slides on its own.
-const PROVIDED_DEPENDENCIES = new Set(['@open-slide/core', 'react', 'react-dom']);
-
-function isInstalled(name: string, root: string): boolean {
-  let dir = root;
-  while (true) {
-    if (existsSync(path.join(dir, 'node_modules', name, 'package.json'))) return true;
-    const parent = path.dirname(dir);
-    if (parent === dir) return false;
-    dir = parent;
-  }
-}
-
-// A workspace only needs an install when slides may import packages it added
-// itself; @types/* only matter to the editor.
-export function needsInstall(root: string): boolean {
-  const pkg = readPackageJson(root);
-  if (!pkg) return false;
-  return ['dependencies', 'devDependencies'].some((field) => {
-    const deps = pkg[field] as Record<string, unknown> | undefined;
-    return Object.keys(deps ?? {}).some(
-      (name) =>
-        !PROVIDED_DEPENDENCIES.has(name) && !name.startsWith('@types/') && !isInstalled(name, root),
-    );
-  });
-}
-
-function readPackageJson(dir: string): Record<string, unknown> | null {
+export function readPackageJson(dir: string): Record<string, unknown> | null {
   try {
-    return JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8')) as Record<
-      string,
-      unknown
-    >;
+    return JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
   } catch {
     return null;
   }
 }
 
-function dependsOnCore(pkg: Record<string, unknown>): boolean {
-  return ['dependencies', 'devDependencies'].some((field) => {
-    const deps = pkg[field] as Record<string, unknown> | undefined;
-    return Boolean(deps && Object.hasOwn(deps, '@open-slide/core'));
+export function findUp<T>(start: string, probe: (dir: string) => T | undefined): T | undefined {
+  for (let dir = start; ; dir = path.dirname(dir)) {
+    const found = probe(dir);
+    if (found !== undefined || path.dirname(dir) === dir) return found;
+  }
+}
+
+// Node's lookup, without require.resolve's refusal of packages whose exports omit package.json.
+export function findPackage(name: string, from: string): string | undefined {
+  return findUp(from, (dir) => {
+    const candidate = path.join(dir, 'node_modules', name);
+    return existsSync(path.join(candidate, 'package.json')) ? candidate : undefined;
   });
+}
+
+function dependencyNames(pkg: Record<string, unknown>): string[] {
+  return ['dependencies', 'devDependencies'].flatMap((field) => {
+    const deps = pkg[field];
+    return deps && typeof deps === 'object' ? Object.keys(deps) : [];
+  });
+}
+
+// Only packages a workspace added itself need an install; @types/* only matter to the editor.
+export function needsInstall(root: string): boolean {
+  const pkg = readPackageJson(root);
+  return dependencyNames(pkg ?? {}).some(
+    (name) =>
+      !PROVIDED_DEPENDENCIES.has(name) &&
+      !name.startsWith('@types/') &&
+      findPackage(name, root) === undefined,
+  );
 }
 
 export function inspectWorkspace(dir: string): WorkspaceInspection {
@@ -94,7 +91,7 @@ export function inspectWorkspace(dir: string): WorkspaceInspection {
     return { path: resolved, name, kind: 'missing' };
   }
   const pkg = readPackageJson(resolved);
-  if (pkg && dependsOnCore(pkg)) {
+  if (pkg && dependencyNames(pkg).includes('@open-slide/core')) {
     return {
       path: resolved,
       name: typeof pkg.name === 'string' ? pkg.name : name,
@@ -105,33 +102,27 @@ export function inspectWorkspace(dir: string): WorkspaceInspection {
   return { path: resolved, name, kind: entries.length === 0 ? 'empty' : 'other' };
 }
 
-const LOCKFILES: [string, PackageManager][] = [
-  ['pnpm-lock.yaml', 'pnpm'],
-  ['bun.lock', 'bun'],
-  ['bun.lockb', 'bun'],
-  ['yarn.lock', 'yarn'],
-  ['package-lock.json', 'npm'],
-];
-
 export function detectPackageManager(root: string, fallback: PackageManager): PackageManager {
   const declared = readPackageJson(root)?.packageManager;
   if (typeof declared === 'string') {
     const name = declared.split('@')[0];
     if ((PACKAGE_MANAGERS as readonly string[]).includes(name)) return name as PackageManager;
   }
-  let dir = root;
-  while (true) {
-    for (const [file, pm] of LOCKFILES) {
-      if (existsSync(path.join(dir, file))) return pm;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) return fallback;
-    dir = parent;
-  }
+  const locked = findUp(
+    root,
+    (dir) => LOCKFILES.find(([file]) => existsSync(path.join(dir, file)))?.[1],
+  );
+  return locked ?? fallback;
 }
 
 export function availablePackageManagers(env: NodeJS.ProcessEnv): PackageManager[] {
   return PACKAGE_MANAGERS.filter((pm) => findOnPath(pm, env) !== null);
+}
+
+export function taskResult({ code, timedOut }: RunResult, label: string): TaskResult {
+  if (code === 0) return { ok: true };
+  if (timedOut) return { ok: false, error: `${label} took too long and was stopped.` };
+  return { ok: false, error: `${label} exited with code ${code}` };
 }
 
 export async function installDependencies(
@@ -142,10 +133,7 @@ export async function installDependencies(
 ): Promise<TaskResult> {
   onChunk(`$ ${pm} install\n`);
   const { done } = run(pm, ['install'], { cwd: root, env, onChunk, timeoutMs: INSTALL_TIMEOUT_MS });
-  const { code, timedOut } = await done;
-  if (code === 0) return { ok: true };
-  if (timedOut) return { ok: false, error: `${pm} install took too long and was stopped.` };
-  return { ok: false, error: `${pm} install exited with code ${code}` };
+  return taskResult(await done, `${pm} install`);
 }
 
 export async function syncSkills(
@@ -154,23 +142,10 @@ export async function syncSkills(
   onChunk: (chunk: string) => void,
 ): Promise<TaskResult> {
   const { done } = runNodeScript(bundledCore().bin, ['sync:skills'], { cwd: root, env, onChunk });
-  const { code } = await done;
-  return code === 0 ? { ok: true } : { ok: false, error: `sync:skills exited with code ${code}` };
+  return taskResult(await done, 'sync:skills');
 }
 
-function cliEntry(): string {
-  const pkgDir = realpathSync(path.join(modulesDir(), '@open-slide', 'cli'));
-  return path.join(pkgDir, 'dist', 'cli.js');
-}
-
-// Where a first-run workspace goes, so someone who has never heard of a
-// workspace can start without being asked for a folder.
-function defaultWorkspaceRoot(): string {
-  return path.join(homedir(), '.open-slide', 'slides');
-}
-
-// `created` tells a workspace this call scaffolded from one that was already
-// there: only the first is the app's own work, and trusted without asking.
+// `created` marks a workspace this call scaffolded, which is trusted without asking.
 export type CreateResult =
   | { ok: true; root: string; created: boolean }
   | { ok: false; error: string };
@@ -187,24 +162,20 @@ async function initWorkspace(
   if (existing.kind === 'project' || existing.kind === 'other') {
     return { ok: false, error: `${target} already exists and is not empty.` };
   }
-  let entry: string;
+  let cli: string;
   try {
-    entry = cliEntry();
+    cli = realpathSync(path.join(modulesDir(), '@open-slide', 'cli'));
   } catch {
     return { ok: false, error: 'The bundled @open-slide/cli is missing from this build.' };
   }
   const args = ['init', name, ...flags];
   onChunk(`$ open-slide ${args.join(' ')}\n`);
-  const { done } = runNodeScript(entry, args, {
-    cwd: parent,
-    env,
-    onChunk,
-    timeoutMs: INSTALL_TIMEOUT_MS,
-  });
-  const { code, timedOut } = await done;
-  if (timedOut) return { ok: false, error: 'open-slide init took too long and was stopped.' };
-  if (code !== 0 || inspectWorkspace(target).kind !== 'project') {
-    return { ok: false, error: `open-slide init exited with code ${code}` };
+  const opts = { cwd: parent, env, onChunk, timeoutMs: INSTALL_TIMEOUT_MS };
+  const result = await runNodeScript(path.join(cli, 'dist', 'cli.js'), args, opts).done;
+  const outcome = taskResult(result, 'open-slide init');
+  if (!outcome.ok) return outcome;
+  if (inspectWorkspace(target).kind !== 'project') {
+    return { ok: false, error: `open-slide init exited with code ${result.code}` };
   }
   return { ok: true, root: target, created: true };
 }
@@ -214,23 +185,16 @@ export function createWorkspace(
   env: NodeJS.ProcessEnv,
   onChunk: (chunk: string) => void,
 ): Promise<CreateResult> {
-  return initWorkspace(
-    request.parent,
-    request.name,
-    [`--use-${request.packageManager}`],
-    env,
-    onChunk,
-  );
+  const flags = [`--use-${request.packageManager}`];
+  return initWorkspace(request.parent, request.name, flags, env, onChunk);
 }
 
-// The bundled core already provides everything the template imports, so this
-// skips the install and needs no package manager. It also skips git: on a Mac
-// without the developer tools, merely probing for git opens an install prompt.
+// --no-git: on a Mac without developer tools, merely probing for git opens an install prompt.
 export async function createDefaultWorkspace(
   env: NodeJS.ProcessEnv,
   onChunk: (chunk: string) => void,
 ): Promise<CreateResult> {
-  const root = defaultWorkspaceRoot();
+  const root = path.join(homedir(), '.open-slide', 'slides');
   if (inspectWorkspace(root).kind === 'project') return { ok: true, root, created: false };
   const parent = path.dirname(root);
   await mkdir(parent, { recursive: true });

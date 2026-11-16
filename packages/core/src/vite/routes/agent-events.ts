@@ -5,10 +5,9 @@ import { isLoopbackRequest } from '../../http/request-guard.ts';
 
 type ConnectionSource = Pick<WebSocketServer, 'on'>;
 
-// Agent output rides the HMR socket every page already holds: a stream of its
-// own would pin one of the browser's six connections per host for each open
-// tab. Every network client can join that socket when the server runs with
-// --host, so only loopback sockets are sent anything.
+// Rides the HMR socket every page already holds: a stream per tab would use up
+// the browser's six connections per host. Any network client can join that
+// socket under --host, so only loopback sockets are sent events.
 export function createAgentBroadcast(
   ws: ConnectionSource,
   enabled: boolean,

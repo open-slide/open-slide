@@ -1,5 +1,13 @@
 import path from 'node:path';
-import { app, Menu, type MenuItemConstructorOptions, shell } from 'electron';
+import {
+  app,
+  type BrowserWindow,
+  type ContextMenuParams,
+  Menu,
+  type MenuItemConstructorOptions,
+  shell,
+  type WebContents,
+} from 'electron';
 
 export type MenuActions = {
   openSettings: () => void;
@@ -19,11 +27,11 @@ export type MenuActions = {
 
 export function installMenu(actions: MenuActions, recent: string[]) {
   const isMac = process.platform === 'darwin';
-  const tabItems: MenuItemConstructorOptions[] = Array.from({ length: 8 }, (_, i) => ({
-    label: `Tab ${i + 1}`,
+  const tabItems: MenuItemConstructorOptions[] = Array.from({ length: 9 }, (_, i) => ({
+    label: i === 8 ? 'Last Tab' : `Tab ${i + 1}`,
     accelerator: `CmdOrCtrl+${i + 1}`,
     visible: false,
-    click: () => actions.selectTab(i),
+    click: () => actions.selectTab(i === 8 ? -1 : i),
   }));
 
   const template: MenuItemConstructorOptions[] = [
@@ -117,12 +125,6 @@ export function installMenu(actions: MenuActions, recent: string[]) {
           click: () => actions.cycleTab(-1),
         },
         ...tabItems,
-        {
-          label: 'Last Tab',
-          accelerator: 'CmdOrCtrl+9',
-          visible: false,
-          click: () => actions.selectTab(-1),
-        },
         ...(isMac ? [{ type: 'separator' as const }, { role: 'front' as const }] : []),
       ],
     },
@@ -145,4 +147,32 @@ export function installMenu(actions: MenuActions, recent: string[]) {
   ];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+export function showContextMenu(
+  window: BrowserWindow,
+  contents: WebContents,
+  params: ContextMenuParams,
+  extra: MenuItemConstructorOptions[] = [],
+) {
+  const items: MenuItemConstructorOptions[] = params.isEditable
+    ? [
+        { role: 'cut', enabled: params.editFlags.canCut },
+        { role: 'copy', enabled: params.editFlags.canCopy },
+        { role: 'paste', enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { role: 'selectAll' },
+      ]
+    : params.selectionText
+      ? [{ role: 'copy' }]
+      : [];
+  items.push(...extra);
+  if (!app.isPackaged) {
+    if (items.length) items.push({ type: 'separator' });
+    items.push({
+      label: 'Inspect Element',
+      click: () => contents.inspectElement(params.x, params.y),
+    });
+  }
+  if (items.length) Menu.buildFromTemplate(items).popup({ window });
 }

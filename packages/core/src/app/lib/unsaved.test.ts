@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  createSaveQueue,
   forgetWrite,
   onAbandon,
   registerUnsaved,
@@ -190,5 +191,38 @@ describe('unsaved work registry', () => {
     expect(unsavedStatus().pending).toBe(false);
     expect(await settleUnsaved('save')).toEqual({ ok: true });
     expect(stale).toHaveBeenCalledOnce();
+  });
+});
+
+describe('createSaveQueue', () => {
+  it('runs one task at a time and reports idle once all settle', async () => {
+    const queue = createSaveQueue();
+    const order: string[] = [];
+    let release!: () => void;
+    const onIdle = vi.fn();
+    const first = queue.run(
+      () =>
+        new Promise<void>((resolve) => {
+          order.push('first:start');
+          release = () => {
+            order.push('first:end');
+            resolve();
+          };
+        }),
+      onIdle,
+    );
+    const second = queue.run(async () => {
+      order.push('second');
+      throw new Error('boom');
+    }, onIdle);
+    await Promise.resolve();
+    expect(queue.busy()).toBe(true);
+    release();
+    await first;
+    await expect(second).rejects.toThrow('boom');
+    expect(order).toEqual(['first:start', 'first:end', 'second']);
+    expect(queue.busy()).toBe(false);
+    expect(onIdle).toHaveBeenCalledOnce();
+    await expect(queue.run(async () => 'next')).resolves.toBe('next');
   });
 });

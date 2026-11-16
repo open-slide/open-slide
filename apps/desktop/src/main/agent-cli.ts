@@ -1,19 +1,20 @@
 import { createHash } from 'node:crypto';
-import { createWriteStream, existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { createWriteStream, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { mkdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { app, net } from 'electron';
-import type { AgentId } from '../shared/types';
-import { run } from './process';
-import { modulesDir } from './workspace';
+import { AGENT_IDS, type AgentId, type LoginState } from '../shared/types';
+import { run, windowsTool } from './process';
+import { findPackage, modulesDir, readPackageJson } from './workspace';
 
 const REGISTRY = 'https://registry.npmjs.org';
 const EXTRACT_TIMEOUT_MS = 5 * 60 * 1000;
 const PROGRESS_INTERVAL_MS = 100;
 const EXE = process.platform === 'win32' ? '.exe' : '';
+const PLATFORM = `${process.platform}-${process.arch}`;
 
 const CODEX_TRIPLES: Record<string, string> = {
   'darwin-arm64': 'aarch64-apple-darwin',
@@ -27,29 +28,26 @@ const CODEX_TRIPLES: Record<string, string> = {
 type CliSpec = {
   command: string;
   sdkPackage: string;
-  sdkName: string;
-  // The SDK dependency whose optionalDependencies pin the per-platform CLI
-  // build, when the SDK does not pin it itself.
+  name: string;
+  // The SDK dependency that pins the platform build, when the SDK does not pin it itself.
   pinnedBy?: string;
   platformPackage: string;
-  // Where the executable and its helpers sit inside the extracted tarball.
+  // The first holds the executable.
   binDirs: (root: string) => string[];
 };
-
-const PLATFORM = `${process.platform}-${process.arch}`;
 
 const SPECS: Record<AgentId, CliSpec> = {
   claude: {
     command: 'claude',
     sdkPackage: '@anthropic-ai/claude-agent-sdk',
-    sdkName: 'Claude Code',
+    name: 'Claude Code',
     platformPackage: `@anthropic-ai/claude-agent-sdk-${PLATFORM}`,
     binDirs: (root) => [root],
   },
   codex: {
     command: 'codex',
     sdkPackage: '@openai/codex-sdk',
-    sdkName: 'Codex',
+    name: 'Codex',
     pinnedBy: '@openai/codex',
     platformPackage: `@openai/codex-${PLATFORM}`,
     binDirs: (root) => {
@@ -61,62 +59,32 @@ const SPECS: Record<AgentId, CliSpec> = {
 };
 
 type Pin = { name: string; version: string };
+type DownloadProgress = NonNullable<LoginState['download']>;
 
-type DownloadProgress = { received: number; total: number | null };
-
-export function cliSpec(id: AgentId): { command: string; sdkPackage: string; name: string } {
-  const { command, sdkPackage, sdkName } = SPECS[id];
-  return { command, sdkPackage, name: sdkName };
+export function cliSpec(id: AgentId): Pick<CliSpec, 'command' | 'sdkPackage' | 'name'> {
+  return SPECS[id];
 }
 
 function agentsRoot(): string {
   return path.join(app.getPath('userData'), 'agents');
 }
 
-function readJson(file: string): Record<string, unknown> | null {
-  try {
-    return JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+const pins = new Map<AgentId, Pin | null>();
+
+function pin(id: AgentId): Pin | null {
+  if (!pins.has(id)) pins.set(id, readPin(SPECS[id]));
+  return pins.get(id) ?? null;
 }
 
-// Node's lookup without require.resolve, which refuses package.json for
-// packages whose exports leave it out. pnpm keeps a package's dependencies
-// next to it in the store, so the walk starts from its real directory.
-function findPackageJson(fromDir: string, name: string): string | null {
-  let dir = realpathSync(fromDir);
-  while (true) {
-    const candidate = path.join(dir, 'node_modules', name, 'package.json');
-    if (path.basename(dir) !== 'node_modules' && existsSync(candidate)) return candidate;
-    const parent = path.dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-
-// The SDK ships without its native CLI; the exact build it expects is the one
-// its package pins for this platform.
-const pins = new Map<CliSpec, Pin | null>();
-
-// The bundled SDKs never change while the app runs.
-function pin(spec: CliSpec): Pin | null {
-  if (!pins.has(spec)) pins.set(spec, readPin(spec));
-  return pins.get(spec) ?? null;
-}
-
+// The SDK ships without its native CLI; the build it expects is the one its package pins.
 function readPin(spec: CliSpec): Pin | null {
   const sdkDir = path.join(modulesDir(), spec.sdkPackage);
-  if (!existsSync(path.join(sdkDir, 'package.json'))) return null;
-  const pinnedByJson = spec.pinnedBy
-    ? findPackageJson(sdkDir, spec.pinnedBy)
-    : path.join(sdkDir, 'package.json');
-  if (!pinnedByJson) return null;
-  const optional = readJson(pinnedByJson)?.optionalDependencies as
-    | Record<string, string>
-    | undefined;
-  const range = optional?.[spec.platformPackage];
-  if (!range) return null;
+  if (!existsSync(sdkDir)) return null;
+  // pnpm keeps a package's dependencies next to its real directory in the store.
+  const pinner = spec.pinnedBy ? findPackage(spec.pinnedBy, realpathSync(sdkDir)) : sdkDir;
+  const optional = pinner && readPackageJson(pinner)?.optionalDependencies;
+  const range = (optional as Record<string, unknown> | undefined)?.[spec.platformPackage];
+  if (typeof range !== 'string') return null;
   const alias = /^npm:(.+)@([^@]+)$/.exec(range);
   return alias
     ? { name: alias[1], version: alias[2] }
@@ -127,13 +95,12 @@ function versionDir(id: AgentId, version: string): string {
   return path.join(agentsRoot(), id, version);
 }
 
-function packageRoot(id: AgentId, version: string): string {
-  return path.join(versionDir(id, version), 'package');
+function binDirs(id: AgentId, version: string): string[] {
+  return SPECS[id].binDirs(path.join(versionDir(id, version), 'package'));
 }
 
 function executable(id: AgentId, version: string): string {
-  const spec = SPECS[id];
-  return path.join(spec.binDirs(packageRoot(id, version))[0], spec.command + EXE);
+  return path.join(binDirs(id, version)[0], SPECS[id].command + EXE);
 }
 
 function installedVersions(id: AgentId): string[] {
@@ -145,31 +112,26 @@ function installedVersions(id: AgentId): string[] {
 }
 
 export function canInstallCli(id: AgentId): boolean {
-  return pin(SPECS[id]) !== null;
+  return pin(id) !== null;
 }
 
 export function isManagedCli(file: string): boolean {
   return file.startsWith(agentsRoot() + path.sep);
 }
 
-// Directories to append to every child's PATH. The pinned version is listed
-// even before it exists, so a CLI downloaded mid-session is found by servers
-// that are already running; until then an older download stands in.
-export function managedCliDirs(): string[] {
-  cliDirs ??= findManagedCliDirs();
-  return cliDirs;
-}
-
 let cliDirs: string[] | null = null;
 
-function findManagedCliDirs(): string[] {
-  return (Object.keys(SPECS) as AgentId[]).flatMap((id) => {
-    const current = pin(SPECS[id])?.version;
+// The pinned version is listed before it exists, so servers already running find a CLI
+// downloaded mid-session; until then an older download stands in.
+export function managedCliDirs(): string[] {
+  cliDirs ??= AGENT_IDS.flatMap((id) => {
+    const current = pin(id)?.version;
     const versions = current ? [current] : [];
     const fallback = installedVersions(id).find((v) => v !== current);
     if (fallback && !(current && existsSync(executable(id, current)))) versions.push(fallback);
-    return versions.flatMap((v) => SPECS[id].binDirs(packageRoot(id, v)));
+    return versions.flatMap((v) => binDirs(id, v));
   });
+  return cliDirs;
 }
 
 const installs = new Map<AgentId, { done: Promise<void>; abort: AbortController }>();
@@ -199,7 +161,7 @@ async function download(
   signal: AbortSignal,
   onProgress: (progress: DownloadProgress) => void,
 ) {
-  const target = pin(SPECS[id]);
+  const target = pin(id);
   if (!target) throw new Error(`No ${SPECS[id].command} build is available for ${PLATFORM}.`);
   if (existsSync(executable(id, target.version))) return;
 
@@ -252,10 +214,7 @@ async function download(
     }
 
     await mkdir(staging, { recursive: true });
-    const tar =
-      process.platform === 'win32'
-        ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
-        : 'tar';
+    const tar = process.platform === 'win32' ? windowsTool('tar.exe') : 'tar';
     signal.throwIfAborted();
     const extract = run(tar, ['-xzf', tarball, '-C', staging], {
       cwd: agentDir,
@@ -279,21 +238,19 @@ async function download(
   }
 }
 
-// Drops downloads the bundled SDK has moved past, and refreshes a stale one in
-// the background so the agent keeps matching its SDK across app updates.
+// Drops downloads the bundled SDK has moved past, and refreshes a stale one so the CLI keeps
+// matching its SDK across app updates.
 export async function syncManagedClis() {
-  for (const id of Object.keys(SPECS) as AgentId[]) {
-    const current = pin(SPECS[id])?.version;
-    if (!current) continue;
+  for (const id of AGENT_IDS) {
+    const current = pin(id)?.version;
     const installed = installedVersions(id);
-    if (installed.length === 0) continue;
-    if (installed.includes(current)) {
-      for (const stale of installed.filter((v) => v !== current)) {
-        await rm(versionDir(id, stale), { recursive: true, force: true });
-      }
-      cliDirs = null;
-    } else {
+    if (!current || installed.length === 0) continue;
+    if (!installed.includes(current)) {
       void installCli(id, () => {}).catch(() => {});
+      continue;
+    }
+    for (const stale of installed.filter((v) => v !== current)) {
+      await rm(versionDir(id, stale), { recursive: true, force: true });
     }
   }
 }

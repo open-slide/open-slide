@@ -7,14 +7,12 @@ files:
   - dist/**
   - "!dist/**/*.map"
   - package.json
-  # The agents' native CLIs are a few hundred MB each, so they are downloaded
-  # on first sign-in instead (src/main/agent-cli.ts).
+  # The agents' native CLIs are a few hundred MB each; src/main/agent-cli.ts downloads them.
   - "!**/node_modules/@anthropic-ai/claude-agent-sdk-*/**"
   - "!**/node_modules/@openai/codex-{darwin,linux,win32}-*/**"
   - "!**/node_modules/**/*.d.{ts,mts,cts}"
-# Every dependency here is loaded by another process as plain files: the dev
-# server imports the agent SDKs, the SDKs spawn the downloaded CLIs, and init
-# runs the CLI. None of them can read inside app.asar, and neither can dlopen.
+# Other processes (dev server, SDKs, init) load these as plain files, and neither they nor
+# dlopen can read inside app.asar.
 asarUnpack:
   - node_modules/**
   - dist/native/**

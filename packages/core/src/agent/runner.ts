@@ -378,8 +378,7 @@ export function createAgentRunner(opts: {
     return true;
   }
 
-  // Resolves once no turn is left to change the store: a stopped provider
-  // still reports its end, and the turn-end handler runs after that.
+  // A stopped turn still reports its end and runs its turn-end handler, so wait for both.
   async function stopAll(): Promise<void> {
     for (const id of Array.from(running.keys())) stop(id);
     await Promise.allSettled(turns);

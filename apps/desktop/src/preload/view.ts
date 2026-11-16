@@ -15,8 +15,8 @@ let spare = window.location.pathname === SPARE_PATH;
 let pending: string | null = null;
 const listeners = new Set<(path: string) => void>();
 
-// The host keeps an adopted spare hidden until the route it was sent to has
-// rendered, so the not-found page it booted on never reaches the screen.
+// The host keeps an adopted spare hidden until its new route has rendered, so
+// the not-found page it booted on never shows.
 function reportCommit() {
   const root = document.getElementById('root');
   const done = () => ipcRenderer.send('host:adopted');
@@ -60,21 +60,14 @@ ipcRenderer.on('host:translucent', (_e, value: unknown) => {
 
 let guard: UnsavedGuard | null = null;
 
-// The host asks before it closes or reloads this page. A page that registered
-// no guard has nothing to lose, so it answers for itself.
+// A page that registered no guard has nothing to lose, so it answers for itself.
 ipcRenderer.on('host:unsaved', (_e, request: number, action: 'query' | UnsavedAction) => {
   const reply = (payload: unknown) => ipcRenderer.send('host:unsaved-reply', request, payload);
-  try {
-    if (action === 'query') {
-      reply(guard ? guard.status() : { drafts: false, pending: false });
-    } else if (guard) {
-      guard.settle(action).then(reply, (err: unknown) => reply({ ok: false, error: String(err) }));
-    } else {
-      reply({ ok: true });
-    }
-  } catch (err) {
-    reply({ ok: false, error: String(err) });
-  }
+  const answer = async () => {
+    if (action === 'query') return guard?.status() ?? { drafts: false, pending: false };
+    return guard ? guard.settle(action) : { ok: true };
+  };
+  answer().then(reply, (err: unknown) => reply({ ok: false, error: String(err) }));
 });
 
 const host: DesktopHost = {
@@ -103,7 +96,7 @@ const host: DesktopHost = {
   },
   onTranslucentChange: (listener) => {
     materialListeners.add(listener);
-    // The page read the material it booted with; it may have changed since.
+    // The material may have changed since the page read `translucent` at boot.
     if (translucent !== config.translucent) listener(translucent);
     return () => {
       materialListeners.delete(listener);

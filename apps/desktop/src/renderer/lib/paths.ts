@@ -1,9 +1,6 @@
-export function splitPath(full: string): { parent: string; name: string } {
-  const trimmed = full.replace(/[\\/]+$/, '');
-  const i = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
-  return i <= 0
-    ? { parent: trimmed.slice(0, i + 1) || trimmed, name: trimmed.slice(i + 1) }
-    : { parent: trimmed.slice(0, i), name: trimmed.slice(i + 1) };
+export function baseName(full: string): string {
+  const parts = full.replace(/[\\/]+$/, '').split(/[\\/]/);
+  return parts[parts.length - 1];
 }
 
 export function joinPath(parent: string, name: string, platform: string): string {
@@ -11,8 +8,7 @@ export function joinPath(parent: string, name: string, platform: string): string
   return parent.endsWith(sep) ? `${parent}${name}` : `${parent}${sep}${name}`;
 }
 
-// Mirrors the CLI's sanitizeDirName: it refuses names a shell would trip on.
-// A name of only dots is the parent folder itself or one above it, not a child.
+// Mirrors the CLI's sanitizeDirName; an all-dots name would resolve to a parent, not a child.
 export function sanitizeName(value: string): string {
   const safe = value
     .trim()

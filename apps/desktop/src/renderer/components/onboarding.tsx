@@ -20,10 +20,18 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { ProviderLogo } from '@/components/agent/provider-logo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { AgentInfo, AppState } from '../../shared/types';
+import type { AgentInfo } from '../../shared/types';
 import { desktop, TELEMETRY_DOCS_URL } from '../lib/desktop';
-import { splitPath } from '../lib/paths';
-import { DownloadStatus, IDLE_LOGIN, type Login, LoginCodeForm, useAgents } from './agents-section';
+import { baseName } from '../lib/paths';
+import type { WorkspaceChoiceProps } from '../lib/workspace-actions';
+import {
+  BrowserHint,
+  DownloadStatus,
+  type Login,
+  LoginButton,
+  LoginCodeForm,
+  useAgents,
+} from './agents-section';
 import {
   AgentsScene,
   CommentScene,
@@ -33,7 +41,7 @@ import {
   PresentScene,
   WorkspaceScene,
 } from './onboarding-scenes';
-import { LineLoader, StatusDot } from './primitives';
+import { ErrorNote, LineLoader, StatusDot } from './primitives';
 
 type Step = {
   kind: 'feature' | 'agents' | 'workspace';
@@ -123,13 +131,17 @@ const STEPS: Step[] = [
 
 const LAST = STEPS.length - 1;
 
+const stagger = (i: number) => ({ '--i': i }) as React.CSSProperties;
+
+const inlineLink =
+  'rounded-[4px] underline decoration-foreground/15 underline-offset-[3px] outline-none hover:text-foreground hover:decoration-foreground/50 focus-visible:ring-2 focus-visible:ring-ring/40';
+
 function subscribeVisibility(listener: () => void) {
   document.addEventListener('visibilitychange', listener);
   return () => document.removeEventListener('visibilitychange', listener);
 }
 
-// The window may sit hidden or covered by the intro while this mounts; the
-// entrance waits until someone can actually see it, then stays put.
+// The window may mount hidden or under the intro; hold the entrance until it is visible.
 function useArmed(ready: boolean): boolean {
   const visible = useSyncExternalStore(
     subscribeVisibility,
@@ -142,21 +154,8 @@ function useArmed(ready: boolean): boolean {
   return armed;
 }
 
-export function Onboarding({
-  state,
-  error,
-  starting,
-  onChoose,
-  onStart,
-  onOpenRecent,
-}: {
-  state: AppState;
-  error: string | null;
-  starting: boolean;
-  onChoose: () => void;
-  onStart: () => void;
-  onOpenRecent: (path: string) => void;
-}) {
+export function Onboarding(props: WorkspaceChoiceProps) {
+  const { state, starting, onStart } = props;
   const armed = useArmed(!state.intro);
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -200,9 +199,8 @@ export function Onboarding({
 
   if (!armed) return null;
 
-  const { kind, eyebrow, title, body, Scene, points } = STEPS[step] ?? STEPS[0];
+  const { kind, eyebrow, title, body, Scene, points } = STEPS[step];
   const motion = { '--dir': direction } as React.CSSProperties;
-  const isMac = state.platform === 'darwin';
 
   return (
     <div className="relative h-full overflow-hidden" onPointerMove={onPointerMove}>
@@ -212,10 +210,7 @@ export function Onboarding({
         <div className="flex min-h-0 flex-1 overflow-y-auto px-10 py-6">
           <div className="m-auto grid w-full max-w-[1320px] grid-cols-[clamp(280px,26vw,360px)_minmax(0,1fr)] items-center gap-[clamp(32px,4.5vw,72px)]">
             <div key={step} className="flex flex-col py-2" style={motion}>
-              <p
-                className="ob-in flex items-center gap-2.5"
-                style={{ '--i': 0 } as React.CSSProperties}
-              >
+              <p className="ob-in flex items-center gap-2.5" style={stagger(0)}>
                 <span className="nums font-mono text-[11px] font-medium text-brand">
                   {String(step + 1).padStart(2, '0')}
                 </span>
@@ -224,14 +219,14 @@ export function Onboarding({
               </p>
               <h1
                 className="ob-in mt-4 font-heading text-[clamp(26px,2.5vw,36px)] leading-[1.06] font-semibold tracking-[-0.038em] text-balance"
-                style={{ '--i': 1 } as React.CSSProperties}
+                style={stagger(1)}
               >
                 <span className="block">{title[0]}</span>
                 <span className="block text-foreground/35">{title[1]}</span>
               </h1>
               <p
                 className="ob-in mt-4 text-[clamp(13px,1vw,14.5px)] leading-relaxed text-pretty text-muted-foreground"
-                style={{ '--i': 2 } as React.CSSProperties}
+                style={stagger(2)}
               >
                 {body}
               </p>
@@ -241,7 +236,7 @@ export function Onboarding({
                     <li
                       key={label}
                       className="ob-in flex items-center gap-3 text-[13px] font-medium"
-                      style={{ '--i': 3 + i * 0.6 } as React.CSSProperties}
+                      style={stagger(3 + i * 0.6)}
                     >
                       <Icon className="size-[15px] shrink-0 text-brand" aria-hidden />
                       {label}
@@ -250,20 +245,8 @@ export function Onboarding({
                 </ul>
               )}
               {kind !== 'feature' && (
-                <div className="ob-in mt-7" style={{ '--i': 3 } as React.CSSProperties}>
-                  {kind === 'agents' ? (
-                    <AgentList />
-                  ) : (
-                    <WorkspaceChoices
-                      isMac={isMac}
-                      state={state}
-                      error={error}
-                      starting={starting}
-                      onChoose={onChoose}
-                      onStart={onStart}
-                      onOpenRecent={onOpenRecent}
-                    />
-                  )}
+                <div className="ob-in mt-7" style={stagger(3)}>
+                  {kind === 'agents' ? <AgentList /> : <WorkspaceChoices {...props} />}
                 </div>
               )}
             </div>
@@ -288,28 +271,17 @@ export function Onboarding({
 
         <footer
           className="ob-in grid h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-t border-hairline px-5"
-          style={{ '--i': 5 } as React.CSSProperties}
+          style={stagger(5)}
         >
           <div>
-            {step < LAST ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                onClick={() => go(LAST)}
-              >
-                Skip tour
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                onClick={() => desktop.onboarding.finish()}
-              >
-                Not now
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => (step < LAST ? go(LAST) : desktop.onboarding.finish())}
+            >
+              {step < LAST ? 'Skip tour' : 'Not now'}
+            </Button>
           </div>
           <Progress step={step} onSelect={go} />
           <div className="flex justify-end gap-1">
@@ -376,7 +348,7 @@ function Progress({ step, onSelect }: { step: number; onSelect: (step: number) =
 }
 
 function AgentList() {
-  const { agents, logins, signIn, signOut, dismiss } = useAgents();
+  const { agents, login, signIn, signOut, dismiss } = useAgents();
   return (
     <div className="w-full">
       <div className="overflow-hidden rounded-[12px] border border-border bg-card text-left shadow-edge">
@@ -389,9 +361,9 @@ function AgentList() {
             <AgentRow
               key={agent.id}
               agent={agent}
-              login={logins[agent.id] ?? IDLE_LOGIN}
+              login={login(agent.id)}
               className={cn(i > 0 && 'border-t border-hairline')}
-              onSignIn={() => void signIn(agent.id)}
+              onSignIn={() => signIn(agent.id)}
               onSignOut={() => void signOut(agent.id)}
               onDismiss={() => dismiss(agent.id)}
             />
@@ -447,24 +419,15 @@ function AgentRow({
             <span className="selectable truncate">{status.label}</span>
           </p>
         </div>
-        {available &&
-          (login.running ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => desktop.agents.cancelLogin(agent.id)}
-            >
-              Cancel
-            </Button>
-          ) : agent.signedIn ? (
-            <Button size="sm" variant="ghost" onClick={onSignOut}>
-              Sign out
-            </Button>
-          ) : (
-            <Button size="sm" variant="outline" onClick={onSignIn}>
-              Sign in
-            </Button>
-          ))}
+        {available && (
+          <LoginButton
+            agent={agent}
+            running={login.running}
+            signInVariant="outline"
+            onSignIn={onSignIn}
+            onSignOut={onSignOut}
+          />
+        )}
       </div>
       {login.download && (
         <div className="ob-pop mt-3 pl-11">
@@ -473,21 +436,7 @@ function AgentRow({
       )}
       {login.running && !login.download && (
         <div className="ob-pop mt-3 flex flex-col gap-2 pl-11">
-          <p className="text-[12px] leading-relaxed">
-            Finish signing in from your browser.
-            {login.url && (
-              <>
-                {' '}
-                <button
-                  type="button"
-                  className="font-medium underline decoration-foreground/30 underline-offset-2 hover:decoration-foreground"
-                  onClick={() => login.url && desktop.openExternal(login.url)}
-                >
-                  Open it again
-                </button>
-              </>
-            )}
-          </p>
+          <BrowserHint url={login.url} linkLabel="Open it again" className="text-[12px]" />
           <LoginCodeForm id={agent.id} />
         </div>
       )}
@@ -504,22 +453,13 @@ function AgentRow({
 }
 
 function WorkspaceChoices({
-  isMac,
   state,
   error,
   starting,
   onChoose,
   onStart,
   onOpenRecent,
-}: {
-  isMac: boolean;
-  state: AppState;
-  error: string | null;
-  starting: boolean;
-  onChoose: () => void;
-  onStart: () => void;
-  onOpenRecent: (path: string) => void;
-}) {
+}: WorkspaceChoiceProps) {
   const current = state.workspace;
   const recent = state.recent.filter((path) => path !== current?.root).slice(0, 3);
   return (
@@ -540,16 +480,12 @@ function WorkspaceChoices({
           icon={<FolderOpen className="size-4" />}
           title="Open a folder…"
           description="Pick up an open-slide folder you already have."
-          shortcut={isMac ? '⌘O' : 'Ctrl O'}
+          shortcut={state.platform === 'darwin' ? '⌘O' : 'Ctrl O'}
           disabled={starting}
           onClick={onChoose}
         />
       </div>
-      {error && (
-        <p className="mt-3 w-full rounded-[8px] border border-destructive/25 bg-destructive/5 px-3 py-2 text-[12.5px] leading-relaxed text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <ErrorNote className="mt-3 w-full">{error}</ErrorNote>}
       {current && (
         <Button
           variant="link"
@@ -571,9 +507,12 @@ function WorkspaceChoices({
               title={path}
               disabled={starting}
               onClick={() => onOpenRecent(path)}
-              className="rounded-[4px] text-[12.5px] font-medium text-foreground/70 underline decoration-foreground/15 underline-offset-[3px] outline-none transition-colors hover:text-foreground hover:decoration-foreground/50 focus-visible:ring-2 focus-visible:ring-ring/40"
+              className={cn(
+                inlineLink,
+                'text-[12.5px] font-medium text-foreground/70 transition-colors',
+              )}
             >
-              {splitPath(path).name}
+              {baseName(path)}
             </button>
           ))}
         </div>
@@ -583,7 +522,7 @@ function WorkspaceChoices({
         <button
           type="button"
           onClick={() => desktop.openExternal(TELEMETRY_DOCS_URL)}
-          className="rounded-[4px] underline decoration-foreground/15 underline-offset-[3px] outline-none hover:text-foreground hover:decoration-foreground/50 focus-visible:ring-2 focus-visible:ring-ring/40"
+          className={inlineLink}
         >
           What’s collected
         </button>

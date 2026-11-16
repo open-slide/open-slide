@@ -1,4 +1,4 @@
-import { type BrowserWindow, dialog, type MessageBoxOptions } from 'electron';
+import { type BrowserWindow, dialog } from 'electron';
 import type {
   CreateWorkspaceRequest,
   LogTask,
@@ -19,9 +19,12 @@ import {
   installDependencies,
 } from './workspace';
 
-// `created` is a workspace this app just scaffolded; `restored` is the one
-// reopened on launch. The rest name where the user asked from.
-export type OpenSource = 'restored' | 'created' | 'shell' | 'menu';
+// `created` was just scaffolded by this app; `restored` is reopened on launch.
+type OpenSource = 'restored' | 'created' | 'shell' | 'menu';
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 type Tabs = {
   readonly session: DeckSession;
@@ -32,8 +35,6 @@ type Tabs = {
 type Options = {
   tabs: () => Tabs | null;
   server: { start(root: string): Promise<void>; markInstalling(): void };
-  // Brings the main window up, creating it when there is none: a workspace
-  // must never start behind no window at all.
   ensureWindow: () => Promise<BrowserWindow>;
   env: () => Promise<NodeJS.ProcessEnv>;
   log: (task: LogTask, chunk: string) => void;
@@ -42,10 +43,6 @@ type Options = {
   onChange: () => void;
 };
 
-// The one owner of which workspace is open. Every way in (the menu, the
-// shell, settings, a restored session, a freshly created folder) goes through
-// here, so trust, unsaved work, the server switch and failures are handled the
-// same way for all of them.
 export class WorkspaceController {
   current: WorkspaceInfo | null = null;
   error: WorkspaceError | null = null;
@@ -54,8 +51,7 @@ export class WorkspaceController {
 
   constructor(private readonly opts: Options) {}
 
-  // Resolves ok when the workspace opened and also when the user backed out;
-  // only a real failure is an error, and it is kept for the shell to show.
+  // Resolves ok when the user backed out too; only a real failure is kept for the shell to show.
   open(root: string, source: OpenSource): Promise<TaskResult> {
     return this.report(this.transition(() => this.switchTo(root, source)));
   }
@@ -81,13 +77,12 @@ export class WorkspaceController {
         `“${picked.name}” isn’t an open-slide workspace. Pick a folder with one, an empty folder to set up, or create a new workspace.`,
       );
     } catch (err) {
-      this.fail(err instanceof Error ? err.message : String(err));
+      this.fail(errorMessage(err));
     }
     return null;
   }
 
-  // The dialog that asked for the workspace shows how creating it went, so a
-  // failure here is returned without also being raised on the shell.
+  // The dialog that asked shows the failure, so it is not also raised on the shell.
   async create(request: CreateWorkspaceRequest): Promise<TaskResult> {
     const created = await this.scaffold('custom', request.packageManager, async () =>
       createWorkspace(request, await this.opts.env(), (chunk) => this.opts.log('create', chunk)),
@@ -97,8 +92,6 @@ export class WorkspaceController {
     return this.transition(() => this.switchTo(created.root, 'created'));
   }
 
-  // Nothing else shows how a quick start went, so every way it can fail,
-  // a scaffold that throws included, is raised on the shell.
   createDefault(): Promise<TaskResult> {
     return this.report(
       (async () => {
@@ -106,8 +99,7 @@ export class WorkspaceController {
           createDefaultWorkspace(await this.opts.env(), (chunk) => this.opts.log('create', chunk)),
         );
         if (!created.ok) return created;
-        // A project that was already at the default location is not this app's
-        // work: it is opened like any other folder, and asked about first.
+        // A project already at the default location is not ours, so trust is asked for.
         const source = created.created ? 'created' : 'shell';
         return this.transition(() => this.switchTo(created.root, source));
       })(),
@@ -149,7 +141,6 @@ export class WorkspaceController {
   ): Promise<CreateResult> {
     const started = Date.now();
     const result = await create();
-    // Finding the default workspace already there created nothing.
     if (!result.ok || result.created) {
       track(result.ok ? 'workspace_created' : 'workspace_create_failed', {
         method,
@@ -160,8 +151,7 @@ export class WorkspaceController {
     return result;
   }
 
-  // One switch at a time: each waits on the user, and two interleaved would
-  // leave the tabs of one workspace on the server of another.
+  // Two interleaved switches would leave one workspace's tabs on another's server.
   private transition<T>(task: () => Promise<T>): Promise<T> {
     const run = this.queue.then(task);
     this.queue = run.catch(() => {});
@@ -177,10 +167,7 @@ export class WorkspaceController {
   private async report(attempt: Promise<TaskResult>): Promise<TaskResult> {
     this.clearError();
     const result = await attempt.catch(
-      (err: unknown): TaskResult => ({
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      }),
+      (err: unknown): TaskResult => ({ ok: false, error: errorMessage(err) }),
     );
     if (!result.ok) this.fail(result.error);
     return result;
@@ -196,10 +183,11 @@ export class WorkspaceController {
     if (inspection.kind !== 'project') {
       return { ok: false, error: `${inspection.path} is not an open-slide workspace.` };
     }
-    const window = source === 'restored' ? null : await this.opts.ensureWindow();
-    if (!(await this.confirmTrust(inspection.path, inspection.name, source, window))) {
-      return { ok: true };
-    }
+    const trusted =
+      source === 'restored'
+        ? settings.trusted(inspection.path)
+        : await this.confirmTrust(inspection.path, inspection.name, source);
+    if (!trusted) return { ok: true };
     const tabs = this.opts.tabs();
     if (tabs && !(await tabs.confirmLeave('switch'))) return { ok: true };
     track('workspace_opened', { source });
@@ -216,30 +204,18 @@ export class WorkspaceController {
     return { ok: true };
   }
 
-  // Opening a workspace runs its config and slides with the user's
-  // permissions, and its decks can drive the agents they are signed in to. One
-  // this app just scaffolded is trusted; any other folder is asked about once,
-  // and is never reopened on launch before that.
-  private async confirmTrust(
-    root: string,
-    name: string,
-    source: OpenSource,
-    window: BrowserWindow | null,
-  ): Promise<boolean> {
+  private async confirmTrust(root: string, name: string, source: OpenSource): Promise<boolean> {
+    const window = await this.opts.ensureWindow();
     if (settings.trusted(root)) return true;
-    if (source === 'restored') return false;
     if (source !== 'created') {
-      const options: MessageBoxOptions = {
+      const { response } = await dialog.showMessageBox(window, {
         type: 'question',
         message: `Do you trust the authors of “${name}”?`,
         detail: `Opening this workspace runs its code on your computer, and its decks can use the agents you are signed in to. Only open folders from people you trust.\n\n${root}`,
         buttons: ['Trust and Open', 'Cancel'],
         defaultId: 1,
         cancelId: 1,
-      };
-      const { response } = await (window
-        ? dialog.showMessageBox(window, options)
-        : dialog.showMessageBox(options));
+      });
       if (response !== 0) return false;
     }
     settings.trust(root);

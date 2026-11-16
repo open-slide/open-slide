@@ -129,9 +129,8 @@ export function EditorSidebar({
   );
 }
 
-// Whether to fade in is fixed when the pane mounts: toggling the animation on a
-// pane that is already showing would replay it. A hidden pane can pick it up
-// safely, since it only plays once the pane is shown again.
+// Fixed at mount, since toggling the fade on a showing pane would replay it; a
+// hidden pane can pick it up, as it only plays once shown again.
 function SwapPane({
   animate,
   hidden = false,

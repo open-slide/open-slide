@@ -17,9 +17,7 @@ body {
   cursor: default;
 }
 
-/* The raw material lets saturated wallpaper bleed across the whole frame, so
-   the shell lays one neutral wash over it. Deck views stay clear above this
-   page and pick up the same wash, keeping every chrome region one tone. */
+/* Neutral wash so saturated wallpaper doesn't tint the translucent chrome; deck views sit clear above it. */
 html[data-translucent] body {
   background-color: oklch(0.975 0 0 / 0.6);
 }
@@ -42,13 +40,11 @@ textarea,
   -webkit-app-region: no-drag;
 }
 
-/* Native chrome loses its ink when the window isn't key; backgrounds stay so
-   the selected tab or pane still reads as selected. */
+/* Like native chrome: dim the ink, not the backgrounds, while the window isn't key. */
 [data-inactive] .window-chrome :is(svg, img, span):not(:has(svg, img, span)) {
   opacity: 0.55;
 }
 
-/* Sheets dim what they cover lightly and never blur it. */
 [data-slot="dialog-overlay"] {
   backdrop-filter: none;
   background-color: oklch(0 0 0 / 0.08);
@@ -58,7 +54,6 @@ textarea,
   background-color: oklch(0 0 0 / 0.3);
 }
 
-/* The intro window is clear so it can open over the desktop. */
 html[data-route="intro"] body {
   background-color: transparent;
 }
@@ -174,7 +169,6 @@ html[data-route="intro"] body {
   animation: ob-caret 1.05s steps(1) infinite;
 }
 
-/* Hairline grid that only shows near the middle of the window. */
 .ob-grid {
   background-image:
     linear-gradient(to right, var(--hairline) 1px, transparent 1px),
@@ -185,8 +179,7 @@ html[data-route="intro"] body {
   opacity: 0.6;
 }
 
-/* Light spilling from beneath the stage. The gradient is its own softness: a
-   blur filter here would be redone on every frame the glow breathes. */
+/* No blur filter: it would re-rasterize on every breathe frame. */
 .ob-glow {
   inset: 26% 2% -20%;
   border-radius: 9999px;
@@ -254,8 +247,7 @@ html[data-route="intro"] body {
   animation: ob-shimmer 1.6s linear infinite;
 }
 
-/* Registered as non-inheriting, so a pointer move restyles the stage alone
-   instead of every element of the scene inside it. */
+/* Non-inheriting so a pointer move restyles only the stage, not the scene inside it. */
 @property --tilt-x {
   syntax: "<angle>";
   inherits: false;
@@ -268,9 +260,8 @@ html[data-route="intro"] body {
   initial-value: 0deg;
 }
 
-/* The stage leans toward the pointer, a few degrees at most. */
 .ob-tilt {
-  transform: perspective(1600px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  transform: perspective(1600px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
   transition: transform 900ms var(--ease-swift);
 }
 

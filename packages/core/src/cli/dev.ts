@@ -30,9 +30,8 @@ export async function dev(opts: DevOptions = {}): Promise<void> {
 
 async function startServer(opts: DevOptions): Promise<void> {
   let server: ViteDevServer | undefined;
-  // A supervisor that crashes or is force-quit sends no signal; its closed IPC
-  // channel is the only notice, and without it the server would keep the port.
-  // It can close while the server is still starting, so this listens first.
+  // A supervisor that crashes sends no signal, only closes the IPC channel, and
+  // can do so while the server is still starting.
   process.once('disconnect', () => {
     void Promise.resolve(server?.close()).finally(() => process.exit(0));
   });

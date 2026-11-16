@@ -28,7 +28,7 @@ import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-edi
 import { independentTargets } from '@/lib/inspector/visual-dom';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
-import { trackWrite, useUnsavedSource } from '@/lib/unsaved';
+import { createSaveQueue, trackWrite, useUnsavedSource } from '@/lib/unsaved';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
 import { AssetPickerDialog } from './asset-picker-dialog';
@@ -539,7 +539,7 @@ export function InspectorProvider({
   );
   const instanceCounterRef = useRef(0);
   const pendingSeqRef = useRef(0);
-  const commitInflightRef = useRef<Promise<void> | null>(null);
+  const [commitQueue] = useState(createSaveQueue);
   const commitFailureRef = useRef<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [committing, setCommitting] = useState(false);
@@ -1184,21 +1184,8 @@ export function InspectorProvider({
     }
   }, [applyEdits, history, refreshCount, t]);
 
-  // One write at a time: a second commit starting while the first is in
-  // flight would send the same buffered ops twice.
-  const commitEdits = useCallback(() => {
-    const previous = commitInflightRef.current;
-    const run = (async () => {
-      await previous?.catch(() => {});
-      await writeEdits();
-    })();
-    commitInflightRef.current = run;
-    const release = () => {
-      if (commitInflightRef.current === run) commitInflightRef.current = null;
-    };
-    run.then(release, release);
-    return run;
-  }, [writeEdits]);
+  // Two commits in flight would send the same buffered ops twice.
+  const commitEdits = useCallback(() => commitQueue.run(writeEdits), [commitQueue, writeEdits]);
 
   const cancelEdits = useCallback(() => {
     if (pendingRef.current.size === 0) {
@@ -1237,8 +1224,7 @@ export function InspectorProvider({
     history.clear();
   }, [history]);
 
-  // Rejects while edits are still buffered, whether the write failed outright
-  // or only some of its edits did.
+  // Rejects while any edit is still buffered, even when only some of them failed.
   const saveEdits = async () => {
     await commitEdits().catch(() => {});
     if (hasBufferedOps(pendingRef.current)) {
@@ -1257,15 +1243,14 @@ export function InspectorProvider({
   useEffect(() => {
     if (!active) commitRef.current().catch(() => {});
   }, [active]);
-  // Nothing is left to report the edits once this unmounts, so a flush that
-  // leaves any behind stays tracked as unsaved work, keyed by their buffer.
+  // Nothing else reports the edits once this unmounts.
   useEffect(() => {
     return () => trackWrite(pendingRef, () => saveRef.current());
   }, []);
 
   useUnsavedSource({
     kind: 'draft',
-    dirty: () => commitInflightRef.current !== null || hasBufferedOps(pendingRef.current),
+    dirty: () => commitQueue.busy() || hasBufferedOps(pendingRef.current),
     save: saveEdits,
     discard: cancelEdits,
   });

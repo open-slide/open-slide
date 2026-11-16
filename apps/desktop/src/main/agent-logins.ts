@@ -21,14 +21,12 @@ function idle(id: AgentId, operation: number): LoginState {
   return { id, operation, phase: 'idle', output: '', url: null, download: null, error: null };
 }
 
-// Sign-ins outlive the window that started them, so their state lives here and
-// every surface renders the same snapshot. Each attempt carries an operation
-// number: whatever a cancelled or replaced attempt still reports is ignored.
+// Sign-ins outlive the window that started them, so every surface renders this one snapshot.
+// What a cancelled or replaced attempt still reports is dropped by its operation number.
 export class AgentLogins {
   private readonly states = new Map<AgentId, LoginState>(AGENT_IDS.map((id) => [id, idle(id, 0)]));
   private readonly running = new Map<AgentId, Running>();
-  // A cancelled CLI may still hold its callback port while it exits, so the
-  // next attempt waits for it.
+  // A cancelled CLI may still hold its callback port while it exits, so a retry waits for it.
   private readonly ending = new Map<AgentId, Promise<unknown>>();
 
   constructor(private readonly opts: Options) {}
@@ -118,7 +116,6 @@ export class AgentLogins {
     this.set(idle(id, current.operation));
   }
 
-  // Clears what a finished attempt left on screen.
   dismiss(id: AgentId) {
     if (this.running.has(id)) return;
     const state = this.state(id);

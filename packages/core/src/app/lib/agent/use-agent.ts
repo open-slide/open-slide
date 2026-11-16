@@ -39,8 +39,7 @@ type State = {
   connectErrors: Partial<Record<AgentProviderId, string>>;
   newDeck: string | null;
   handoff: Handoff | null;
-  // Counts handoffs taken here, so one naming the session already active is
-  // still seen.
+  // Bumped per handoff taken, so one naming the already active session still registers.
   handoffs: number;
 };
 
@@ -177,8 +176,7 @@ function upsertSummary(list: AgentSessionSummary[], summary: AgentSessionSummary
   );
 }
 
-// One list per snapshot request in flight, collecting the events that arrive
-// while it is out.
+// Events that arrive while each snapshot request is in flight.
 const recovering = new Set<AgentStreamEvent[]>();
 
 function applyEvent(event: AgentStreamEvent) {
@@ -186,8 +184,7 @@ function applyEvent(event: AgentStreamEvent) {
   reduceEvent(event);
 }
 
-// A snapshot can land after events newer than it, and replacing state with it
-// undoes them, so the ones it does not include are applied again on top.
+// A snapshot can land after newer events; replaying the ones it lacks keeps them.
 async function loadSnapshot<T>(
   path: string,
   apply: (snapshot: T) => void,
@@ -322,8 +319,7 @@ async function loadSessions(): Promise<void> {
       ({ sessions }) => setState({ sessions, sessionsLoaded: true }),
       (event) => event.type === 'session' || event.type === 'session-removed',
     );
-    // Checked once the events the snapshot missed are back on top of it: a
-    // session created while it was out is not in it, but is still there.
+    // Only after the replay, which restores sessions created while the request was out.
     setState((prev) =>
       prev.activeId && !prev.sessions.some((s) => s.id === prev.activeId) ? { activeId: null } : {},
     );
@@ -459,9 +455,9 @@ if (available) {
   });
 }
 
-// The desktop app keeps each deck in a tab of its own: separate pages sharing
-// one origin. A session picked for another deck is left in storage for that
-// deck's tab, which reaches one that is already open as well as one yet to load.
+// Each desktop tab is a separate page on one origin, so a session picked for
+// another deck goes through storage, reaching that deck's tab whether it is
+// already open or yet to load.
 export function openSessionInHost(slideId: string, sessionId: string): boolean {
   if (!desktopHost) return false;
   writeStorage(HANDOFF_KEY, JSON.stringify({ slideId, sessionId, at: Date.now() }));

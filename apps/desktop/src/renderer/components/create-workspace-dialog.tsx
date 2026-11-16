@@ -11,15 +11,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import type { PackageManager } from '../../shared/types';
 import { desktop, settle, useAppState, useLog } from '../lib/desktop';
 import { joinPath, sanitizeName, tildify } from '../lib/paths';
-import { LineLoader, LogView } from './primitives';
+import { LoadingLabel, LogView, Segmented } from './primitives';
 
-// `fixed` sets up `parent` itself, the folder the user picked, instead of a new
-// one below it.
+// `fixed` scaffolds into `parent` itself instead of a new folder below it.
 export type CreateTarget = { parent: string; name: string; fixed: boolean };
 
 type Phase = { kind: 'form' } | { kind: 'running' } | { kind: 'failed'; error: string };
@@ -27,11 +25,9 @@ type Phase = { kind: 'form' } | { kind: 'running' } | { kind: 'failed'; error: s
 export function CreateWorkspaceDialog({
   target,
   onClose,
-  onCreated,
 }: {
   target: CreateTarget | null;
   onClose: () => void;
-  onCreated: () => void;
 }) {
   const state = useAppState();
   const platform = state?.platform ?? 'darwin';
@@ -45,8 +41,7 @@ export function CreateWorkspaceDialog({
   const creating = useRef(false);
 
   useEffect(() => {
-    // The menu can ask for another workspace while one is being created; that
-    // creation keeps the dialog until it ends.
+    // A menu request for another workspace mid-creation must not replace the running one.
     if (creating.current) return;
     setShown(target);
     if (!target) return;
@@ -74,13 +69,15 @@ export function CreateWorkspaceDialog({
     creating.current = true;
     setPhase({ kind: 'running' });
     setLog('');
-    // A picked folder is set up in place, so its name never needs to be shell-safe.
-    const request = fixed
-      ? { parent, name: '.', packageManager: manager }
-      : { parent, name: folderName, packageManager: manager };
-    const result = await settle(desktop.workspace.create(request));
+    const result = await settle(
+      desktop.workspace.create({
+        parent,
+        name: fixed ? '.' : folderName,
+        packageManager: manager,
+      }),
+    );
     creating.current = false;
-    if (result.ok) onCreated();
+    if (result.ok) onClose();
     else setPhase({ kind: 'failed', error: result.error });
   };
 
@@ -94,8 +91,6 @@ export function CreateWorkspaceDialog({
       <DialogContent
         showCloseButton={false}
         className={cn(
-          // A sheet: it drops from just under the tab strip instead of
-          // zooming in at the center of the window.
           'top-12 translate-y-0 rounded-[12px] sm:max-w-[480px]',
           'transition-[translate,opacity] duration-200 ease-(--ease-swift)',
           'data-starting-style:scale-100 motion-safe:data-starting-style:-translate-y-3',
@@ -159,20 +154,12 @@ export function CreateWorkspaceDialog({
             <div className="flex flex-col gap-1.5">
               <Label>Package manager</Label>
               {managers.length > 0 ? (
-                <ToggleGroup
-                  variant="outline"
-                  size="sm"
-                  value={[manager]}
-                  onValueChange={(value: string[]) => {
-                    if (value[0]) setManager(value[0] as PackageManager);
-                  }}
-                >
-                  {managers.map((pm) => (
-                    <ToggleGroupItem key={pm} value={pm} className="font-mono">
-                      {pm}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
+                <Segmented
+                  mono
+                  value={manager}
+                  options={managers}
+                  onChange={(next) => next && setManager(next)}
+                />
               ) : (
                 <p className="text-[12px] text-amber-600 dark:text-amber-400">
                   No package manager found on your PATH. Install Node.js, then try again.
@@ -183,10 +170,7 @@ export function CreateWorkspaceDialog({
         ) : (
           <div className="flex flex-col gap-3">
             {running ? (
-              <div className="flex items-center gap-3">
-                <LineLoader className="w-24" />
-                <span className="eyebrow">Creating workspace</span>
-              </div>
+              <LoadingLabel>Creating workspace</LoadingLabel>
             ) : (
               <p className="text-[12.5px] text-destructive">
                 {phase.kind === 'failed' ? phase.error : null}

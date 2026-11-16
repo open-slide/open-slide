@@ -1,6 +1,5 @@
-// `to` is a gap in the strip as it is drawn, with the dragged tab still in
-// place, so a move to the right lands one slot earlier once the tab is lifted
-// out. Slot 0 belongs to Home.
+// `to` is a gap in the strip with the dragged tab still in place, so a move to
+// the right lands one slot earlier once it is lifted out. Slot 0 is Home.
 export function moveTab<T>(tabs: readonly T[], from: number, to: number): T[] {
   const next = [...tabs];
   if (from < 1 || from >= next.length || !Number.isInteger(to)) return next;

@@ -55,7 +55,6 @@ describe('entryFromPackageJson', () => {
 });
 
 describe('findOnPath', () => {
-  // Windows only matches a PATHEXT extension.
   const exe = process.platform === 'win32' ? '.exe' : '';
 
   it('finds an executable file in PATH directories', async () => {

@@ -115,7 +115,6 @@ function setup(...answers: string[]) {
   manager.setBaseUrl(BASE);
   manager.setOverlay(false);
 
-  // Opens a deck and waits for its view to finish loading.
   const open = async (slideId: string, script?: PageScript) => {
     manager.openDeck(slideId);
     const view = fixture.views.at(-1);

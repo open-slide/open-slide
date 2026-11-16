@@ -2,11 +2,9 @@ import { useEffect, useRef } from 'react';
 import type { UnsavedAction, UnsavedOutcome, UnsavedStatus } from './desktop-host';
 
 export type UnsavedSource = {
-  // A draft waits for the user to save it; autosaved work is written on its
-  // own and is only unsaved until that write lands.
+  // A draft waits for the user to save it; autosaved work is unsaved only until its write lands.
   kind: 'draft' | 'autosave';
   dirty: () => boolean;
-  // Rejects when the work could not be written.
   save: () => Promise<void>;
   discard: () => void;
 };
@@ -26,9 +24,8 @@ export function registerUnsaved(source: UnsavedSource): () => void {
 }
 
 // For a write that outlives the component that started it, such as a flush on
-// unmount: nothing else would still report it as unsaved. One that fails is
-// kept and run again the next time the page is asked to save, until it lands
-// or the work is abandoned. A newer write under the same key takes its place.
+// unmount. A failed one is retried on the next save until it lands or the work
+// is abandoned; a newer write under the same key replaces it.
 export function trackWrite(key: unknown, write: Write): void {
   const attempt = write();
   writes.set(key, attempt);
@@ -44,8 +41,6 @@ export function trackWrite(key: unknown, write: Write): void {
   );
 }
 
-// For state kept on behalf of tracked writes, which goes with them when the
-// work is abandoned.
 export function onAbandon(listener: () => void): () => void {
   abandonListeners.add(listener);
   return () => {
@@ -53,7 +48,7 @@ export function onAbandon(listener: () => void): () => void {
   };
 }
 
-// For work that reached disk some other way since its tracked write failed.
+// For work that reached disk some other way after its tracked write failed.
 export function forgetWrite(key: unknown): void {
   failed.delete(key);
 }
@@ -67,6 +62,11 @@ export function unsavedStatus(): UnsavedStatus {
     else pending = true;
   }
   return { drafts, pending };
+}
+
+export function hasUnsaved(): boolean {
+  const { drafts, pending } = unsavedStatus();
+  return drafts || pending;
 }
 
 function describe(error: unknown): string {
@@ -88,7 +88,7 @@ export async function settleUnsaved(action: UnsavedAction): Promise<UnsavedOutco
     }
   }
   if (action === 'abandon') {
-    // Dropped while still in flight too, so one that fails later is not kept.
+    // In-flight writes too, so one that fails later is not kept for a retry.
     writes.clear();
     failed.clear();
     for (const listener of abandonListeners) listener();
@@ -99,8 +99,7 @@ export async function settleUnsaved(action: UnsavedAction): Promise<UnsavedOutco
     if (result.status === 'rejected') errors.push(describe(result.reason));
   }
   if (errors.length > 0) return { ok: false, error: errors.join(' ') };
-  const after = unsavedStatus();
-  if (after.drafts || after.pending) {
+  if (hasUnsaved()) {
     return { ok: false, error: 'More changes were made while saving.' };
   }
   return { ok: true };
@@ -120,4 +119,21 @@ export function useUnsavedSource(source: UnsavedSource) {
       }),
     [kind],
   );
+}
+
+// Runs saves one after another, each starting once the previous one settles.
+export function createSaveQueue() {
+  let tail: Promise<unknown> = Promise.resolve();
+  let size = 0;
+  return {
+    run<T>(task: () => Promise<T>, onIdle?: () => void): Promise<T> {
+      size++;
+      const result = tail.then(task).finally(() => {
+        if (--size === 0) onIdle?.();
+      });
+      tail = result.catch(() => {});
+      return result;
+    },
+    busy: () => size > 0,
+  };
 }

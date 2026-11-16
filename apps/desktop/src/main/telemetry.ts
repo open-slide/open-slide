@@ -32,10 +32,8 @@ function enabled(): boolean {
   return client !== null && settings.get().telemetry;
 }
 
-// Events wait here, not inside the SDK, until a batch is due: the SDK has no
-// way to drop what it already queued, and an opt-out has to. The tour is also
-// where the user is told about telemetry and how to turn it off, so nothing
-// leaves before it ends.
+// Events wait here rather than in the SDK, which cannot drop what it queued, as an opt-out
+// must. Nothing leaves before the tour that announces telemetry ends.
 const waiting: ((client: PostHog) => void)[] = [];
 let batchTimer: NodeJS.Timeout | null = null;
 
@@ -51,12 +49,17 @@ function clearBatchTimer() {
   batchTimer = null;
 }
 
-function deliverWaiting() {
+function dropWaiting() {
+  waiting.length = 0;
   clearBatchTimer();
+}
+
+function deliverWaiting() {
   if (!client || !enabled()) {
-    waiting.length = 0;
+    dropWaiting();
     return;
   }
+  clearBatchTimer();
   if (!settings.onboarded()) {
     if (waiting.length > 0) batchTimer = setTimeout(deliverWaiting, BATCH_INTERVAL_MS);
     return;
@@ -64,31 +67,24 @@ function deliverWaiting() {
   for (const deliver of waiting.splice(0)) deliver(client);
 }
 
-// Turning telemetry off drops everything that has not been sent yet, the SDK
-// refuses whatever an in-flight capture still tries to queue, and the transport
-// refuses retries of a batch that was already handed over.
 export function setTelemetryEnabled(on: boolean) {
   if (!client) return;
   if (on) {
     void client.optIn();
     return;
   }
-  waiting.length = 0;
-  clearBatchTimer();
+  dropWaiting();
   void client.optOut();
 }
 
-function osName(): string {
-  if (process.platform === 'darwin') return 'macOS';
-  if (process.platform === 'win32') return 'Windows';
-  if (process.platform === 'linux') return 'Linux';
-  return process.platform;
-}
+const OS_NAMES: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: 'macOS',
+  win32: 'Windows',
+  linux: 'Linux',
+};
 
-// Stack frames and messages carry absolute paths, and the home directory names
-// the user. The SDK rewrites frame paths relative to the cwd, which is `/` in a
-// packaged app, so the home directory also appears without its root. Paths are
-// matched as JSON text, so Windows backslashes are escaped; longest first.
+// The home directory names the user. The SDK makes frame paths relative to the cwd, `/` when
+// packaged, so it also appears without its root. Matched as JSON text, longest first.
 function homeNeedles(): string[] {
   const home = os.homedir();
   if (!home) return [];
@@ -111,15 +107,11 @@ function redact(event: EventMessage): EventMessage {
 
 const LOCAL_URL_RE = /(https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?)[^\s"'`)]*/g;
 const QUOTED_PATH_RE = /(['"`])(?:\/|[A-Za-z]:[\\/]|\\\\)[^'"`\n]*\1/g;
-// An unquoted path has no end of its own once folder names carry spaces, so
-// it is taken to run to the next quote, colon or line end: losing the rest of
-// a sentence is cheaper than sending half a folder name.
+// An unquoted path may contain spaces, so it runs to the next quote, colon or line end.
 const POSIX_PATH_RE = /(?<![\w.:/<])\/(?:[^\s/'":]+\/)+[^'":\n]*/g;
 const WINDOWS_PATH_RE = /(?:\b[A-Za-z]:[\\/]|(?<![\w\\])\\\\)[^'":\n]+/g;
 
-// Error messages quote whatever the failing call was given: a save path named
-// after a deck, a dev-server URL ending in a deck id. Neither leaves the
-// machine; the error's name, code and stack are enough to act on.
+// Messages quote paths named after decks and dev-server URLs ending in deck ids.
 function scrubMessage(text: string): string {
   return text
     .replace(LOCAL_URL_RE, '$1')
@@ -133,8 +125,7 @@ export function scrubError(error: unknown): Error {
   const message = scrubMessage(error.message);
   const clean = new Error(message);
   clean.name = error.name;
-  // A function, so `$&` and the like in the message are not expanded back
-  // into the text that was just scrubbed.
+  // A replacer function, so `$&` in the message is not expanded.
   clean.stack = error.stack?.replace(error.message, () => message) ?? `${error.name}: ${message}`;
   return clean;
 }
@@ -142,8 +133,7 @@ export function scrubError(error: unknown): Error {
 let errorWindowStart = 0;
 const reported = new Set<string>();
 
-// An error thrown from a frame loop or a retry would otherwise arrive once per
-// frame: each distinct error is sent once a minute, up to a cap.
+// Each distinct error is sent once a minute, up to a cap, so one thrown per frame is not a flood.
 function shouldReport(error: Error): boolean {
   const now = Date.now();
   if (now - errorWindowStart > ERROR_WINDOW_MS) {
@@ -156,8 +146,7 @@ function shouldReport(error: Error): boolean {
   return true;
 }
 
-// Kept on disk only: PostHog cannot symbolicate minidumps, so the next launch
-// reports how many appeared instead.
+// Kept on disk: PostHog cannot symbolicate minidumps, so the next launch reports a count.
 export function startCrashReporter() {
   crashReporter.start({ uploadToServer: false, compress: true });
 }
@@ -166,29 +155,25 @@ export function initTelemetry() {
   if (client || !allowed()) return;
   base = {
     $app_version: bundledCore().version,
-    $os: osName(),
+    $os: OS_NAMES[process.platform] ?? process.platform,
     $os_version: process.getSystemVersion(),
     arch: process.arch,
     electron_version: process.versions.electron,
     locale: app.getLocale(),
     packaged: app.isPackaged,
   };
-  // Batching happens in `waiting`, so the SDK sends what it is handed at once
-  // and never holds events of its own.
   client = new PostHog(TOKEN, {
     host: HOST,
     flushAt: 1,
     flushInterval: 0,
     before_send: redact,
-    // The SDK retries a failed batch without checking consent again, so every
-    // attempt is gated here: a retry after an opt-out never leaves.
+    // The SDK retries failed batches without rechecking consent.
     fetch: (url, options) =>
       enabled() ? fetch(url, options) : Promise.reject(new Error('Telemetry is turned off.')),
   });
   if (!settings.get().telemetry) void client.optOut();
 
-  // A monitor observes without taking over, so Electron still shows its own
-  // error dialog for an uncaught exception in the main process.
+  // A monitor keeps Electron's own dialog for uncaught main-process exceptions.
   process.on('uncaughtExceptionMonitor', (error, origin) => {
     captureError(error, { source: 'main', origin });
   });
@@ -197,24 +182,21 @@ export function initTelemetry() {
     captureError(reason, { source: 'main', origin: 'unhandledRejection' });
   });
   app.on('render-process-gone', (_e, _contents, details) => {
-    if (details.reason === 'clean-exit') return;
-    track('process_gone', {
-      type: 'renderer',
-      reason: details.reason,
-      exit_code: details.exitCode,
-    });
+    trackGone(details, { type: 'renderer' });
   });
   app.on('child-process-gone', (_e, details) => {
-    if (details.reason === 'clean-exit') return;
-    track('process_gone', {
+    trackGone(details, {
       type: details.type,
       service: details.serviceName ?? details.name ?? null,
-      reason: details.reason,
-      exit_code: details.exitCode,
     });
   });
 
   trackLaunch();
+}
+
+function trackGone(details: { reason: string; exitCode: number }, properties: Properties) {
+  if (details.reason === 'clean-exit') return;
+  track('process_gone', { ...properties, reason: details.reason, exit_code: details.exitCode });
 }
 
 function findDumps(dir: string, since: number): number {
@@ -239,7 +221,6 @@ function trackLaunch() {
   settings.setCrashCheckedAt(Date.now());
   settings.setLastVersion(version);
 
-  // Dumps from before the first check predate telemetry, so they are skipped.
   const crashes = checkedAt ? findDumps(app.getPath('crashDumps'), checkedAt) : 0;
   if (crashes > 0) track('native_crash', { count: crashes, crashed_version: previous ?? version });
 
@@ -286,9 +267,7 @@ export function reportRendererError(report: unknown, window: string) {
   const error = new Error(report.message);
   error.name = report.name;
   error.stack = report.stack ?? `${report.name}: ${report.message}`;
-  // The SDK resolves a frame's source map by the chunk id that posthog-cli
-  // injected into its file, read from this process's registry; the renderer's
-  // own registry is merged in so its frames resolve here too.
+  // The SDK maps frames to source maps through this process's chunk id registry.
   if (report.chunkIds && typeof report.chunkIds === 'object') {
     const registry = globalThis as { _posthogChunkIds?: Record<string, string> };
     registry._posthogChunkIds = { ...registry._posthogChunkIds, ...report.chunkIds };
@@ -298,8 +277,7 @@ export function reportRendererError(report: unknown, window: string) {
 
 export async function shutdownTelemetry() {
   if (settings.onboarded()) deliverWaiting();
-  waiting.length = 0;
-  clearBatchTimer();
+  dropWaiting();
   await client?.shutdown(SHUTDOWN_TIMEOUT_MS).catch(() => {});
 }
 

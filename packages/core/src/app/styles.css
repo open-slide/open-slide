@@ -1,9 +1,27 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "./shadcn.css";
 @import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
+
+@custom-variant data-active {
+  &:where([data-state="active"]),
+  &:where([data-active]:not([data-active="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) {
+    @slot;
+  }
+}
+
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) {
+    @slot;
+  }
+}
 
 @theme inline {
   --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -196,10 +214,8 @@
   }
 }
 
-/* Inside the desktop app the window paints a native material (macOS
-   vibrancy, Windows Mica) behind the page; clearing the chrome ground lets
-   it through while content cards stay opaque. Nothing should scroll beneath
-   a chrome surface, since a clear one can't hide what passes under it. */
+/* Lets the desktop window's native material show through the chrome; content
+   cards stay opaque, so nothing should scroll beneath a chrome surface. */
 html[data-translucent] {
   --sidebar: transparent;
 }

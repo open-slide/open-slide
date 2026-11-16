@@ -3,7 +3,10 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { AppState } from '../../shared/types';
 import { desktop, settle, useLog } from '../lib/desktop';
-import { LineLoader, LogView } from './primitives';
+import { CenteredScreen, LineLoader, LogView } from './primitives';
+
+const HEADING = 'font-heading text-[17px] font-semibold tracking-tight';
+const BODY = 'mt-1.5 text-[13px] leading-relaxed text-muted-foreground';
 
 export function ServerScreen({
   state,
@@ -22,14 +25,19 @@ export function ServerScreen({
     if (server.state === 'error') void desktop.server.log().then(setServerLog);
   }, [server.state, setServerLog]);
 
+  const openAnother = (
+    <Button variant="outline" onClick={onChooseWorkspace}>
+      <FolderOpen aria-hidden />
+      Open another…
+    </Button>
+  );
+
   if (server.state === 'not-installed') {
     return (
       <Centered>
         <Package className="size-5 text-muted-foreground" aria-hidden />
-        <h2 className="mt-4 font-heading text-[17px] font-semibold tracking-tight">
-          Install this workspace
-        </h2>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+        <h2 className={`mt-4 ${HEADING}`}>Install this workspace</h2>
+        <p className={BODY}>
           <span className="font-medium text-foreground">{workspace?.name}</span> hasn’t installed
           the packages its slides depend on yet. open-slide will run{' '}
           <code className="font-mono text-[12px]">{server.packageManager} install</code> in the
@@ -47,10 +55,7 @@ export function ServerScreen({
           >
             Install dependencies
           </Button>
-          <Button variant="outline" onClick={onChooseWorkspace}>
-            <FolderOpen aria-hidden />
-            Open another…
-          </Button>
+          {openAnother}
         </div>
         {installLog && <LogView text={installLog} className="mt-5 w-full" />}
       </Centered>
@@ -61,19 +66,14 @@ export function ServerScreen({
     return (
       <Centered>
         <span className="eyebrow text-destructive">Dev server stopped</span>
-        <h2 className="mt-2 font-heading text-[17px] font-semibold tracking-tight">
-          {workspace?.name} couldn’t start
-        </h2>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{server.message}</p>
+        <h2 className={`mt-2 ${HEADING}`}>{workspace?.name} couldn’t start</h2>
+        <p className={BODY}>{server.message}</p>
         <div className="mt-5 flex gap-2">
           <Button onClick={() => desktop.server.restart()}>
             <RotateCw aria-hidden />
             Try again
           </Button>
-          <Button variant="outline" onClick={onChooseWorkspace}>
-            <FolderOpen aria-hidden />
-            Open another…
-          </Button>
+          {openAnother}
         </div>
         <LogView text={serverLog} className="mt-5 w-full" />
       </Centered>
@@ -95,9 +95,5 @@ export function ServerScreen({
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-full items-center justify-center overflow-y-auto px-6 pb-10">
-      <div className="rise-in flex w-full max-w-[520px] flex-col items-start">{children}</div>
-    </div>
-  );
+  return <CenteredScreen className="max-w-[520px] items-start">{children}</CenteredScreen>;
 }

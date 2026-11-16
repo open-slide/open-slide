@@ -157,8 +157,7 @@ function readPackageAt(pkgDir: string): ResolvedPackage | null {
   return { dir: pkgDir, version: pkg.version ?? '0.0.0', entry: path.resolve(pkgDir, entry) };
 }
 
-// node_modules directories a host (the desktop app) ships the agent SDKs in,
-// so a workspace can connect without installing them. The workspace's own
+// node_modules directories a host ships the agent SDKs in. The workspace's own
 // copy still wins, keeping a version the user pinned.
 export const AGENT_MODULES_ENV = 'OPEN_SLIDE_AGENT_MODULES';
 

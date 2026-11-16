@@ -7,41 +7,31 @@ import { cn } from '@/lib/utils';
 import { AGENT_IDS, type AgentId, type AgentInfo, type LoginState } from '../../shared/types';
 import { desktop, settle, useLogins } from '../lib/desktop';
 import { tildify } from '../lib/paths';
-import { LineLoader, LogView, ProgressLine, SectionCard, StatusDot } from './primitives';
+import {
+  LineLoader,
+  LoadingLabel,
+  LogView,
+  ProgressLine,
+  SectionCard,
+  StatusDot,
+} from './primitives';
 
-export type Login = {
-  output: string;
-  url: string | null;
+export type Login = Pick<LoginState, 'output' | 'url' | 'error' | 'download'> & {
   running: boolean;
-  error: string | null;
-  download: { received: number; total: number | null } | null;
 };
 
-export const IDLE_LOGIN: Login = {
-  output: '',
-  url: null,
-  running: false,
-  error: null,
-  download: null,
-};
+const IDLE_LOGIN: Login = { output: '', url: null, error: null, download: null, running: false };
 
 function toLogin(state: LoginState | undefined): Login {
   if (!state) return IDLE_LOGIN;
-  const { output, url, error, download, phase } = state;
-  return {
-    output,
-    url,
-    error,
-    download,
-    running: phase === 'downloading' || phase === 'signing-in',
-  };
+  return { ...state, running: state.phase === 'downloading' || state.phase === 'signing-in' };
 }
 
 export function useAgents() {
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [signOutErrors, setSignOutErrors] = useState<Partial<Record<AgentId, string>>>({});
   const states = useLogins();
-
   const latest = useRef(0);
 
   // Sign-in fires several refreshes in a row, and an earlier one can answer last.
@@ -54,8 +44,7 @@ export function useAgents() {
     setRefreshing(false);
   }, []);
 
-  // What an agent offers changes when its CLI lands and when a sign-in ends,
-  // whichever window that happened in.
+  // CLI installs and sign-ins in any window change what an agent reports.
   const progress = AGENT_IDS.map((id) => {
     const state = states[id];
     return state ? `${state.operation}:${state.phase}` : '';
@@ -65,32 +54,31 @@ export function useAgents() {
     void refresh();
   }, [refresh, progress]);
 
-  const logins: Partial<Record<AgentId, Login>> = {};
-  for (const id of AGENT_IDS) logins[id] = toLogin(states[id]);
-
-  const [signOutErrors, setSignOutErrors] = useState<Partial<Record<AgentId, string>>>({});
   const setSignOutError = (id: AgentId, error: string | undefined) =>
     setSignOutErrors((prev) => ({ ...prev, [id]: error }));
 
-  const signIn = (id: AgentId) => {
-    setSignOutError(id, undefined);
-    void desktop.agents.login(id).catch(() => {});
+  return {
+    agents,
+    refreshing,
+    refresh,
+    login: (id: AgentId) => toLogin(states[id]),
+    signOutError: (id: AgentId) => signOutErrors[id] ?? null,
+    signIn: (id: AgentId) => {
+      setSignOutError(id, undefined);
+      void desktop.agents.login(id).catch(() => {});
+    },
+    signOut: async (id: AgentId) => {
+      setSignOutError(id, undefined);
+      const result = await settle(desktop.agents.logout(id));
+      if (!result.ok) setSignOutError(id, result.error);
+      await refresh();
+    },
+    dismiss: (id: AgentId) => desktop.agents.dismissLogin(id),
   };
-
-  const signOut = async (id: AgentId) => {
-    setSignOutError(id, undefined);
-    const result = await settle(desktop.agents.logout(id));
-    if (!result.ok) setSignOutError(id, result.error);
-    await refresh();
-  };
-
-  const dismiss = (id: AgentId) => desktop.agents.dismissLogin(id);
-
-  return { agents, refreshing, logins, signOutErrors, refresh, signIn, signOut, dismiss };
 }
 
 export function AgentsSection() {
-  const { agents, refreshing, logins, signOutErrors, refresh, signIn, signOut, dismiss } =
+  const { agents, refreshing, refresh, login, signOutError, signIn, signOut, dismiss } =
     useAgents();
 
   return (
@@ -101,18 +89,15 @@ export function AgentsSection() {
       </p>
       {agents === null ? (
         <SectionCard>
-          <div className="flex items-center gap-3">
-            <LineLoader className="w-24" />
-            <span className="eyebrow">Checking agents</span>
-          </div>
+          <LoadingLabel>Checking agents</LoadingLabel>
         </SectionCard>
       ) : (
         agents.map((agent) => (
           <AgentCard
             key={agent.id}
             agent={agent}
-            login={logins[agent.id] ?? IDLE_LOGIN}
-            signOutError={signOutErrors[agent.id] ?? null}
+            login={login(agent.id)}
+            signOutError={signOutError(agent.id)}
             onSignIn={() => signIn(agent.id)}
             onSignOut={() => signOut(agent.id)}
             onDismiss={() => dismiss(agent.id)}
@@ -178,28 +163,17 @@ function AgentCard({
             )}
           </p>
         </div>
-        <div className="flex shrink-0 gap-1.5">
-          {available &&
-            !login.running &&
-            (agent.signedIn ? (
-              <Button size="sm" variant="ghost" onClick={onSignOut}>
-                Sign out
-              </Button>
-            ) : (
-              <Button size="sm" onClick={onSignIn}>
-                Sign in
-              </Button>
-            ))}
-          {login.running && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => desktop.agents.cancelLogin(agent.id)}
-            >
-              Cancel
-            </Button>
-          )}
-        </div>
+        {available && (
+          <div className="shrink-0">
+            <LoginButton
+              agent={agent}
+              running={login.running}
+              signInVariant="default"
+              onSignIn={onSignIn}
+              onSignOut={onSignOut}
+            />
+          </div>
+        )}
       </div>
 
       <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12px]">
@@ -229,21 +203,11 @@ function AgentCard({
         <div className="mt-4 flex flex-col gap-2.5 border-t border-hairline pt-4">
           {login.download && <DownloadStatus name={agent.name} download={login.download} />}
           {login.running && !login.download && (
-            <p className="text-[12.5px] leading-relaxed">
-              Finish signing in from your browser.
-              {login.url && (
-                <>
-                  {' '}
-                  <button
-                    type="button"
-                    className="font-medium underline decoration-foreground/30 underline-offset-2 hover:decoration-foreground"
-                    onClick={() => login.url && desktop.openExternal(login.url)}
-                  >
-                    Open the sign-in page again
-                  </button>
-                </>
-              )}
-            </p>
+            <BrowserHint
+              url={login.url}
+              linkLabel="Open the sign-in page again"
+              className="text-[12.5px]"
+            />
           )}
           {login.error && <p className="text-[12.5px] text-destructive">{login.error}</p>}
           {!login.download && <LogView text={login.output} className="max-h-40" />}
@@ -257,6 +221,65 @@ function AgentCard({
         </div>
       )}
     </SectionCard>
+  );
+}
+
+export function LoginButton({
+  agent,
+  running,
+  signInVariant,
+  onSignIn,
+  onSignOut,
+}: {
+  agent: AgentInfo;
+  running: boolean;
+  signInVariant: 'default' | 'outline';
+  onSignIn: () => void;
+  onSignOut: () => void;
+}) {
+  if (running) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => desktop.agents.cancelLogin(agent.id)}>
+        Cancel
+      </Button>
+    );
+  }
+  return agent.signedIn ? (
+    <Button size="sm" variant="ghost" onClick={onSignOut}>
+      Sign out
+    </Button>
+  ) : (
+    <Button size="sm" variant={signInVariant} onClick={onSignIn}>
+      Sign in
+    </Button>
+  );
+}
+
+export function BrowserHint({
+  url,
+  linkLabel,
+  className,
+}: {
+  url: string | null;
+  linkLabel: string;
+  className: string;
+}) {
+  return (
+    <p className={cn('leading-relaxed', className)}>
+      Finish signing in from your browser.
+      {url && (
+        <>
+          {' '}
+          <button
+            type="button"
+            className="font-medium underline decoration-foreground/30 underline-offset-2 hover:decoration-foreground"
+            onClick={() => desktop.openExternal(url)}
+          >
+            {linkLabel}
+          </button>
+        </>
+      )}
+    </p>
   );
 }
 

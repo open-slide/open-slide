@@ -1,5 +1,8 @@
+import type { HapticPattern } from '../../../../packages/core/src/app/lib/desktop-host';
+
 export type {
   DesktopHost,
+  HapticPattern,
   UnsavedAction,
   UnsavedGuard,
   UnsavedOutcome,
@@ -8,8 +11,8 @@ export type {
 
 export const TAB_STRIP_HEIGHT = 40;
 
-// Matches no core route, so a spare view boots the whole app behind a cheap
-// not-found page and waits there until a tab adopts it.
+// Matches no core route, so a spare view boots the app on a cheap not-found
+// page until a tab adopts it.
 export const SPARE_PATH = '/__open-slide-spare__';
 
 export const PACKAGE_MANAGERS = ['pnpm', 'npm', 'yarn', 'bun'] as const;
@@ -34,17 +37,15 @@ export type TabInfo = {
 
 export type WorkspaceInfo = { root: string; name: string };
 
-// Why the last attempt to open or set up a workspace failed. The id lets a
-// surface dismiss the failure it showed, not one that replaced it.
+// The id lets a surface dismiss the failure it showed, not one that replaced it.
 export type WorkspaceError = { id: number; message: string };
 
 export type AppState = {
   platform: string;
   translucent: boolean;
-  // The system accent as #rrggbbaa, or null where the platform has none.
+  // #rrggbbaa, or null where the platform has none.
   accent: string | null;
   fullscreen: boolean;
-  // First-run tour: shown until a workspace opens or the user dismisses it.
   onboarding: boolean;
   // The full-screen intro is still covering the main window.
   intro: boolean;
@@ -59,7 +60,6 @@ export type AppState = {
 export type DesktopSettings = {
   translucent: boolean;
   packageManager: PackageManager | null;
-  // Anonymous usage events and crash reports.
   telemetry: boolean;
 };
 
@@ -101,8 +101,6 @@ export type AgentInfo = {
   account: string | null;
 };
 
-// One agent's sign-in as the main process holds it, so any window can show
-// it, including one opened after it began.
 export type LoginState = {
   id: AgentId;
   // Counts this agent's sign-in attempts.
@@ -120,8 +118,7 @@ export type LogEvent = { task: LogTask; chunk: string };
 
 export type ShellCommand = 'open-workspace' | 'new-workspace';
 
-// The main window's frame in the intro window's coordinates, so the intro can
-// land exactly where the window appears.
+// The main window's frame in the intro window's coordinates.
 export type IntroTarget = {
   x: number;
   y: number;
@@ -130,8 +127,6 @@ export type IntroTarget = {
   radius: number;
   dark: boolean;
 };
-
-export type HapticPattern = 'alignment' | 'levelChange' | 'generic';
 
 export type ShellApi = {
   getState(): Promise<AppState>;
@@ -169,8 +164,7 @@ export type ShellApi = {
     showMenu(id: string): void;
   };
   workspace: {
-    // Opens the folder the user picks. Resolves to an empty folder that still
-    // needs setting up, and to null once there is nothing left to do.
+    // An empty folder that still needs setting up, or null once nothing is left to do.
     choose(): Promise<{ create: string } | null>;
     chooseParent(): Promise<string | null>;
     defaultParent(): Promise<string>;

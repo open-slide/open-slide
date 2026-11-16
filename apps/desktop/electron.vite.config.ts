@@ -39,8 +39,7 @@ export default defineConfig({
     build: {
       outDir: 'dist/preload',
       sourcemap: 'hidden',
-      // Sandboxed preloads cannot require sibling chunks, so each entry is
-      // bundled on its own.
+      // Sandboxed preloads cannot require sibling chunks.
       isolatedEntries: true,
       externalizeDeps: false,
       rolldownOptions: {
@@ -53,8 +52,7 @@ export default defineConfig({
     },
   },
   renderer: {
-    // The shell reuses core's own UI primitives and tokens, so it reads core's
-    // source through the same `@` alias core uses internally.
+    // Core's own `@` alias, so the shell can import core's UI primitives from source.
     resolve: {
       alias: { '@': coreApp },
       dedupe: ['react', 'react-dom'],

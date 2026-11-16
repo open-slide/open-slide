@@ -1,13 +1,23 @@
 import { useEffect, useRef } from 'react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
+
+const TRACK = 'relative h-px w-56 overflow-hidden bg-hairline';
+const BAR = 'absolute inset-y-[-0.5px] left-0 bg-foreground';
 
 export function LineLoader({ className }: { className?: string }) {
   return (
-    <div className={cn('relative h-px w-56 overflow-hidden bg-hairline', className)}>
-      <span
-        aria-hidden
-        className="line-loader-bar absolute inset-y-[-0.5px] left-0 w-1/4 bg-foreground"
-      />
+    <div className={cn(TRACK, className)}>
+      <span aria-hidden className={cn('line-loader-bar w-1/4', BAR)} />
+    </div>
+  );
+}
+
+export function LoadingLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <LineLoader className="w-24" />
+      <span className="eyebrow">{children}</span>
     </div>
   );
 }
@@ -29,11 +39,14 @@ export function ProgressLine({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(clamped * 100)}
-      className={cn('relative h-px w-56 overflow-hidden bg-hairline', className)}
+      className={cn(TRACK, className)}
     >
       <span
         aria-hidden
-        className="absolute inset-y-[-0.5px] left-0 w-full origin-left bg-foreground transition-transform duration-150 ease-out motion-reduce:transition-none"
+        className={cn(
+          BAR,
+          'w-full origin-left transition-transform duration-150 ease-out motion-reduce:transition-none',
+        )}
         style={{ transform: `scaleX(${clamped})` }}
       />
     </div>
@@ -65,17 +78,13 @@ export function SectionCard({
   title,
   description,
   children,
-  className,
 }: {
   title?: string;
   description?: string;
   children: React.ReactNode;
-  className?: string;
 }) {
   return (
-    <section
-      className={cn('rounded-[10px] border border-border bg-card p-4 shadow-edge', className)}
-    >
+    <section className="rounded-[10px] border border-border bg-card p-4 shadow-edge">
       {title && (
         <header className="mb-3">
           <h3 className="font-heading text-[13.5px] font-semibold tracking-tight">{title}</h3>
@@ -103,5 +112,64 @@ export function StatusDot({ tone }: { tone: 'ok' | 'busy' | 'warn' | 'off' }) {
         tone === 'off' && 'bg-muted-foreground/40',
       )}
     />
+  );
+}
+
+export function ErrorNote({ children, className }: { children: string; className?: string }) {
+  return (
+    <p
+      className={cn(
+        'rounded-[8px] border border-destructive/25 bg-destructive/5 px-3 py-2 text-[12.5px] leading-relaxed text-destructive',
+        className,
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+export function CenteredScreen({
+  className,
+  children,
+}: {
+  className: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex h-full items-center justify-center overflow-y-auto px-6 pb-10">
+      <div className={cn('rise-in flex w-full flex-col', className)}>{children}</div>
+    </div>
+  );
+}
+
+export function Segmented<T extends string>({
+  value,
+  options,
+  labels,
+  mono = false,
+  disabled,
+  onChange,
+}: {
+  value: T | null;
+  options: readonly T[];
+  labels?: Record<T, string>;
+  mono?: boolean;
+  disabled?: boolean;
+  onChange: (value: T | null) => void;
+}) {
+  return (
+    <ToggleGroup
+      variant="outline"
+      size="sm"
+      disabled={disabled}
+      value={value ? [value] : []}
+      onValueChange={(next: string[]) => onChange((next[0] as T | undefined) ?? null)}
+    >
+      {options.map((option) => (
+        <ToggleGroupItem key={option} value={option} className={cn(mono && 'font-mono')}>
+          {labels?.[option] ?? option}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
   );
 }

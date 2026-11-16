@@ -10,25 +10,16 @@ const PAPER = {
   '--sk-photo': 'linear-gradient(150deg, #ffb48f 0%, #fe5226 55%, #8a2306 100%)',
 } as const;
 
-function Bar({ className, accent = false }: { className: string; accent?: boolean }) {
-  return (
-    <span
-      className={cn('absolute rounded-full', className)}
-      style={{ background: accent ? 'var(--sk-accent)' : 'var(--sk-faint)' }}
-    />
-  );
+const TONE = {
+  ink: 'bg-(--sk-ink)',
+  faint: 'bg-(--sk-faint)',
+  accent: 'bg-(--sk-accent)',
+} as const;
+
+function Mark({ tone = 'faint', className }: { tone?: keyof typeof TONE; className: string }) {
+  return <span className={cn('absolute rounded-full', TONE[tone], className)} />;
 }
 
-function Ink({ className }: { className: string }) {
-  return (
-    <span
-      className={cn('absolute rounded-full', className)}
-      style={{ background: 'var(--sk-ink)' }}
-    />
-  );
-}
-
-// A wordless drawing of a slide layout, so decks read as decks at any size.
 export function SlideSketch({
   variant,
   className,
@@ -53,51 +44,44 @@ export function SlideSketch({
     >
       {variant === 'title' && (
         <>
-          <Bar accent className="top-[22%] left-[9%] h-[5%] w-[14%]" />
-          <Ink className="top-[36%] left-[9%] h-[11%] w-[62%]" />
-          <Ink className="top-[52%] left-[9%] h-[11%] w-[44%]" />
-          <Bar className="top-[72%] left-[9%] h-[5%] w-[36%]" />
+          <Mark tone="accent" className="top-[22%] left-[9%] h-[5%] w-[14%]" />
+          <Mark tone="ink" className="top-[36%] left-[9%] h-[11%] w-[62%]" />
+          <Mark tone="ink" className="top-[52%] left-[9%] h-[11%] w-[44%]" />
+          <Mark className="top-[72%] left-[9%] h-[5%] w-[36%]" />
         </>
       )}
       {variant === 'chart' && (
         <>
-          <Ink className="top-[14%] left-[9%] h-[8%] w-[38%]" />
-          <Bar className="top-[27%] left-[9%] h-[5%] w-[24%]" />
+          <Mark tone="ink" className="top-[14%] left-[9%] h-[8%] w-[38%]" />
+          <Mark className="top-[27%] left-[9%] h-[5%] w-[24%]" />
           {[34, 48, 42, 62, 78].map((h, i) => (
             <span
               key={h}
-              className="absolute bottom-[14%] w-[9%] rounded-t-[3px]"
-              style={{
-                left: `${9 + i * 14}%`,
-                height: `${h * 0.62}%`,
-                background: i === 4 ? 'var(--sk-accent)' : 'var(--sk-faint)',
-              }}
+              className={cn(
+                'absolute bottom-[14%] w-[9%] rounded-t-[3px]',
+                i === 4 ? TONE.accent : TONE.faint,
+              )}
+              style={{ left: `${9 + i * 14}%`, height: `${h * 0.62}%` }}
             />
           ))}
-          <Bar className="bottom-[10%] left-[9%] h-[1.5%] w-[68%]" />
+          <Mark className="bottom-[10%] left-[9%] h-[1.5%] w-[68%]" />
         </>
       )}
       {variant === 'image' && (
         <>
-          <span
-            className="absolute inset-y-0 left-0 w-[46%]"
-            style={{ background: 'var(--sk-photo)' }}
-          />
-          <Bar accent className="top-[26%] left-[54%] h-[5%] w-[12%]" />
-          <Ink className="top-[38%] left-[54%] h-[9%] w-[34%]" />
-          <Bar className="top-[54%] left-[54%] h-[5%] w-[36%]" />
-          <Bar className="top-[64%] left-[54%] h-[5%] w-[28%]" />
+          <span className="absolute inset-y-0 left-0 w-[46%] [background:var(--sk-photo)]" />
+          <Mark tone="accent" className="top-[26%] left-[54%] h-[5%] w-[12%]" />
+          <Mark tone="ink" className="top-[38%] left-[54%] h-[9%] w-[34%]" />
+          <Mark className="top-[54%] left-[54%] h-[5%] w-[36%]" />
+          <Mark className="top-[64%] left-[54%] h-[5%] w-[28%]" />
         </>
       )}
       {variant === 'quote' && (
         <>
-          <span
-            className="absolute top-[18%] left-1/2 h-[18%] w-[9%] -translate-x-1/2 rounded-full"
-            style={{ background: 'var(--sk-accent)' }}
-          />
-          <Ink className="top-[46%] left-1/2 h-[9%] w-[66%] -translate-x-1/2" />
-          <Ink className="top-[60%] left-1/2 h-[9%] w-[48%] -translate-x-1/2" />
-          <Bar className="top-[77%] left-1/2 h-[5%] w-[20%] -translate-x-1/2" />
+          <Mark tone="accent" className="top-[18%] left-1/2 h-[18%] w-[9%] -translate-x-1/2" />
+          <Mark tone="ink" className="top-[46%] left-1/2 h-[9%] w-[66%] -translate-x-1/2" />
+          <Mark tone="ink" className="top-[60%] left-1/2 h-[9%] w-[48%] -translate-x-1/2" />
+          <Mark className="top-[77%] left-1/2 h-[5%] w-[20%] -translate-x-1/2" />
         </>
       )}
       {cover && (
@@ -110,46 +94,34 @@ export function SlideSketch({
       )}
       {variant === 'list' && (
         <>
-          <Ink className="top-[17%] left-[9%] h-[9%] w-[42%]" />
+          <Mark tone="ink" className="top-[17%] left-[9%] h-[9%] w-[42%]" />
           {[54, 44, 50].map((width, i) => (
             <span
               key={width}
               className="absolute left-[9%] flex h-[6%] items-center gap-[5%]"
               style={{ top: `${41 + i * 15}%`, width: `${width}%` }}
             >
-              <span
-                className="aspect-square h-full rounded-full"
-                style={{ background: 'var(--sk-accent)' }}
-              />
-              <span
-                className="h-[72%] flex-1 rounded-full"
-                style={{ background: 'var(--sk-faint)' }}
-              />
+              <span className={cn('aspect-square h-full rounded-full', TONE.accent)} />
+              <span className={cn('h-[72%] flex-1 rounded-full', TONE.faint)} />
             </span>
           ))}
         </>
       )}
       {variant === 'grid' && (
         <>
-          <Ink className="top-[14%] left-[9%] h-[8%] w-[32%]" />
+          <Mark tone="ink" className="top-[14%] left-[9%] h-[8%] w-[32%]" />
           {[0, 1, 2].map((i) => (
             <span
               key={i}
-              className="absolute top-[34%] h-[52%] w-[25%] rounded-[6%]"
-              style={{ left: `${9 + i * 28}%`, background: 'var(--sk-faint)' }}
+              className={cn('absolute top-[34%] h-[52%] w-[25%] rounded-[6%]', TONE.faint)}
+              style={{ left: `${9 + i * 28}%` }}
             >
-              <span
-                className="absolute top-[16%] left-[14%] aspect-square w-[22%] rounded-full"
-                style={{ background: i === 1 ? 'var(--sk-accent)' : 'var(--sk-ink)' }}
+              <Mark
+                tone={i === 1 ? 'accent' : 'ink'}
+                className="top-[16%] left-[14%] aspect-square w-[22%]"
               />
-              <span
-                className="absolute top-[58%] left-[14%] h-[9%] w-[64%] rounded-full"
-                style={{ background: 'var(--sk-ink)', opacity: 0.6 }}
-              />
-              <span
-                className="absolute top-[74%] left-[14%] h-[9%] w-[44%] rounded-full"
-                style={{ background: 'var(--sk-ink)', opacity: 0.3 }}
-              />
+              <Mark tone="ink" className="top-[58%] left-[14%] h-[9%] w-[64%] opacity-60" />
+              <Mark tone="ink" className="top-[74%] left-[14%] h-[9%] w-[44%] opacity-30" />
             </span>
           ))}
         </>

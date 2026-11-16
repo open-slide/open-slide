@@ -18,8 +18,7 @@ export const desktop = window.desktop;
 
 export const TELEMETRY_DOCS_URL = 'https://open-slide.dev/docs/reference/desktop-telemetry';
 
-// A handler that throws in the main process rejects the call instead of
-// answering with a failed result.
+// A handler that throws in the main process rejects instead of resolving a failed result.
 export async function settle(task: Promise<TaskResult>): Promise<TaskResult> {
   try {
     return await task;
@@ -28,39 +27,36 @@ export async function settle(task: Promise<TaskResult>): Promise<TaskResult> {
   }
 }
 
-let current: AppState | null = null;
-const listeners = new Set<() => void>();
-
-function publish(next: AppState) {
-  current = next;
-  for (const listener of listeners) listener();
+function createStore<T>(initial: T) {
+  let value = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set: (next: T) => {
+      value = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
 }
 
-void desktop.getState().then(publish);
-desktop.onState(publish);
+const appState = createStore<AppState | null>(null);
+void desktop.getState().then(appState.set);
+desktop.onState(appState.set);
 
 export function useAppState(): AppState | null {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    () => current,
-  );
+  return useSyncExternalStore(appState.subscribe, appState.get);
 }
 
-// Sign-ins run in the main process and outlive whatever started them, so a
-// surface that mounts mid-way reads the same state as one that watched it all.
-let logins: Partial<Record<AgentId, LoginState>> = {};
-const loginListeners = new Set<() => void>();
+const logins = createStore<Partial<Record<AgentId, LoginState>>>({});
+const publishLogin = (next: LoginState) => logins.set({ ...logins.get(), [next.id]: next });
 
-function publishLogin(next: LoginState) {
-  logins = { ...logins, [next.id]: next };
-  for (const listener of loginListeners) listener();
-}
-
-// Subscribed before the snapshot is asked for, and both arrive in order, so
-// the snapshot can only ever be overwritten by something newer.
+// Subscribed before the snapshot is requested; IPC is ordered, so the snapshot never clobbers newer state.
 desktop.agents.onLoginState(publishLogin);
 void desktop.agents
   .logins()
@@ -70,19 +66,13 @@ void desktop.agents
   .catch(() => {});
 
 export function useLogins(): Partial<Record<AgentId, LoginState>> {
-  return useSyncExternalStore(
-    (listener) => {
-      loginListeners.add(listener);
-      return () => loginListeners.delete(listener);
-    },
-    () => logins,
-  );
+  return useSyncExternalStore(logins.subscribe, logins.get);
 }
 
 const LOG_LIMIT = 40_000;
 
-export function useLog(task: LogTask, initial = ''): [string, (text: string) => void] {
-  const [text, setText] = useState(initial);
+export function useLog(task: LogTask): [string, (text: string) => void] {
+  const [text, setText] = useState('');
   useEffect(
     () =>
       desktop.onLog((event) => {
@@ -93,13 +83,15 @@ export function useLog(task: LogTask, initial = ''): [string, (text: string) => 
   return [text, setText];
 }
 
+const root = document.documentElement;
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
 export function useWindowAppearance() {
   const state = useAppState();
   const translucent = state?.translucent ?? false;
+  const accent = state?.accent ?? null;
+
   useEffect(() => {
-    const root = document.documentElement;
     const apply = () => {
       root.classList.toggle('dark', darkQuery.matches);
       root.style.colorScheme = darkQuery.matches ? 'dark' : 'light';
@@ -108,19 +100,17 @@ export function useWindowAppearance() {
     darkQuery.addEventListener('change', apply);
     return () => darkQuery.removeEventListener('change', apply);
   }, []);
+
   useEffect(() => {
-    document.documentElement.toggleAttribute('data-translucent', translucent);
+    root.toggleAttribute('data-translucent', translucent);
   }, [translucent]);
 
-  const accent = state?.accent ?? null;
   useEffect(() => {
-    const style = document.documentElement.style;
-    if (accent) style.setProperty('--ring', accent);
-    else style.removeProperty('--ring');
+    if (accent) root.style.setProperty('--ring', accent);
+    else root.style.removeProperty('--ring');
   }, [accent]);
 
   useEffect(() => {
-    const root = document.documentElement;
     const apply = (focused: boolean) => root.toggleAttribute('data-inactive', !focused);
     void desktop.window.isFocused().then(apply);
     return desktop.window.onFocus(apply);

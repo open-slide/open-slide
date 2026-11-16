@@ -6,12 +6,9 @@ import type { PackageManager, ServerStatus } from '../shared/types';
 import { stripAnsi } from './process';
 import { bundledCore, needsInstall } from './workspace';
 
-// Mirrors core's dev supervisor protocol (packages/core/src/cli/dev.ts and
-// vite/routes/restart.ts): a supervised server reports its port over IPC and
-// exits with RESTART_EXIT_CODE when an in-app update wants a fresh process.
+// Must match what core reads in packages/core/src/cli/dev.ts and src/vite.
 const DEV_SUPERVISED_ENV = 'OPEN_SLIDE_DEV_SUPERVISED';
 const RESTART_EXIT_CODE = 52;
-// packages/core/src/vite/config.ts and vite/routes/update.ts
 const CACHE_DIR_ENV = 'OPEN_SLIDE_CACHE_DIR';
 const MANAGED_CORE_ENV = 'OPEN_SLIDE_MANAGED_CORE';
 const LISTEN_TIMEOUT_MS = 60_000;
@@ -49,7 +46,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
   private child: ChildProcess | null = null;
   private exited: Promise<void> | null = null;
   private root: string | null = null;
-  // The workspace last asked for, which the queue may not have reached yet.
+  // Last requested workspace, which the queue may not have reached yet.
   private wanted: string | null = null;
   private port: number | null = null;
   private logText = '';
@@ -80,8 +77,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
     });
   }
 
-  // Restarts whatever was last asked for, so a start still waiting in the
-  // queue is restarted into rather than dropped for the workspace before it.
+  // Targets the last request, so a start still queued is not dropped for the previous workspace.
   restart(): Promise<void> {
     if (!this.wanted) return Promise.resolve();
     return this.enqueue(async (latest) => {
@@ -111,9 +107,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
     });
   }
 
-  // Starts and stops run one at a time, and a request overtaken while it
-  // waited does nothing, so the server left running always belongs to the last
-  // workspace asked for.
+  // Serialized, and a request overtaken while waiting is skipped, so the last request wins.
   private enqueue(task: (latest: () => boolean) => Promise<void>): Promise<void> {
     const request = ++this.request;
     const run = this.queue.then(() => task(() => request === this.request));
@@ -164,14 +158,8 @@ export class DevServer extends EventEmitter<ServerEvents> {
     this.setStatus({ state: 'starting' });
     let env: NodeJS.ProcessEnv;
     try {
-      // Each workspace keeps its port across launches: the port is part of the
-      // tabs' origin, and with it their localStorage (theme, agent panel state).
-      if (this.port === null) {
-        const preferred = this.ports.get(root);
-        this.port = await (preferred ? reservePort(preferred) : Promise.reject()).catch(() =>
-          reservePort(0),
-        );
-      }
+      // Kept per workspace: the port is part of the tabs' origin, and so of their localStorage.
+      this.port ??= await reservePort(this.ports.get(root) ?? 0).catch(() => reservePort(0));
       env = await this.env();
     } catch (err) {
       if (generation === this.generation) this.fail('exited', (err as Error).message);
@@ -222,7 +210,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
       });
       child.on('error', (err) => {
         this.append(`${err.message}\n`);
-        // Only a failed spawn ends the child; it never emits exit.
+        // A failed spawn never emits exit.
         if (child.pid !== undefined) return;
         end(null, null, err);
         resolve();

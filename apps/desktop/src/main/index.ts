@@ -4,12 +4,11 @@ import path from 'node:path';
 import {
   app,
   BrowserWindow,
+  type BrowserWindowConstructorOptions,
   dialog,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
-  Menu,
-  type MenuItemConstructorOptions,
   nativeTheme,
   screen,
   session,
@@ -35,7 +34,7 @@ import { cancelAllInstalls, managedCliDirs, syncManagedClis } from './agent-cli'
 import { AgentLogins } from './agent-logins';
 import { listAgents, logout, startLogin } from './agents';
 import { performHaptic } from './haptics';
-import { installMenu, type MenuActions } from './menu';
+import { installMenu, type MenuActions, showContextMenu } from './menu';
 import { terminateRunning } from './process';
 import { QuitGate } from './quit';
 import { DevServer } from './server';
@@ -64,21 +63,20 @@ import { WorkspaceController } from './workspace-controller';
 
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
+const supportsMaterial = isMac || isWindows;
 const SHELL_PRELOAD = path.join(import.meta.dirname, '../preload/shell.cjs');
 const VIEW_PRELOAD = path.join(import.meta.dirname, '../preload/view.cjs');
 const THEMES = new Set(['light', 'dark', 'system']);
 const WORKSPACE_NAME_RE = /^[\p{L}\p{N}._-]+$/u;
 const AGENTS_TTL_MS = 5000;
-// What a deck or the shell may ask Chromium for; everything else is refused
-// without a prompt.
 const TAB_PERMISSIONS = new Set(['fullscreen', 'clipboard-sanitized-write']);
 const SHELL_PERMISSIONS = new Set(['clipboard-sanitized-write']);
 const SETTINGS_WIDTH = 640;
-// Matches the corner the system draws on the main window, so the intro lands on it.
+// The corner the system draws on the main window, for the intro to land on.
 const WINDOW_RADIUS = isMac ? 12 : isWindows ? 8 : 0;
 // The intro runs about fifteen seconds; past this it has stalled.
 const INTRO_TIMEOUT = 20_000;
-// Once released, the intro only has its score's tail left to ring out.
+// Long enough for the score's tail to ring out once the intro is released.
 const INTRO_TAIL_TIMEOUT = 14_000;
 const WINDOW_SHOW_TIMEOUT_MS = 2000;
 
@@ -95,10 +93,6 @@ async function childEnv(read = shellEnv): Promise<NodeJS.ProcessEnv> {
   return { ...env, PATH, OPEN_SLIDE_AGENT_MODULES: modulesDir() };
 }
 
-function fallbackPackageManager(): PackageManager {
-  return settings.packageManager() ?? 'npm';
-}
-
 function cacheDirFor(root: string): string {
   const key = createHash('sha256').update(root).digest('hex').slice(0, 16);
   return path.join(app.getPath('userData'), 'vite-cache', key);
@@ -106,21 +100,17 @@ function cacheDirFor(root: string): string {
 
 const server = new DevServer(
   () => childEnv(loginEnv),
-  (root) => detectPackageManager(root, fallbackPackageManager()),
+  (root) => detectPackageManager(root, settings.packageManager() ?? 'npm'),
   { get: (root) => settings.port(root), set: (root, port) => settings.setPort(root, port) },
   cacheDirFor,
 );
 
-function translucencySupported(): boolean {
-  return isMac || isWindows;
-}
-
 function translucent(): boolean {
-  return translucencySupported() && settings.get().translucent;
+  return supportsMaterial && settings.get().translucent;
 }
 
 function accent(): string | null {
-  if (!translucencySupported()) return null;
+  if (!supportsMaterial) return null;
   const hex = systemPreferences.getAccentColor();
   return hex ? `#${hex}` : null;
 }
@@ -147,6 +137,10 @@ function shellWindows(): BrowserWindow[] {
   return [window, settingsWindow, introWindow].filter(
     (w): w is BrowserWindow => !!w && !w.isDestroyed(),
   );
+}
+
+function shellWindowOf(contents: WebContents | null): BrowserWindow | null {
+  return shellWindows().find((w) => w.webContents === contents) ?? null;
 }
 
 function sendAll(channel: string, payload: unknown) {
@@ -180,8 +174,7 @@ function sendLog(task: LogTask, chunk: string) {
   sendAll('log', { task, chunk });
 }
 
-// Every way of reaching the main window from outside it comes through here.
-// On macOS the app outlives its last window, so there may be none to reach.
+// On macOS the app outlives its last window, so this may have to create one.
 async function ensureMainWindow(): Promise<BrowserWindow> {
   if (window) {
     if (window.isMinimized()) window.restore();
@@ -190,8 +183,7 @@ async function ensureMainWindow(): Promise<BrowserWindow> {
     return window;
   }
   const created = createWindow();
-  // It shows itself once it has painted; a dialog attached before then would
-  // hang off a window nobody can see.
+  // A dialog attached before the window shows would hang off an invisible one.
   if (!created.isVisible()) {
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, WINDOW_SHOW_TIMEOUT_MS);
@@ -228,13 +220,16 @@ server.on('failure', ({ reason, code, signal }) => {
   track('server_failed', { reason, exit_code: code, signal });
 });
 
-// Skills describe the core that runs the workspace, so they follow the bundled
-// core: synced once per app update, like an in-app core update used to.
+// Skills describe the bundled core, so they are synced once per app update.
 async function syncSkillsOnce(root: string) {
   const { version } = bundledCore();
   if (settings.skillsVersion(root) === version) return;
   const result = await syncSkills(root, await childEnv(), (chunk) => sendLog('server', chunk));
   if (result.ok) settings.setSkillsVersion(root, version);
+}
+
+function revealWorkspace() {
+  if (workspaces.current) void shell.openPath(workspaces.current.root);
 }
 
 function removeCache(root: string) {
@@ -260,8 +255,7 @@ const workspaces = new WorkspaceController({
 const quitGate = new QuitGate({
   confirm: async () => (await tabs?.confirmLeave('quit')) ?? true,
   cleanup: async () => {
-    // Work settled during confirm; an edit made while the server stops would be
-    // destroyed with its window without being asked about again.
+    // Work was settled during confirm; an edit made now would be lost unasked.
     for (const win of BrowserWindow.getAllWindows()) win.setEnabled(false);
     workspaces.persistSession();
     settings.flush();
@@ -296,21 +290,27 @@ function loadShell(win: BrowserWindow, hash?: string) {
   }
 }
 
-function editMenu(params: Electron.ContextMenuParams): MenuItemConstructorOptions[] {
-  if (params.isEditable) {
-    return [
-      { role: 'cut', enabled: params.editFlags.canCut },
-      { role: 'copy', enabled: params.editFlags.canCopy },
-      { role: 'paste', enabled: params.editFlags.canPaste },
-      { type: 'separator' },
-      { role: 'selectAll' },
-    ];
-  }
-  return params.selectionText ? [{ role: 'copy' }] : [];
+function materialOptions(): BrowserWindowConstructorOptions {
+  return {
+    backgroundColor: windowBackground(),
+    ...(isMac
+      ? { vibrancy: translucent() ? 'sidebar' : undefined, visualEffectState: 'followWindow' }
+      : {}),
+    ...(isWindows && translucent() ? { backgroundMaterial: 'mica' } : {}),
+  };
 }
 
-// Shared by every window that runs the shell renderer.
-function wireShell(win: BrowserWindow) {
+function createShellWindow(options: BrowserWindowConstructorOptions): BrowserWindow {
+  const win = new BrowserWindow({
+    show: false,
+    ...options,
+    webPreferences: {
+      preload: SHELL_PRELOAD,
+      sandbox: true,
+      contextIsolation: true,
+      ...options.webPreferences,
+    },
+  });
   const contents = win.webContents;
   const sendFocus = (focused: boolean) => {
     if (!contents.isDestroyed()) contents.send('window:focus', focused);
@@ -319,17 +319,8 @@ function wireShell(win: BrowserWindow) {
   win.on('blur', () => sendFocus(false));
   contents.on('will-navigate', (e) => e.preventDefault());
   contents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  contents.on('context-menu', (_e, params) => {
-    const items = editMenu(params);
-    if (!app.isPackaged) {
-      if (items.length) items.push({ type: 'separator' });
-      items.push({
-        label: 'Inspect Element',
-        click: () => contents.inspectElement(params.x, params.y),
-      });
-    }
-    if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
-  });
+  contents.on('context-menu', (_e, params) => showContextMenu(win, contents, params));
+  return win;
 }
 
 function openSettingsWindow() {
@@ -338,37 +329,21 @@ function openSettingsWindow() {
     settingsWindow.focus();
     return;
   }
-  const win = new BrowserWindow({
+  const win = createShellWindow({
     width: SETTINGS_WIDTH,
     height: 520,
-    show: false,
     title: 'Settings',
     resizable: false,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
-    backgroundColor: windowBackground(),
+    ...materialOptions(),
     ...(isMac
-      ? {
-          titleBarStyle: 'hidden' as const,
-          trafficLightPosition: { x: 14, y: 10 },
-          vibrancy: translucent() ? ('sidebar' as const) : undefined,
-          visualEffectState: 'followWindow' as const,
-        }
-      : {
-          autoHideMenuBar: true,
-          ...(isWindows && translucent() ? { backgroundMaterial: 'mica' as const } : {}),
-        }),
-    webPreferences: {
-      preload: SHELL_PRELOAD,
-      sandbox: true,
-      contextIsolation: true,
-    },
+      ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 14, y: 10 } }
+      : { autoHideMenuBar: true }),
   });
   settingsWindow = win;
-  wireShell(win);
-  // The first fit-content shows the window at its final height; this only
-  // covers a renderer that never reports one.
+  // The first fit-content shows the window; this covers a renderer that never reports a height.
   win.once('ready-to-show', () => {
     setTimeout(() => {
       if (!win.isDestroyed() && !win.isVisible()) win.show();
@@ -396,32 +371,20 @@ function fitSettingsWindow(win: BrowserWindow, height: number) {
 
 function createWindow(): BrowserWindow {
   const bounds = settings.bounds();
-  const win = new BrowserWindow({
+  const win = createShellWindow({
     width: bounds?.width ?? 1440,
     height: bounds?.height ?? 900,
     ...(bounds ? { x: bounds.x, y: bounds.y } : {}),
     minWidth: 820,
     minHeight: 540,
-    show: false,
     title: 'open-slide',
-    backgroundColor: windowBackground(),
+    ...materialOptions(),
     ...(isMac
-      ? {
-          titleBarStyle: 'hiddenInset' as const,
-          trafficLightPosition: { x: 14, y: 14 },
-          vibrancy: translucent() ? ('sidebar' as const) : undefined,
-          visualEffectState: 'followWindow' as const,
-        }
+      ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 } }
       : {
-          titleBarStyle: 'hidden' as const,
+          titleBarStyle: 'hidden',
           titleBarOverlay: { height: TAB_STRIP_HEIGHT, color: '#00000000' },
-          ...(isWindows && translucent() ? { backgroundMaterial: 'mica' as const } : {}),
         }),
-    webPreferences: {
-      preload: SHELL_PRELOAD,
-      sandbox: true,
-      contextIsolation: true,
-    },
   });
   window = win;
   const manager = new TabManager({
@@ -446,12 +409,10 @@ function createWindow(): BrowserWindow {
 
   win.on('enter-full-screen', broadcast);
   win.on('leave-full-screen', broadcast);
-  // While the intro plays it reveals this window itself, right where it lands.
+  // A playing intro reveals this window itself, right where it lands.
   win.once('ready-to-show', () => {
     if (!introWindow) win.show();
   });
-  // Closing the window destroys its tabs, so their unsaved work is settled
-  // first and the close goes ahead once the user has agreed.
   let closeConfirmed = false;
   win.on('close', (e) => {
     if (!closeConfirmed && !quitGate.leaving) {
@@ -471,7 +432,6 @@ function createWindow(): BrowserWindow {
     if (tabs === manager) tabs = null;
     if (window === win) window = null;
   });
-  wireShell(win);
   loadShell(win);
   return win;
 }
@@ -498,16 +458,14 @@ function introTarget(): IntroTarget | null {
   };
 }
 
-// A borderless, clear window over the whole display the main window sits on:
-// the intro plays over the desktop, then folds down into the main window.
+// A clear window over the whole display; the intro folds down into the main window.
 function playIntro() {
   if (introWindow) return;
   const main = window ?? createWindow();
   if (main.isMinimized()) main.restore();
   const { bounds } = screen.getDisplayMatching(main.getBounds());
-  const win = new BrowserWindow({
+  const win = createShellWindow({
     ...bounds,
-    show: false,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
@@ -521,24 +479,17 @@ function playIntro() {
     enableLargerThanScreen: true,
     roundedCorners: false,
     title: 'Welcome to open-slide',
-    webPreferences: {
-      preload: SHELL_PRELOAD,
-      sandbox: true,
-      contextIsolation: true,
-      backgroundThrottling: false,
-    },
+    webPreferences: { backgroundThrottling: false },
   });
   introWindow = win;
   introCovering = true;
   win.setAlwaysOnTop(true, 'screen-saver');
-  wireShell(win);
   const close = () => {
     if (!win.isDestroyed()) win.close();
   };
   let stalled = setTimeout(close, INTRO_TIMEOUT);
   let released = false;
-  // Kept open but clear and click-through, not hidden, so nothing can suspend the
-  // score's audio while it rings out over the revealed main window.
+  // Made click-through rather than hidden, so nothing suspends the score's audio as it rings out.
   releaseIntro = () => {
     releaseIntro = null;
     released = true;
@@ -571,13 +522,8 @@ function playIntro() {
 function replayIntro() {
   settings.setOnboarded(false);
   broadcast();
-  if (reducedMotion()) {
-    const main = window ?? createWindow();
-    main.show();
-    main.focus();
-  } else {
-    playIntro();
-  }
+  if (reducedMotion()) void ensureMainWindow();
+  else playIntro();
 }
 
 function reducedMotion(): boolean {
@@ -585,11 +531,7 @@ function reducedMotion(): boolean {
 }
 
 function fromShell(e: IpcMainEvent | IpcMainInvokeEvent): boolean {
-  return shellWindows().some((w) => w.webContents === e.sender);
-}
-
-function senderWindow(sender: WebContents): BrowserWindow | null {
-  return shellWindows().find((w) => w.webContents === sender) ?? null;
+  return shellWindowOf(e.sender) !== null;
 }
 
 function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => R | Promise<R>) {
@@ -631,9 +573,7 @@ function isCreateRequest(value: unknown): value is CreateWorkspaceRequest {
   );
 }
 
-// Every page stays where it was put: a tab or presenter on the dev server, the
-// shell on its own file. Tabs and presenter windows refine this with their own
-// handlers; anything created without one gets no navigation and no popups.
+// The baseline for every page: tabs and presenters refine it with their own handlers.
 function restrictContents(contents: WebContents) {
   contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   const guard = (e: Electron.Event, url: string) => {
@@ -648,9 +588,7 @@ function restrictContents(contents: WebContents) {
 function permitted(contents: WebContents | null, permission: string, origin: string): boolean {
   if (!contents) return false;
   if (tabs?.hosts(contents)) return tabs.isServerUrl(origin) && TAB_PERMISSIONS.has(permission);
-  return (
-    shellWindows().some((w) => w.webContents === contents) && SHELL_PERMISSIONS.has(permission)
-  );
+  return shellWindowOf(contents) !== null && SHELL_PERMISSIONS.has(permission);
 }
 
 function installPermissionPolicy() {
@@ -665,8 +603,7 @@ function installPermissionPolicy() {
 
 let agentList: { at: number; value: Promise<AgentInfo[]> } | null = null;
 
-// The settings window and the tour both ask, and each answer costs four CLI
-// launches, so one answer serves every caller for a few seconds.
+// Each answer costs four CLI launches, so one serves every caller for a few seconds.
 function cachedAgents(): Promise<AgentInfo[]> {
   if (agentList && Date.now() - agentList.at < AGENTS_TTL_MS) return agentList.value;
   const entry = { at: Date.now(), value: childEnv().then((env) => listAgents(env)) };
@@ -689,8 +626,7 @@ async function printToPdf(sender: WebContents, filename: unknown): Promise<boole
   });
   if (canceled || !filePath) return false;
   pdfDir = path.dirname(filePath);
-  // Same Chromium print pipeline as window.print(), so the deck's @page size and
-  // print-only styles apply unchanged.
+  // The same pipeline as window.print(), so the deck's @page size and print styles apply.
   const pdf = await sender.printToPDF({
     printBackground: true,
     preferCSSPageSize: true,
@@ -699,12 +635,6 @@ async function printToPdf(sender: WebContents, filename: unknown): Promise<boole
   await writeFile(filePath, pdf);
   track('pdf_exported');
   return true;
-}
-
-function windowKind(win: BrowserWindow): string {
-  if (win === settingsWindow) return 'settings';
-  if (win === introWindow) return 'intro';
-  return 'main';
 }
 
 function isAgentId(value: unknown): value is AgentId {
@@ -744,12 +674,14 @@ function registerIpc() {
   });
   listen('settings:open-window', () => openSettingsWindow());
   ipcMain.on('telemetry:error', (e, report: unknown) => {
-    const win = senderWindow(e.sender);
-    if (win) reportRendererError(report, windowKind(win));
+    const win = shellWindowOf(e.sender);
+    if (!win) return;
+    const kind = win === settingsWindow ? 'settings' : win === introWindow ? 'intro' : 'main';
+    reportRendererError(report, kind);
   });
-  ipcMain.handle('window:is-focused', (e) => senderWindow(e.sender)?.isFocused() ?? false);
+  ipcMain.handle('window:is-focused', (e) => shellWindowOf(e.sender)?.isFocused() ?? false);
   ipcMain.on('window:fit-content', (e, height: unknown) => {
-    const win = senderWindow(e.sender);
+    const win = shellWindowOf(e.sender);
     if (win && win === settingsWindow && typeof height === 'number' && Number.isFinite(height)) {
       fitSettingsWindow(win, height);
     }
@@ -757,7 +689,6 @@ function registerIpc() {
 
   handle('intro:target', () => introTarget());
   listen('intro:reveal', () => revealMain());
-  // Released rather than closed, so the score can ring out; the intro closes itself once quiet.
   listen('intro:done', (skipped: unknown) => {
     track('intro_finished', { skipped: skipped === true });
     releaseIntro?.();
@@ -821,9 +752,7 @@ function registerIpc() {
   );
   handle('workspace:create-default', () => workspaces.createDefault());
   handle('workspace:install', () => workspaces.install());
-  listen('workspace:reveal', () => {
-    if (workspaces.current) void shell.openPath(workspaces.current.root);
-  });
+  listen('workspace:reveal', revealWorkspace);
   listen('workspace:dismiss-error', (id: unknown) => workspaces.dismissError(id));
   listen('workspace:forget', (root: string) => {
     if (settings.recent().includes(root)) forgetWorkspace(root);
@@ -863,11 +792,8 @@ function registerIpc() {
     if (fromHost(e)) tabs?.unsavedReply(e.sender, request, payload);
   });
   listenHost('host:open-deck', (slideId: unknown) => {
-    if (typeof slideId === 'string' && slideId && tabs) {
-      const before = tabs.info.tabs.length;
-      tabs.openDeck(slideId);
-      const decks = tabs.info.tabs.length - 1;
-      if (decks >= before) track('deck_opened', { open_tabs: bucket(decks) });
+    if (typeof slideId === 'string' && slideId && tabs?.openDeck(slideId)) {
+      track('deck_opened', { open_tabs: bucket(tabs.info.tabs.length - 1) });
     }
     window?.focus();
   });
@@ -899,9 +825,8 @@ const menuActions: MenuActions = {
   openSettings: () => openSettingsWindow(),
   openWorkspace: () => sendCommand('open-workspace'),
   newWorkspace: () => sendCommand('new-workspace'),
-  revealWorkspace: () => workspaces.current && void shell.openPath(workspaces.current.root),
+  revealWorkspace,
   closeTab: () => {
-    // Settings and presenter windows have no tabs, so ⌘W closes them outright.
     const focused = BrowserWindow.getFocusedWindow();
     if (focused && focused !== window) {
       focused.close();

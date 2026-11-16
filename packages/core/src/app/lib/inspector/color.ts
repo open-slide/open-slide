@@ -1,20 +1,4 @@
-type Rgba = { r: number; g: number; b: number; a: number };
-
-const RGB_RE = /^rgba?\(([^)]+)\)$/;
-
-function parseRgb(value: string): Rgba | null {
-  const m = value.match(RGB_RE);
-  if (!m) return null;
-  const parts = m[1].split(/[\s,/]+/).filter(Boolean);
-  if (parts.length < 3) return null;
-  const alpha = parts[3] === undefined ? 1 : Number.parseFloat(parts[3]);
-  return {
-    r: clampByte(Number(parts[0])),
-    g: clampByte(Number(parts[1])),
-    b: clampByte(Number(parts[2])),
-    a: parts[3]?.endsWith('%') ? alpha / 100 : alpha,
-  };
-}
+import { parseColor, type Rgba, toHex } from '../pptx/css';
 
 let painter: CanvasRenderingContext2D | null | undefined;
 const painted = new Map<string, Rgba | null>();
@@ -48,21 +32,20 @@ function paintRgb(value: string): Rgba | null {
 
 function toRgba(value: string): Rgba | null {
   if (!value) return null;
-  return parseRgb(value) ?? paintRgb(value);
+  return parseColor(value) ?? paintRgb(value);
 }
 
 export function rgbToHex(value: string): string | null {
   const rgba = toRgba(value);
-  if (!rgba) return null;
-  return `#${[rgba.r, rgba.g, rgba.b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
-}
-
-function clampByte(n: number): number {
-  return Math.max(0, Math.min(255, Math.round(Number.isFinite(n) ? n : 0)));
+  return rgba ? `#${toHex(rgba).toLowerCase()}` : null;
 }
 
 export function isTransparent(value: string): boolean {
-  if (!value || value === 'transparent') return true;
+  if (!value) return true;
   const rgba = toRgba(value);
   return rgba ? rgba.a === 0 : false;
+}
+
+export function opaqueHex(value: string): string | null {
+  return isTransparent(value) ? null : rgbToHex(value);
 }

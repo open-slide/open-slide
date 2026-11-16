@@ -15,9 +15,8 @@ type Target = { slideId: string; index: number };
 // stays stale across navigation. Cache last-saved text per target so
 // switching slides and back doesn't surface the old value.
 const sessionCache = new Map<string, string>();
-// Text left behind on a slide whose write is still landing or failed. Coming
-// back shows it instead of the older text on disk, which a later save would
-// otherwise write over it.
+// Text left on a slide whose write is still landing or failed, shown on return
+// instead of the older text on disk.
 const detachedText = new Map<string, string>();
 onAbandon(() => detachedText.clear());
 const cacheKey = (slideId: string, index: number) => `${slideId}:${index}`;
@@ -66,9 +65,8 @@ export function useNotes(slideId: string, index: number, initial: string | undef
     }
   }, []);
 
-  // Resolves to the failure, or null once the text is on disk or a newer
-  // write to the same notes has taken over. Only that cancels a write: one
-  // still landing for the slide just left is not cut off by typing on the next.
+  // Resolves to the failure, or null once the text is on disk or a newer write
+  // to the same notes took over; writes to other notes are never cut off.
   const persist = useCallback(async (target: Target, text: string): Promise<string | null> => {
     const key = cacheKey(target.slideId, target.index);
     const inflight = inflightRef.current;
@@ -87,7 +85,6 @@ export function useNotes(slideId: string, index: number, initial: string | undef
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(body.error ?? `PUT /__notes → ${res.status}`);
       sessionCache.set(key, text);
-      // Writes to one key never overlap, so this one is the newest text.
       detachedText.delete(key);
       forgetWrite(writeKey(key));
       if (!showing()) return null;
@@ -107,18 +104,22 @@ export function useNotes(slideId: string, index: number, initial: string | undef
     }
   }, []);
 
-  // For a write nothing here will wait on: the page still counts as unsaved
-  // until it lands, and a failure is retried with the page's other work.
+  const persistOrThrow = useCallback(
+    async (target: Target, text: string) => {
+      const error = await persist(target, text);
+      if (error) throw new Error(error);
+    },
+    [persist],
+  );
+
+  // For a write nothing here will wait on.
   const persistDetached = useCallback(
     (target: Target, text: string) => {
       const key = cacheKey(target.slideId, target.index);
       detachedText.set(key, text);
-      trackWrite(writeKey(key), async () => {
-        const error = await persist(target, text);
-        if (error) throw new Error(error);
-      });
+      trackWrite(writeKey(key), () => persistOrThrow(target, text));
     },
-    [persist],
+    [persistOrThrow],
   );
 
   const flush = useCallback(async () => {
@@ -139,9 +140,8 @@ export function useNotes(slideId: string, index: number, initial: string | undef
       if (lastSavedRef.current !== pending) persistDetached(prev, pending);
     }
     targetRef.current = { slideId, index };
-    // A save here updates the cache `initialText` reads from. That is this
-    // editor's own text coming back, not new text to adopt: taking it would
-    // drop whatever was typed while the save was in flight.
+    // A save updates the cache `initialText` reads; adopting that echo would drop
+    // text typed while the save was in flight.
     if (!targetChanged && initialText === lastSavedRef.current) return;
     cancelTimer();
     setValueState(initialText);
@@ -150,7 +150,6 @@ export function useNotes(slideId: string, index: number, initial: string | undef
     setStatus({ kind: 'idle' });
   }, [slideId, index, initialText, persistDetached, cancelTimer]);
 
-  // Unmounting mid-edit writes what was typed instead of dropping it.
   useEffect(() => {
     return () => {
       cancelTimer();
@@ -161,10 +160,9 @@ export function useNotes(slideId: string, index: number, initial: string | undef
   useUnsavedSource({
     kind: 'autosave',
     dirty: () => dirtyRef.current,
-    save: async () => {
+    save: () => {
       cancelTimer();
-      const error = await persist(targetRef.current, valueRef.current);
-      if (error) throw new Error(error);
+      return persistOrThrow(targetRef.current, valueRef.current);
     },
     discard: () => {
       cancelTimer();

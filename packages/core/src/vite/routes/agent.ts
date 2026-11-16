@@ -125,9 +125,7 @@ async function renamePlaceholderDeck(
   // A new turn may have started while the file was read; it must not lose the
   // folder it is writing into.
   if (store.list().some((s) => s.slideId === slideId && s.status === 'running')) return;
-  // Nor may it start once the server is closing: the folder's new name could
-  // reach the store after the sessions were last saved, and they would name a
-  // folder that is gone.
+  // Once closing, the new name could reach the store after its last save.
   if (closing()) return;
   recordWrite(entry);
   const renamed = await renameSlideDir(ctx.slidesRoot, slideId, desired);
@@ -179,8 +177,8 @@ const STOP_TIMEOUT_MS = 2000;
 
 class ClosingError extends Error {}
 
-// Returns what must finish before the server is gone: sessions are saved on a
-// debounce, and a flush nobody waits for is cut off when the process exits.
+// Returns what must finish before the server is gone, since a debounced
+// session save nobody waits for is cut off when the process exits.
 export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () => Promise<void> {
   const providers = createProviders();
   const store = createSessionStore({
@@ -213,9 +211,8 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
     return closed;
   };
 
-  // A request can outlast the start of a close while its body arrives; what it
-  // asks for would run on an agent nothing is listening to any more. Called in
-  // the same tick as the change it guards, so a close cannot begin in between.
+  // A request whose body is still arriving can outlast the start of a close.
+  // Call it in the same tick as the change it guards.
   const assertOpen = () => {
     if (closed) throw new ClosingError();
   };

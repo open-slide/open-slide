@@ -3,9 +3,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { DesktopHost, HapticPattern } from './desktop-host';
 import { slideIds } from './slides';
-import { settleUnsaved, unsavedStatus } from './unsaved';
-
-export type { DesktopHost, HapticPattern } from './desktop-host';
+import { hasUnsaved, settleUnsaved, unsavedStatus } from './unsaved';
 
 declare global {
   interface Window {
@@ -18,22 +16,20 @@ export const desktopHost: DesktopHost | undefined =
 
 if (desktopHost) {
   desktopHost.guardUnsaved?.({ status: unsavedStatus, settle: settleUnsaved });
-  // The host settles unsaved work before it closes or reloads a tab itself;
-  // this holds the page through any other unload, such as a dev-server reload.
+  // Covers unloads the host does not start itself, such as a dev-server reload.
   window.addEventListener('beforeunload', (e) => {
-    const { drafts, pending } = unsavedStatus();
-    if (drafts || pending) e.preventDefault();
+    if (hasUnsaved()) e.preventDefault();
   });
 }
 
 const DECK_PATH_RE = /^\/s\/([^/]+)\/?$/;
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 function stripBase(pathname: string): string {
-  const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-  return base && pathname.startsWith(base) ? pathname.slice(base.length) || '/' : pathname;
+  return BASE && pathname.startsWith(BASE) ? pathname.slice(BASE.length) || '/' : pathname;
 }
 
-export function deckIdFromPath(pathname: string): string | null {
+function deckIdFromPath(pathname: string): string | null {
   const m = DECK_PATH_RE.exec(stripBase(pathname));
   return m ? decodeURIComponent(m[1]) : null;
 }
@@ -42,7 +38,7 @@ function isHomePath(pathname: string): boolean {
   return !stripBase(pathname).startsWith('/s/');
 }
 
-// Returns true when the host took over, so callers skip their own navigation.
+// True when the host took over, so the caller skips its own navigation.
 export function openDeckInHost(slideId: string): boolean {
   if (!desktopHost) return false;
   desktopHost.openDeck(slideId);
@@ -96,12 +92,10 @@ export function DesktopBridge() {
   useEffect(
     () =>
       desktopHost?.onNavigate((path) => {
-        // The host may route a pre-warmed page to a deck created after it
-        // booted; its baked-in slide list can't load that deck, so do a
-        // full load instead.
+        // A pre-warmed page's slide list predates decks created after it booted.
         const deck = deckIdFromPath(path);
         if (deck && !slideIds.includes(deck)) {
-          window.location.replace(`${import.meta.env.BASE_URL.replace(/\/$/, '')}${path}`);
+          window.location.replace(`${BASE}${path}`);
           return;
         }
         navigate(path);

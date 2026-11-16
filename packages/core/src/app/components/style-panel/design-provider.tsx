@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { useHistory } from '@/components/history-provider';
 import { type DesignSystem, designToCssVars } from '../../lib/design';
 import { shuffleDesign } from '../../lib/design-presets';
-import { useUnsavedSource } from '../../lib/unsaved';
+import { createSaveQueue, useUnsavedSource } from '../../lib/unsaved';
 import { useDesign as useDesignFetch } from './use-design';
 
 type DesignCtx = {
@@ -49,13 +49,10 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
   const history = useHistory();
   const draftRef = useRef<DesignSystem | null>(null);
   draftRef.current = draft;
-  // A save or discard only reaches `dirty` on the next render, so the draft it
-  // settled is remembered to answer in between.
+  // A save or discard only reaches `dirty` on the next render; this answers in between.
   const settledDraftRef = useRef<DesignSystem | null>(null);
-  const writesRef = useRef(0);
-  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
-  // The draft a save sent: when its response arrives as the new design, edits
-  // made since are newer than it and stay.
+  const [saveQueue] = useState(createSaveQueue);
+  // When a save's response arrives as the new design, edits made since it was sent stay.
   const sentRef = useRef<DesignSystem | null>(null);
 
   useEffect(() => {
@@ -86,35 +83,30 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
     [history],
   );
 
-  // One save at a time, each sending the draft as it stands when its turn
-  // comes: two in flight could answer out of order, and the older response
-  // would put its design back over the newer draft.
+  // Each save sends the draft as it stands when its turn comes: two in flight
+  // could answer out of order and put an older design back over the draft.
   const write = useCallback((): Promise<string | null> => {
     if (!draftRef.current) return Promise.resolve(null);
-    writesRef.current++;
     setCommitting(true);
-    const run = queueRef.current.then(async () => {
-      try {
+    return saveQueue.run(
+      async () => {
         const saving = draftRef.current;
         if (!saving || saving === settledDraftRef.current) return null;
         sentRef.current = saving;
         const r = await save(saving);
-        if (!r.ok) sentRef.current = null;
         if (draftRef.current === saving) history.clear();
         if (r.ok) {
           settledDraftRef.current = saving;
           return null;
         }
+        sentRef.current = null;
         const error = r.error ?? 'Failed to save';
         toast.error(error);
         return error;
-      } finally {
-        if (--writesRef.current === 0) setCommitting(false);
-      }
-    });
-    queueRef.current = run.catch(() => {});
-    return run;
-  }, [save, history]);
+      },
+      () => setCommitting(false),
+    );
+  }, [saveQueue, save, history]);
 
   const commit = useCallback(async () => {
     await write();
@@ -131,7 +123,7 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
   useUnsavedSource({
     kind: 'draft',
     dirty: () =>
-      writesRef.current > 0 || (dirtyRef.current && draftRef.current !== settledDraftRef.current),
+      saveQueue.busy() || (dirtyRef.current && draftRef.current !== settledDraftRef.current),
     save: async () => {
       const error = await write();
       if (error) throw new Error(error);

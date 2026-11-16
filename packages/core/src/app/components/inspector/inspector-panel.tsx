@@ -39,7 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { isTransparent, rgbToHex } from '@/lib/inspector/color';
+import { opaqueHex, rgbToHex } from '@/lib/inspector/color';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import { hasOnlyInlineTextChildren } from '@/lib/inspector/inline-text';
 import { styleContext } from '@/lib/inspector/text-selection';
@@ -908,7 +908,7 @@ function readSnapshot(el: HTMLElement): ElementSnapshot {
 
   return {
     ...readTypography(el),
-    backgroundColor: isTransparent(cs.backgroundColor) ? null : rgbToHex(cs.backgroundColor),
+    backgroundColor: opaqueHex(cs.backgroundColor),
     textAlign: normalizeTextAlign(cs.textAlign),
     lineHeight: parseLineHeight(cs.lineHeight, parseFloat(cs.fontSize) || 16),
     letterSpacing: parseLetterSpacing(cs.letterSpacing),

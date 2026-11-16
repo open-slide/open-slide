@@ -1,6 +1,7 @@
 import { AlignCenter, AlignLeft, AlignRight, Bold, Italic, Minus, Plus } from 'lucide-react';
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useHistory } from '@/components/history-provider';
+import { rgbToHex } from '@/lib/inspector/color';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import {
   isEditableTextContainer,
@@ -669,16 +670,4 @@ function caretRangeAtPoint(x: number, y: number): Range | null {
   }
   range.collapse(true);
   return range;
-}
-
-function rgbToHex(value: string): string | null {
-  const m = value.match(/^rgba?\(([^)]+)\)$/);
-  if (!m) return null;
-  const parts = m[1].split(',').map((s) => s.trim());
-  if (parts.length < 3) return null;
-  const bytes = parts.slice(0, 3).map((p) => {
-    const n = Math.round(Number(p));
-    return Math.max(0, Math.min(255, Number.isFinite(n) ? n : 0));
-  });
-  return `#${bytes.map((n) => n.toString(16).padStart(2, '0')).join('')}`;
 }

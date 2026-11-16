@@ -99,8 +99,7 @@ export function AgentPanel({
   }, [slideId, sessionsLoaded, activeId, sessions]);
   const isNewDeck = Boolean(context.slideId) && newDeck === context.slideId;
 
-  // A session handed over from another tab can arrive while history is
-  // showing, and can be the one that is already active here.
+  // A handoff from another tab can arrive while history shows, naming the active session.
   // biome-ignore lint/correctness/useExhaustiveDependencies: every handoff shows the chat again
   useEffect(() => {
     if (activeId) setView('chat');

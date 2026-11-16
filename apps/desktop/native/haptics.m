@@ -1,8 +1,7 @@
 #import <AppKit/AppKit.h>
 
-// Node-API is resolved from the host process at load time (-undefined dynamic_lookup),
-// and its ABI is stable, so the handful of calls used are declared here instead of
-// pulling in Node headers.
+// Node-API resolves from the host at load time (-undefined dynamic_lookup) and its ABI is
+// stable, so the few calls used are declared here instead of pulling in Node headers.
 typedef struct napi_env__ *napi_env;
 typedef struct napi_value__ *napi_value;
 typedef struct napi_callback_info__ *napi_callback_info;

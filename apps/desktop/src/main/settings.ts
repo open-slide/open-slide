@@ -11,7 +11,6 @@ type Bounds = { x: number; y: number; width: number; height: number };
 type Stored = DesktopSettings & {
   workspace: string | null;
   recent: string[];
-  // Workspaces whose code the user agreed to run.
   trusted: string[];
   sessions: Record<string, DeckSession>;
   ports: Record<string, number>;
@@ -26,6 +25,7 @@ type Stored = DesktopSettings & {
 };
 
 const RECENT_LIMIT = 8;
+const SAVE_DELAY_MS = 200;
 
 const defaults: Stored = {
   translucent: true,
@@ -46,10 +46,6 @@ const defaults: Stored = {
   crashCheckedAt: 0,
 };
 
-function file(): string {
-  return path.join(app.getPath('userData'), 'settings.json');
-}
-
 type Check = (value: unknown) => boolean;
 
 const isString: Check = (v) => typeof v === 'string';
@@ -61,6 +57,10 @@ const nullOr =
   (check: Check): Check =>
   (v) =>
     v === null || check(v);
+const listOf =
+  (check: Check): Check =>
+  (v) =>
+    Array.isArray(v) && v.every(check);
 const recordOf =
   (check: Check): Check =>
   (v) =>
@@ -68,20 +68,19 @@ const recordOf =
 const isSession: Check = (v) =>
   isRecord(v) &&
   nullOr(isString)(v.active) &&
-  Array.isArray(v.decks) &&
-  v.decks.every((d) => isRecord(d) && isString(d.slideId) && isString(d.title));
-const isBounds: Check = (v) =>
-  isRecord(v) && [v.x, v.y, v.width, v.height].every((side) => isNumber(side));
+  listOf((d) => isRecord(d) && isString(d.slideId) && isString(d.title))(v.decks);
+const isBounds: Check = (v) => isRecord(v) && [v.x, v.y, v.width, v.height].every(isNumber);
+const isPort: Check = (v) => Number.isInteger(v) && (v as number) > 0 && (v as number) < 65536;
 
 const checks: { [K in keyof Stored]: Check } = {
   translucent: isBoolean,
-  packageManager: (v) => v === null || (PACKAGE_MANAGERS as readonly unknown[]).includes(v),
+  packageManager: nullOr((v) => (PACKAGE_MANAGERS as readonly unknown[]).includes(v)),
   telemetry: isBoolean,
   workspace: nullOr(isString),
-  recent: (v) => Array.isArray(v) && v.every(isString),
-  trusted: (v) => Array.isArray(v) && v.every(isString),
+  recent: listOf(isString),
+  trusted: listOf(isString),
   sessions: recordOf(isSession),
-  ports: recordOf((v) => Number.isInteger(v) && (v as number) > 0 && (v as number) < 65536),
+  ports: recordOf(isPort),
   skillsVersions: recordOf(isString),
   bounds: nullOr(isBounds),
   loginPath: nullOr(isString),
@@ -92,29 +91,22 @@ const checks: { [K in keyof Stored]: Check } = {
   crashCheckedAt: isNumber,
 };
 
+function file(): string {
+  return path.join(app.getPath('userData'), 'settings.json');
+}
+
 function load(): Stored {
+  const loaded: Record<string, unknown> = structuredClone(defaults);
   let saved: unknown;
   try {
     saved = JSON.parse(readFileSync(file(), 'utf8'));
-  } catch {
-    return structuredClone(defaults);
+  } catch {}
+  if (isRecord(saved)) {
+    for (const key of Object.keys(checks) as (keyof Stored)[]) {
+      if (checks[key](saved[key])) loaded[key] = saved[key];
+    }
   }
-  if (!isRecord(saved)) return structuredClone(defaults);
-  // Settings written before the first-run tour existed belong to people who
-  // already set the app up, so they skip it.
-  const next: Record<string, unknown> = {
-    ...structuredClone(defaults),
-    introSeen: true,
-    onboarded: true,
-  };
-  // A hand-edited or damaged field falls back to its default on its own.
-  for (const key of Object.keys(checks) as (keyof Stored)[]) {
-    if (key in saved && checks[key](saved[key])) next[key] = saved[key];
-  }
-  const loaded = next as Stored;
-  // Settings from before trust was asked for list workspaces that already ran.
-  if (!('trusted' in saved)) loaded.trusted = [...loaded.recent];
-  return loaded;
+  return loaded as Stored;
 }
 
 let stored: Stored | null = null;
@@ -128,8 +120,7 @@ function current(): Stored {
 function flush() {
   if (writeTimer) clearTimeout(writeTimer);
   writeTimer = null;
-  // Runs from a timer and on quit, where a throw would take the app down
-  // over a full disk; the settings stay in memory and the next save retries.
+  // Runs from a timer and on quit, where a full disk must not crash the app; the next save retries.
   try {
     const target = file();
     mkdirSync(path.dirname(target), { recursive: true });
@@ -143,7 +134,22 @@ function flush() {
 
 function save() {
   if (writeTimer) clearTimeout(writeTimer);
-  writeTimer = setTimeout(flush, 200);
+  writeTimer = setTimeout(flush, SAVE_DELAY_MS);
+}
+
+function put<K extends keyof Stored>(key: K, value: Stored[K]) {
+  if (current()[key] === value) return;
+  current()[key] = value;
+  save();
+}
+
+type PerWorkspace = 'ports' | 'skillsVersions';
+
+function putFor<K extends PerWorkspace>(key: K, root: string, value: Stored[K][string]) {
+  const records = current()[key] as Record<string, Stored[K][string]>;
+  if (records[root] === value) return;
+  records[root] = value;
+  save();
 }
 
 export const settings = {
@@ -157,14 +163,9 @@ export const settings = {
     save();
     return settings.get();
   },
-  workspace(): string | null {
-    return current().workspace;
-  },
-  recent(): string[] {
-    return current().recent;
-  },
-  // Returns the workspaces this pushed off the end of the recent list, whose
-  // per-workspace records go with them.
+  workspace: (): string | null => current().workspace,
+  recent: (): string[] => current().recent,
+  // Returns the workspaces pushed off the recent list, whose records are forgotten.
   setWorkspace(root: string | null): string[] {
     const s = current();
     s.workspace = root;
@@ -184,94 +185,40 @@ export const settings = {
     delete s.skillsVersions[root];
     save();
   },
-  trusted(root: string): boolean {
-    return current().trusted.includes(root);
-  },
+  trusted: (root: string): boolean => current().trusted.includes(root),
   trust(root: string) {
-    const s = current();
-    if (s.trusted.includes(root)) return;
-    s.trusted.push(root);
+    const { trusted } = current();
+    if (trusted.includes(root)) return;
+    trusted.push(root);
     save();
   },
-  session(root: string): DeckSession {
-    return current().sessions[root] ?? { decks: [], active: null };
-  },
+  session: (root: string): DeckSession => current().sessions[root] ?? { decks: [], active: null },
   setSession(root: string, session: DeckSession) {
     const sessions = current().sessions;
     if (JSON.stringify(sessions[root]) === JSON.stringify(session)) return;
     sessions[root] = session;
     save();
   },
-  port(root: string): number | null {
-    return current().ports[root] ?? null;
-  },
-  setPort(root: string, port: number) {
-    if (current().ports[root] === port) return;
-    current().ports[root] = port;
-    save();
-  },
-  skillsVersion(root: string): string | null {
-    return current().skillsVersions[root] ?? null;
-  },
-  setSkillsVersion(root: string, version: string) {
-    current().skillsVersions[root] = version;
-    save();
-  },
-  packageManager(): PackageManager | null {
-    return current().packageManager;
-  },
-  bounds(): Bounds | null {
-    return current().bounds;
-  },
-  setBounds(bounds: Bounds) {
-    current().bounds = bounds;
-    save();
-  },
-  loginPath(): string | null {
-    return current().loginPath;
-  },
-  setLoginPath(loginPath: string) {
-    if (current().loginPath === loginPath) return;
-    current().loginPath = loginPath;
-    save();
-  },
-  introSeen(): boolean {
-    return current().introSeen;
-  },
-  setIntroSeen() {
-    if (current().introSeen) return;
-    current().introSeen = true;
-    save();
-  },
-  onboarded(): boolean {
-    return current().onboarded;
-  },
-  setOnboarded(onboarded: boolean) {
-    if (current().onboarded === onboarded) return;
-    current().onboarded = onboarded;
-    save();
-  },
+  port: (root: string): number | null => current().ports[root] ?? null,
+  setPort: (root: string, port: number) => putFor('ports', root, port),
+  skillsVersion: (root: string): string | null => current().skillsVersions[root] ?? null,
+  setSkillsVersion: (root: string, version: string) => putFor('skillsVersions', root, version),
+  packageManager: (): PackageManager | null => current().packageManager,
+  bounds: (): Bounds | null => current().bounds,
+  setBounds: (bounds: Bounds) => put('bounds', bounds),
+  loginPath: (): string | null => current().loginPath,
+  setLoginPath: (loginPath: string) => put('loginPath', loginPath),
+  introSeen: (): boolean => current().introSeen,
+  setIntroSeen: () => put('introSeen', true),
+  onboarded: (): boolean => current().onboarded,
+  setOnboarded: (onboarded: boolean) => put('onboarded', onboarded),
   installId(): string {
     const s = current();
-    if (!s.installId) {
-      s.installId = randomUUID();
-      save();
-    }
-    return s.installId;
+    if (!s.installId) put('installId', randomUUID());
+    return s.installId as string;
   },
-  lastVersion(): string | null {
-    return current().lastVersion;
-  },
-  setLastVersion(version: string) {
-    if (current().lastVersion === version) return;
-    current().lastVersion = version;
-    save();
-  },
-  crashCheckedAt(): number {
-    return current().crashCheckedAt;
-  },
-  setCrashCheckedAt(time: number) {
-    current().crashCheckedAt = time;
-    save();
-  },
+  lastVersion: (): string | null => current().lastVersion,
+  setLastVersion: (version: string) => put('lastVersion', version),
+  crashCheckedAt: (): number => current().crashCheckedAt,
+  setCrashCheckedAt: (time: number) => put('crashCheckedAt', time),
 };

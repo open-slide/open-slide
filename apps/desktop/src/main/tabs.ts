@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
-  app,
   type BrowserWindow,
-  dialog,
   Menu,
   type MenuItemConstructorOptions,
   shell,
@@ -10,6 +8,7 @@ import {
   WebContentsView,
 } from 'electron';
 import { SPARE_PATH, TAB_STRIP_HEIGHT, type TabInfo } from '../shared/types';
+import { showContextMenu } from './menu';
 import type { DeckSession } from './settings';
 import { moveTab } from './tab-order';
 import {
@@ -28,7 +27,7 @@ type Tab = {
   title: string;
   loading: boolean;
   view: WebContentsView | null;
-  // Where a not-yet-loaded home tab should land once it gets a view.
+  // Where a home tab without a view lands once it gets one.
   pendingPath: string | null;
 };
 
@@ -36,15 +35,14 @@ type TabManagerOptions = {
   window: BrowserWindow;
   viewPreload: string;
   onChange: () => void;
-  // Shows a dialog on the window and resolves to the button that was chosen.
   prompt: Prompt;
 };
 
 const DECK_ROOT_RE = /^\/s\/([^/]+)\/?$/;
 const PRESENTER_RE = /^\/s\/[^/]+\/presenter\/?$/;
 const DEFAULT_TITLE = 'open-slide';
-// Each warm tab is a renderer process running the unbundled dev app; past
-// this, restored tabs load on click.
+// Each warm tab is a renderer running the unbundled dev app; past this,
+// restored tabs load on click.
 const MAX_WARM_TABS = 3;
 const WARM_DELAY_MS = 800;
 const ADOPT_TIMEOUT_MS = 1500;
@@ -53,8 +51,7 @@ const WARM_SETTLE_MS = 15_000;
 const CRASH_WINDOW_MS = 60_000;
 const MAX_CRASH_RELOADS = 3;
 
-// Controls act like native ones: no pointer cursor, no text selection, and
-// links or images don't tear off as drag ghosts.
+// Controls act like native ones: no pointer cursor, no selection, no drag ghosts.
 const NATIVE_CSS = `
 html, body { overscroll-behavior: none; }
 :is(button, summary, label, [role="button"], [role="tab"], [role="menuitem"],
@@ -81,6 +78,10 @@ function isHomePath(pathname: string): boolean {
   return !pathname.startsWith('/s/');
 }
 
+function openOutside(url: string) {
+  if (isHttpUrl(url)) void shell.openExternal(url);
+}
+
 export class TabManager {
   private tabs: Tab[];
   private activeId: string;
@@ -90,8 +91,8 @@ export class TabManager {
   private ownsFullscreen = false;
   private spare: WebContentsView | null = null;
   private warmTimer: NodeJS.Timeout | null = null;
-  // A view stays hidden until its first load finishes, so a tab never shows
-  // a half-booted page; an adopted spare also waits for its new route.
+  // A view stays hidden until its first load finishes; an adopted spare also
+  // waits for its new route.
   private readonly loaded = new WeakSet<WebContents>();
   private readonly adopting = new WeakSet<WebContents>();
   private readonly revealed = new WeakSet<WebContents>();
@@ -116,13 +117,7 @@ export class TabManager {
 
   get info(): { tabs: TabInfo[]; activeTabId: string } {
     return {
-      tabs: this.tabs.map(({ id, kind, slideId, title, loading }) => ({
-        id,
-        kind,
-        slideId,
-        title,
-        loading,
-      })),
+      tabs: this.tabs.map(({ view: _view, pendingPath: _pendingPath, ...info }) => info),
       activeTabId: this.activeId,
     };
   }
@@ -144,8 +139,6 @@ export class TabManager {
     );
   }
 
-  // Everything that carries the host bridge: the tabs plus their presenter
-  // windows.
   hosts(contents: WebContents): boolean {
     if (this.owns(contents)) return true;
     for (const popup of this.popups) {
@@ -167,8 +160,6 @@ export class TabManager {
     this.unsaved.answer(contents, request, payload);
   }
 
-  // Settles the unsaved work in every tab before something destroys them all.
-  // Resolves false when the user chose to stay.
   confirmLeave(intent: LeaveIntent): Promise<boolean> {
     return this.confirm(this.tabs, intent);
   }
@@ -181,17 +172,10 @@ export class TabManager {
     }
   }
 
-  // Destroys every tab without asking; callers settle unsaved work first with
-  // confirmLeave.
+  // Destroys every tab without asking; settle unsaved work first with confirmLeave.
   reset(session: DeckSession) {
-    for (const tab of this.tabs) this.destroyView(tab);
-    this.destroySpare();
-    this.cancelWarm();
-    this.closePopups();
-    if (this.ownsFullscreen) {
-      this.ownsFullscreen = false;
-      if (!this.opts.window.isDestroyed()) this.opts.window.setFullScreen(false);
-    }
+    this.destroy();
+    this.exitOwnedFullscreen();
     const home = this.makeTab('home', null);
     const decks = session.decks.map((d) => ({
       ...this.makeTab('deck', d.slideId),
@@ -245,15 +229,17 @@ export class TabManager {
     if (next) this.activate(next.id);
   }
 
-  openDeck(slideId: string) {
+  // True when it opened a new tab rather than switching to one.
+  openDeck(slideId: string): boolean {
     const existing = this.tabs.find((t) => t.kind === 'deck' && t.slideId === slideId);
     if (existing) {
       this.activate(existing.id);
-      return;
+      return false;
     }
     const tab = this.makeTab('deck', slideId);
     this.tabs.push(tab);
     this.activate(tab.id);
+    return true;
   }
 
   openHome(path?: string) {
@@ -279,8 +265,7 @@ export class TabManager {
     this.remove(closing, anchor);
   }
 
-  // The tabs may have changed while the user was deciding, so only the ones
-  // still open are removed.
+  // Tabs may have changed while the user was deciding.
   private remove(closing: Tab[], anchor?: Tab) {
     const gone = closing.filter((t) => this.tabs.includes(t));
     if (!gone.length) return;
@@ -323,8 +308,7 @@ export class TabManager {
     return this.guard.confirm(pages, intent);
   }
 
-  // A page that never loaded, crashed, or sits on an error page has no core
-  // app in it to hold work or answer for it.
+  // A page that never loaded, crashed, or sits on an error page has no core app to answer.
   private canHoldWork(contents: WebContents): boolean {
     return (
       !contents.isDestroyed() &&
@@ -360,7 +344,6 @@ export class TabManager {
     Menu.buildFromTemplate(items).popup({ window: this.opts.window });
   }
 
-  // False when the active tab is not one that closes.
   closeActive(): boolean {
     const tab = this.active();
     if (!tab || tab.kind === 'home') return false;
@@ -383,10 +366,6 @@ export class TabManager {
     for (const tab of this.tabs) this.destroyView(tab);
     this.destroySpare();
     this.cancelWarm();
-    this.closePopups();
-  }
-
-  private closePopups() {
     for (const popup of this.popups) {
       if (!popup.isDestroyed()) popup.close();
     }
@@ -425,7 +404,7 @@ export class TabManager {
     return path;
   }
 
-  layout(includeHidden = true) {
+  private layout(includeHidden = true) {
     const win = this.opts.window;
     if (win.isDestroyed()) return;
     const { width, height } = win.getContentBounds();
@@ -462,8 +441,8 @@ export class TabManager {
         sandbox: true,
         contextIsolation: true,
         spellcheck: true,
-        // A hidden view gets no animation frames, and core's deck warm-up
-        // paces itself on them; throttling resumes once the view is shown.
+        // Core's deck warm-up paces itself on animation frames, which a
+        // throttled hidden view never gets; throttling resumes once shown.
         backgroundThrottling: false,
       },
     });
@@ -519,13 +498,11 @@ export class TabManager {
   private createSpare() {
     const view = this.createView();
     this.spare = view;
-    const contents = view.webContents;
-    contents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    contents.on('render-process-gone', () => {
+    view.webContents.on('render-process-gone', () => {
       if (this.spare === view) this.destroySpare();
     });
     this.layout();
-    this.load(contents, SPARE_PATH);
+    this.load(view.webContents, SPARE_PATH);
   }
 
   private destroySpare() {
@@ -548,8 +525,7 @@ export class TabManager {
   }
 
   // One background load at a time, after whatever the user is waiting on:
-  // first the tabs restored from the last session, then a spare for the next
-  // deck to open.
+  // restored tabs first, then a spare for the next deck.
   private warm() {
     if (!this.baseUrl || this.opts.window.isDestroyed()) return;
     const views = [...this.tabs.map((t) => t.view), this.spare];
@@ -576,12 +552,8 @@ export class TabManager {
     if (!view.webContents.isDestroyed()) view.webContents.close();
   }
 
-  private sameOrigin(url: URL): boolean {
-    return this.baseUrl !== null && url.origin === originOf(this.baseUrl);
-  }
-
   // Presenter windows carry the host bridge, so they stay on the dev server
-  // like the tab that opened them, and close with its workspace.
+  // and close with the workspace.
   private trackPopup(popup: BrowserWindow) {
     this.popups.add(popup);
     popup.on('closed', () => this.popups.delete(popup));
@@ -589,20 +561,18 @@ export class TabManager {
     const guard = (e: Electron.Event, url: string) => {
       if (this.isServerUrl(url)) return;
       e.preventDefault();
-      if (isHttpUrl(url)) void shell.openExternal(url);
+      openOutside(url);
     };
     contents.on('will-navigate', (e) => guard(e, e.url));
     contents.on('will-redirect', (e) => guard(e, e.url));
     contents.setWindowOpenHandler(({ url }) => {
-      if (!this.isServerUrl(url) && isHttpUrl(url)) void shell.openExternal(url);
+      if (!this.isServerUrl(url)) openOutside(url);
       return { action: 'deny' };
     });
   }
 
   private async offerReload(tab: Tab, contents: WebContents) {
-    const win = this.opts.window;
-    if (win.isDestroyed()) return;
-    const { response } = await dialog.showMessageBox(win, {
+    const response = await this.opts.prompt({
       type: 'warning',
       message: `“${tab.title}” keeps crashing`,
       detail: 'Reloading it did not help. You can try once more or leave it for now.',
@@ -630,17 +600,17 @@ export class TabManager {
       this.changed();
     });
     contents.on('did-navigate-in-page', (_e, url, isMainFrame) => {
-      if (isMainFrame) this.followNavigation(tab, contents, new URL(url));
+      if (isMainFrame) this.followNavigation(tab, contents, url);
     });
-    contents.on('did-navigate', (_e, url) => this.followNavigation(tab, contents, new URL(url)));
+    contents.on('did-navigate', (_e, url) => this.followNavigation(tab, contents, url));
 
     contents.on('will-navigate', (e) => {
-      const url = new URL(e.url);
-      if (!this.sameOrigin(url)) {
+      if (!this.isServerUrl(e.url)) {
         e.preventDefault();
-        if (isHttpUrl(e.url)) void shell.openExternal(e.url);
+        openOutside(e.url);
         return;
       }
+      const url = new URL(e.url);
       const deck = deckIdFromPath(url.pathname);
       if (tab.kind === 'home' && deck) {
         e.preventDefault();
@@ -652,11 +622,11 @@ export class TabManager {
     });
 
     contents.setWindowOpenHandler(({ url: raw }) => {
-      const url = new URL(raw);
-      if (!this.sameOrigin(url)) {
-        if (isHttpUrl(raw)) void shell.openExternal(raw);
+      if (!this.isServerUrl(raw)) {
+        openOutside(raw);
         return { action: 'deny' };
       }
+      const url = new URL(raw);
       if (PRESENTER_RE.test(url.pathname)) {
         return {
           action: 'allow',
@@ -690,31 +660,19 @@ export class TabManager {
     contents.on('leave-html-full-screen', () => this.leaveHtmlFullscreen());
 
     contents.on('context-menu', (_e, params) => {
-      const items: MenuItemConstructorOptions[] = [];
-      if (params.isEditable) {
-        items.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' });
-      } else if (params.selectionText) {
-        items.push({ role: 'copy' });
-      }
-      if (isHttpUrl(params.linkURL) && !this.isServerUrl(params.linkURL)) {
-        items.push({
-          label: 'Open Link in Browser',
-          click: () => shell.openExternal(params.linkURL),
-        });
-      }
-      if (!app.isPackaged) {
-        if (items.length) items.push({ type: 'separator' });
-        items.push({
-          label: 'Inspect Element',
-          click: () => contents.inspectElement(params.x, params.y),
-        });
-      }
-      if (items.length) Menu.buildFromTemplate(items).popup({ window: this.opts.window });
+      const external = isHttpUrl(params.linkURL) && !this.isServerUrl(params.linkURL);
+      showContextMenu(
+        this.opts.window,
+        contents,
+        params,
+        external
+          ? [{ label: 'Open Link in Browser', click: () => openOutside(params.linkURL) }]
+          : [],
+      );
     });
 
-    // Core holds any unload it was not asked for while it has drafts, such as
-    // a reload from the dev server. The page stays; the user is asked, and the
-    // reload it wanted follows once the drafts are settled.
+    // Core holds back an unload it was not asked for while it has drafts, such
+    // as a dev-server reload; the user is asked, then the reload follows.
     contents.on('will-prevent-unload', (event) => {
       if (this.allowedUnloads.delete(contents)) event.preventDefault();
       else void this.reload(tab.id);
@@ -741,20 +699,23 @@ export class TabManager {
 
   private leaveHtmlFullscreen() {
     this.fullscreenTab = null;
-    if (this.ownsFullscreen) {
-      this.ownsFullscreen = false;
-      const win = this.opts.window;
-      if (!win.isDestroyed()) win.setFullScreen(false);
-    }
+    this.exitOwnedFullscreen();
     this.layout();
     this.changed();
   }
 
-  // Core asks the host before moving between home and a deck; this catches
-  // any navigation that still slips through so a tab keeps its role.
-  private followNavigation(tab: Tab, contents: WebContents, url: URL) {
+  private exitOwnedFullscreen() {
+    if (!this.ownsFullscreen) return;
+    this.ownsFullscreen = false;
+    if (!this.opts.window.isDestroyed()) this.opts.window.setFullScreen(false);
+  }
+
+  // Catches navigation between home and a deck that slipped past core asking
+  // the host, so a tab keeps its role.
+  private followNavigation(tab: Tab, contents: WebContents, href: string) {
+    const url = new URL(href);
     // A spare adopted mid-boot still commits its own page after joining a tab.
-    if (!this.sameOrigin(url) || url.pathname === SPARE_PATH) return;
+    if (!this.isServerUrl(href) || url.pathname === SPARE_PATH) return;
     const deck = deckIdFromPath(url.pathname);
     if (tab.kind === 'deck') {
       if (deck && deck !== tab.slideId) {

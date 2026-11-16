@@ -34,16 +34,20 @@ const PARENT_OF = (grandchild: string, after = 'setInterval(() => {}, 1000)') =>
    console.log('descendant:' + c.pid);
    ${after}`;
 
-function descendantOf(handle: ReturnType<typeof run>, chunks: string[]): Promise<number> {
-  return (async () => {
-    for (let i = 0; i < 200; i++) {
-      const match = /descendant:(\d+)/.exec(chunks.join(''));
-      if (match) return Number(match[1]);
-      if (handle.child.exitCode !== null && i > 50) break;
-      await pause(10);
-    }
-    throw new Error('the child never reported its descendant');
-  })();
+async function withDescendant(script: string) {
+  let output = '';
+  const handle = node(script, {
+    onChunk: (chunk) => {
+      output += chunk;
+    },
+  });
+  for (let i = 0; i < 200; i++) {
+    const match = /descendant:(\d+)/.exec(output);
+    if (match) return { handle, descendant: Number(match[1]) };
+    if (handle.child.exitCode !== null && i > 50) break;
+    await pause(10);
+  }
+  throw new Error('the child never reported its descendant');
 }
 
 // Real processes and POSIX signals; Windows goes through taskkill instead.
@@ -70,11 +74,7 @@ describe.skipIf(process.platform === 'win32')('run', () => {
   });
 
   it('terminates the processes a child started, not only the child', async () => {
-    const chunks: string[] = [];
-    const handle = node(PARENT_OF('setInterval(() => {}, 1000)'), {
-      onChunk: (chunk) => chunks.push(chunk),
-    });
-    const descendant = await descendantOf(handle, chunks);
+    const { handle, descendant } = await withDescendant(PARENT_OF('setInterval(() => {}, 1000)'));
     expect(alive(descendant)).toBe(true);
 
     await handle.terminate();
@@ -84,11 +84,9 @@ describe.skipIf(process.platform === 'win32')('run', () => {
   });
 
   it('kills a descendant that ignores SIGTERM once the grace period ends', async () => {
-    const chunks: string[] = [];
-    const handle = node(PARENT_OF("process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"), {
-      onChunk: (chunk) => chunks.push(chunk),
-    });
-    const descendant = await descendantOf(handle, chunks);
+    const { descendant } = await withDescendant(
+      PARENT_OF("process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"),
+    );
     // Give the grandchild time to install its handler.
     await pause(300);
 
@@ -98,13 +96,10 @@ describe.skipIf(process.platform === 'win32')('run', () => {
   });
 
   it('settles after a clean exit even while a descendant holds the output open', async () => {
-    const chunks: string[] = [];
     const started = Date.now();
-    const handle = node(
+    const { handle, descendant } = await withDescendant(
       PARENT_OF('setInterval(() => {}, 1000)', 'setTimeout(() => process.exit(0), 100)'),
-      { onChunk: (chunk) => chunks.push(chunk) },
     );
-    const descendant = await descendantOf(handle, chunks);
     try {
       const result = await handle.done;
       expect(result).toMatchObject({ code: 0, timedOut: false });
@@ -117,17 +112,12 @@ describe.skipIf(process.platform === 'win32')('run', () => {
   });
 
   it('finishes termination of descendants even after the parent closes its pipes', async () => {
-    const chunks: string[] = [];
-    const handle = node(
-      `
+    const { handle, descendant } = await withDescendant(`
       const { spawn } = require('node:child_process');
       const child = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); process.send('ready'); setInterval(() => {}, 1000)"], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
       child.once('message', () => console.log('descendant:' + child.pid));
       setInterval(() => {}, 1000);
-    `,
-      { onChunk: (chunk) => chunks.push(chunk) },
-    );
-    const descendant = await descendantOf(handle, chunks);
+    `);
     try {
       await handle.terminate();
       expect(await gone(descendant)).toBe(true);

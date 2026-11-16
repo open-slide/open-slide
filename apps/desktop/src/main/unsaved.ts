@@ -5,7 +5,6 @@ const QUERY_TIMEOUT_MS = 3000;
 const SETTLE_TIMEOUT_MS = 20_000;
 const ERROR_LIMIT = 400;
 
-// What is about to happen to the pages being asked.
 export type LeaveIntent = 'close' | 'reload' | 'switch' | 'restart' | 'quit';
 
 const INTENTS: Record<LeaveIntent, { doing: string; anyway: string }> = {
@@ -18,7 +17,6 @@ const INTENTS: Record<LeaveIntent, { doing: string; anyway: string }> = {
 
 export type UnsavedPage = {
   title: string;
-  // Null when the page did not answer.
   status: () => Promise<UnsavedStatus | null>;
   settle: (action: UnsavedAction) => Promise<UnsavedOutcome>;
   reveal: () => void;
@@ -43,8 +41,7 @@ function parseOutcome(payload: unknown): UnsavedOutcome {
   return { ok: false, error: message.slice(0, ERROR_LIMIT) };
 }
 
-// Requests to a page's unsaved-work guard, each matched to its reply. A page
-// that is closed, crashes, or stays silent answers null.
+// A page that is closed, crashes, or stays silent answers null.
 export class UnsavedChannel {
   private readonly waiting = new Map<
     number,
@@ -102,9 +99,8 @@ function titles(pages: UnsavedPage[]): string {
   return pages.length === 1 ? '' : `${pages.map((page) => page.title).join('\n')}\n\n`;
 }
 
-// Decides what happens to unsaved work before its pages are destroyed:
-// destroying a page runs none of its cleanup, so nothing is flushed unless it
-// is asked first. Resolves false when the pages must stay.
+// Destroying a page runs none of its cleanup, so its unsaved work is settled
+// here first. Resolves false when the pages must stay.
 export class UnsavedGuard {
   private busy = false;
 
@@ -112,8 +108,7 @@ export class UnsavedGuard {
 
   async confirm(pages: UnsavedPage[], intent: LeaveIntent): Promise<boolean> {
     if (pages.length === 0) return true;
-    // A decision is already on screen; a second one would race it for the
-    // same pages.
+    // A second decision would race the one on screen for the same pages.
     if (this.busy) return false;
     this.busy = true;
     try {
@@ -125,8 +120,8 @@ export class UnsavedGuard {
 
   private async decide(pages: UnsavedPage[], intent: LeaveIntent): Promise<boolean> {
     const { doing, anyway } = INTENTS[intent];
-    // A page that answered clean can pick up work while another is being asked
-    // about or saved, so they are all asked again until none has any left.
+    // A clean page can pick up work while another is being settled, so all are
+    // asked again until none has any left.
     let asking = pages;
     for (;;) {
       const statuses = await Promise.all(asking.map((page) => page.status()));
@@ -169,16 +164,15 @@ export class UnsavedGuard {
         ...landing.map((page) => ({ page, action: 'save' }) as const),
       ];
       const outcomes = await Promise.all(settling.map(({ page, action }) => page.settle(action)));
-      const failed = settling
-        .map(({ page }, i) => ({ page, outcome: outcomes[i] }))
-        .filter(({ outcome }) => !outcome.ok);
+      const failed = settling.flatMap(({ page }, i) => {
+        const outcome = outcomes[i];
+        return outcome.ok ? [] : [{ page, error: outcome.error }];
+      });
       if (failed.length === 0) continue;
 
       failed[0].page.reveal();
       const reasons = failed
-        .map(({ page, outcome }) =>
-          outcome.ok ? '' : failed.length === 1 ? outcome.error : `${page.title}: ${outcome.error}`,
-        )
+        .map(({ page, error }) => (failed.length === 1 ? error : `${page.title}: ${error}`))
         .join('\n');
       const choice = await this.prompt({
         type: 'error',

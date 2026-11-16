@@ -3,17 +3,17 @@ import path from 'node:path';
 
 const OUTPUT_LIMIT = 64 * 1024;
 const KILL_GRACE_MS = 2000;
-// How long output pipes may stay open once the process itself is gone. A
-// descendant that inherited them would otherwise keep a run from ever ending.
+// Grace for pipes after exit, since a descendant that inherited them could hold a run open forever.
 const DRAIN_MS = 1000;
+const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[ -/]*[@-~]`, 'g');
+const isWindows = process.platform === 'win32';
 
-export type RunOptions = {
+type RunOptions = {
   cwd: string;
   env: NodeJS.ProcessEnv;
   onChunk?: (chunk: string) => void;
   timeoutMs?: number;
   stdin?: boolean;
-  // How long the process tree gets to exit on its own once asked to stop.
   killGraceMs?: number;
 };
 
@@ -21,8 +21,7 @@ export type RunResult = { code: number | null; output: string; timedOut: boolean
 
 export type RunHandle = {
   child: ChildProcess;
-  // Always settles: at the latest a grace period and a drain after the
-  // process is asked to stop or exits.
+  // Always settles, at the latest a grace period and a drain after a stop or exit.
   done: Promise<RunResult>;
   terminate: () => Promise<void>;
 };
@@ -33,28 +32,25 @@ export function terminateRunning(): Promise<void> {
   return Promise.all([...running].map((handle) => handle.terminate())).then(() => {});
 }
 
-const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[ -/]*[@-~]`, 'g');
-
 export function stripAnsi(text: string): string {
   return text.replace(ANSI_RE, '');
 }
 
-const isWindows = process.platform === 'win32';
+export function windowsTool(exe: string): string {
+  return path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', exe);
+}
 
-// Signals the child and everything it started. Only called between spawn and
-// settlement: while the child or one of its descendants is alive its pid still
-// names their process group, so the signal cannot land on an unrelated process.
+// Only called before settlement, while the pid still names a live process group.
 function signalTree(child: ChildProcess, signal: NodeJS.Signals) {
   const pid = child.pid;
   if (pid === undefined) return;
   if (isWindows) {
-    // Console processes get no graceful signal on Windows, and child.kill()
-    // would leave whatever a .cmd shim started behind.
-    const taskkill = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe');
-    spawn(taskkill, ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }).on(
-      'error',
-      () => child.kill(),
-    );
+    // Console processes get no graceful signal on Windows, and child.kill() would orphan
+    // whatever a .cmd shim started.
+    spawn(windowsTool('taskkill.exe'), ['/pid', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    }).on('error', () => child.kill());
     return;
   }
   try {
@@ -72,7 +68,7 @@ export function run(cmd: string, args: string[], opts: RunOptions): RunHandle {
     // Package managers are .cmd shims on Windows, which only a shell can run.
     shell: isWindows && !path.isAbsolute(cmd),
     windowsHide: true,
-    // Its own process group, so stopping it reaches the processes it started.
+    // Its own process group, so a stop reaches everything it started.
     detached: !isWindows,
   });
   let output = '';
@@ -96,8 +92,7 @@ export function run(cmd: string, args: string[], opts: RunOptions): RunHandle {
   };
   child.stdout?.on('data', onData);
   child.stderr?.on('data', onData);
-  // A write after the child exits fails with EPIPE; the exit code still decides
-  // the outcome, so the failed write is dropped instead of crashing main.
+  // Swallow EPIPE from writes after exit; the exit code decides the outcome.
   child.stdin?.on('error', () => {});
 
   const done = new Promise<RunResult>((resolve) => {
@@ -105,7 +100,6 @@ export function run(cmd: string, args: string[], opts: RunOptions): RunHandle {
       if (settled) return;
       settled = true;
       for (const timer of timers) clearTimeout(timer);
-      timers.clear();
       running.delete(handle);
       child.stdout?.destroy();
       child.stderr?.destroy();
@@ -130,19 +124,15 @@ export function run(cmd: string, args: string[], opts: RunOptions): RunHandle {
 
   child.on('error', (err) => {
     onData(Buffer.from(`${err.message}\n`));
-    // Only a failed spawn ends the child; it never emits exit.
+    // A failed spawn never emits exit.
     if (child.pid === undefined) settle(-1);
   });
-  child.on('exit', (code) => {
-    // A stop in progress still has descendants to reach, and settles itself.
-    later(() => {
-      if (!stopping) settle(code);
-    }, DRAIN_MS);
-  });
-  child.on('close', (code) => {
-    // Closed pipes do not mean every descendant accepted SIGTERM.
+  // While stopping, descendants may still need SIGKILL, so the stop settles instead.
+  const settleUnlessStopping = (code: number | null) => {
     if (!stopping) settle(code);
-  });
+  };
+  child.on('exit', (code) => later(() => settleUnlessStopping(code), DRAIN_MS));
+  child.on('close', settleUnlessStopping);
   if (opts.timeoutMs) {
     later(() => {
       timedOut = true;
@@ -152,8 +142,6 @@ export function run(cmd: string, args: string[], opts: RunOptions): RunHandle {
   return handle;
 }
 
-// Runs a Node script on Electron's own runtime, so the app needs no separate
-// Node install for its own tooling.
 export function runNodeScript(script: string, args: string[], opts: RunOptions): RunHandle {
   return run(process.execPath, [script, ...args], {
     ...opts,

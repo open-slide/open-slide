@@ -93,14 +93,6 @@ export function createSessionStore(opts: { file: string | null }) {
     }, SAVE_DEBOUNCE_MS);
   };
 
-  const snapshot = (): string => {
-    const body: PersistedShape = {
-      version: 1,
-      sessions: list().flatMap((s) => sessions.get(s.id) ?? []),
-    };
-    return JSON.stringify(body);
-  };
-
   const writeSnapshot = async (file: string, body: string) => {
     const tmp = `${file}.tmp`;
     try {
@@ -114,14 +106,16 @@ export function createSessionStore(opts: { file: string | null }) {
   };
 
   // Saves share one temp file, so a flush racing a debounced save must wait
-  // for it rather than interleave writes and renames. The snapshot is taken
-  // when the save is queued, so the last one a closing store writes holds
-  // nothing changed after close.
+  // for it rather than interleave writes and renames. The body is taken when
+  // the save is queued, so a closing store's last write has nothing from after close.
   let saving: Promise<void> = Promise.resolve();
   const save = () => {
     const file = opts.file;
     if (!file || closed) return saving;
-    const body = snapshot();
+    const body = JSON.stringify({
+      version: 1,
+      sessions: list().flatMap((s) => sessions.get(s.id) ?? []),
+    } satisfies PersistedShape);
     saving = saving.then(() => writeSnapshot(file, body));
     return saving;
   };
@@ -263,8 +257,7 @@ export function createSessionStore(opts: { file: string | null }) {
     await save();
   }
 
-  // The file belongs to whichever store loads it next, so a change made here
-  // afterwards must not be written over what that one saves.
+  // The file belongs to whichever store loads it next; later changes here must not overwrite it.
   async function close(): Promise<void> {
     const last = flush();
     closed = true;

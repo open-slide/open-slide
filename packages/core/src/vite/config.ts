@@ -11,7 +11,7 @@ import { designPlugin } from './design-plugin.ts';
 import { locTagsPlugin } from './loc-tags-plugin.ts';
 import { notesPlugin } from './notes-plugin.ts';
 import { loadUserConfig, type OpenSlideConfig, openSlidePlugin } from './open-slide-plugin.ts';
-import { MANAGED_CORE_ENV } from './routes/update.ts';
+import { isManagedCore } from './routes/update.ts';
 import { serverInfoPlugin } from './server-info-plugin.ts';
 import { themesPlugin } from './themes-plugin.ts';
 
@@ -37,10 +37,6 @@ function readCoreVersion(): string {
 }
 
 const CORE_VERSION = readCoreVersion();
-
-// Vite's default cache sits inside core's own package directory, which a host
-// that bundles core (the desktop app) ships read-only and code-signed.
-export const CACHE_DIR_ENV = 'OPEN_SLIDE_CACHE_DIR';
 
 // styles.css pulls webfonts from core's own dependencies. Their real paths sit
 // outside the app root — and, under pnpm or in a workspace, outside the user's
@@ -75,8 +71,8 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
   const assetsAbs = path.resolve(userCwd, assetsDir);
 
   return {
-    // The desktop app addresses every tab from the server root.
-    base: process.env[MANAGED_CORE_ENV] === '1' ? '/' : (config.base ?? '/'),
+    // A managed host addresses every tab from the server root.
+    base: isManagedCore() ? '/' : (config.base ?? '/'),
     root: APP_ROOT,
     configFile: false,
     envDir: userCwd,
@@ -98,15 +94,14 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
       currentPlugin({ userCwd, slidesDir }),
       serverInfoPlugin({ userCwd }),
     ],
-    cacheDir: process.env[CACHE_DIR_ENV] || undefined,
+    // The default cache sits inside core's package, which a bundling host ships read-only.
+    cacheDir: process.env.OPEN_SLIDE_CACHE_DIR || undefined,
     resolve: {
       alias: [
         { find: '@', replacement: APP_ROOT },
         { find: '@assets', replacement: assetsAbs },
-        // Slides and themes import core from wherever they sit, which may be a
-        // workspace with no install or a different core version than the one
-        // serving them (the desktop app bundles its own). Always hand them the
-        // running core.
+        // Slides may sit in a workspace with no install or another core version
+        // than the one serving them, so always hand them the running core.
         { find: /^@open-slide\/core$/, replacement: path.join(PKG_ROOT, 'dist', 'index.js') },
         {
           find: /^@open-slide\/core\/locale$/,

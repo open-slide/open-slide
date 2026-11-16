@@ -1,7 +1,7 @@
 import { MousePointer2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { ColorField, Field } from '@/components/panel/panel-fields';
-import { isTransparent, rgbToHex } from '@/lib/inspector/color';
+import { isTransparent, opaqueHex } from '@/lib/inspector/color';
 import { findSlideSource, jsxOwnerType } from '@/lib/inspector/fiber';
 import { readCanvas, readFrame } from '@/lib/inspector/visual-dom';
 import type { Page } from '@/lib/sdk';
@@ -25,7 +25,6 @@ type PageState = {
   preview: string | null;
   source: BackgroundSource;
   target: SelectedTarget | null;
-  overridden: boolean;
   steps: number;
 };
 
@@ -59,23 +58,18 @@ export function PagePanel({ page }: { page: PageInfo }) {
         {format(t.inspector.pageLabel, { page: page.index + 1, total: page.total })}
       </div>
       <div className="flex flex-col gap-3 px-3.5 py-4">
-        {state?.target && state.source !== 'complex' ? (
-          <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1">
+          {state?.target && state.source !== 'complex' ? (
             <ColorField
               label={t.inspector.pageBackground}
               value={state.color ?? '#ffffff'}
               dim={!state.color}
               onChange={setBackground}
               onClear={
-                page.themed && state.overridden && state.source === 'page'
-                  ? () => setBackground(null)
-                  : undefined
+                page.themed && state.source === 'page' ? () => setBackground(null) : undefined
               }
             />
-            {backgroundCaption && <Caption>{backgroundCaption}</Caption>}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1">
+          ) : (
             <Field label={t.inspector.pageBackground}>
               <span className="flex size-7 shrink-0 items-center justify-center rounded-[5px] border border-border bg-background">
                 <span
@@ -92,9 +86,9 @@ export function PagePanel({ page }: { page: PageInfo }) {
                 </span>
               )}
             </Field>
-            {backgroundCaption && <Caption>{backgroundCaption}</Caption>}
-          </div>
-        )}
+          )}
+          {backgroundCaption && <Caption>{backgroundCaption}</Caption>}
+        </div>
         <div className="flex flex-col gap-1">
           <Field label={t.inspector.pageTransition}>
             <span className="truncate text-[12px]">
@@ -210,22 +204,15 @@ function readPageState(
   const themeBackground = layer.parentElement
     ? getComputedStyle(layer.parentElement).backgroundColor
     : '';
-  const themeColor = isTransparent(themeBackground) ? null : rgbToHex(themeBackground);
+  const themeColor = opaqueHex(themeBackground);
   if (!painted) {
     const target = chain.map(ownTarget).find(Boolean) ?? null;
-    return {
-      color: themeColor,
-      preview: null,
-      source: 'theme',
-      target,
-      overridden: false,
-      steps,
-    };
+    return { color: themeColor, preview: null, source: 'theme', target, steps };
   }
 
   const style = getComputedStyle(painted);
   const target = ownTarget(painted);
-  const color = isTransparent(style.backgroundColor) ? null : rgbToHex(style.backgroundColor);
+  const color = opaqueHex(style.backgroundColor);
   const complex = style.backgroundImage !== 'none';
   // A page that writes its own background owns it even when it matches the
   // theme, so it can still be reset to follow later theme changes.
@@ -245,7 +232,6 @@ function readPageState(
             ? 'page'
             : 'shared',
     target,
-    overridden: true,
     steps,
   };
 }
