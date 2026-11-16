@@ -55,10 +55,13 @@ describe('entryFromPackageJson', () => {
 });
 
 describe('findOnPath', () => {
+  // Windows only matches a PATHEXT extension.
+  const exe = process.platform === 'win32' ? '.exe' : '';
+
   it('finds an executable file in PATH directories', async () => {
     const bin = path.join(dir, 'bin');
     await mkdir(bin);
-    const file = path.join(bin, 'fake-cli');
+    const file = path.join(bin, `fake-cli${exe}`);
     await writeFile(file, '#!/bin/sh\necho 1.2.3\n');
     await chmod(file, 0o755);
     expect(
@@ -73,11 +76,11 @@ describe('findOnPath', () => {
     const second = path.join(dir, 'second');
     await mkdir(first);
     await mkdir(second);
-    await writeFile(path.join(first, 'fake-cli'), '');
-    await writeFile(path.join(second, 'fake-cli'), '');
+    await writeFile(path.join(first, `fake-cli${exe}`), '');
+    await writeFile(path.join(second, `fake-cli${exe}`), '');
     const env = { PATH: `${first}${path.delimiter}${second}` };
     expect(findOnPath('fake-cli', env, (file) => !file.startsWith(first))).toBe(
-      path.join(second, 'fake-cli'),
+      path.join(second, `fake-cli${exe}`),
     );
     expect(findOnPath('fake-cli', env, () => false)).toBeNull();
   });
