@@ -6,7 +6,8 @@ import { buttonVariants } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useLocale } from '@/lib/use-locale';
@@ -38,27 +39,20 @@ export function ThemeToggle() {
         </DropdownMenuTrigger>
       </IconTooltip>
       <DropdownMenuContent align="end" className="min-w-[140px]">
-        <DropdownMenuItem
-          onClick={() => setTheme('light')}
-          data-active={mounted && theme === 'light'}
-        >
-          <Sun />
-          {t.themeToggle.light}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setTheme('dark')}
-          data-active={mounted && theme === 'dark'}
-        >
-          <Moon />
-          {t.themeToggle.dark}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setTheme('system')}
-          data-active={mounted && theme === 'system'}
-        >
-          <Monitor />
-          {t.themeToggle.system}
-        </DropdownMenuItem>
+        <DropdownMenuRadioGroup value={mounted ? theme : undefined} onValueChange={setTheme}>
+          <DropdownMenuRadioItem value="light" closeOnClick>
+            <Sun />
+            {t.themeToggle.light}
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="dark" closeOnClick>
+            <Moon />
+            {t.themeToggle.dark}
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="system" closeOnClick>
+            <Monitor />
+            {t.themeToggle.system}
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
