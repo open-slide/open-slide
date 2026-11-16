@@ -4,6 +4,8 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+packageExtensionsChecksum: sha256-xek4DxHKJ154byA4DfjHvqdcM+O1zH6v+xGH3nh1Yig=
+
 importers:
 
   .:
@@ -93,7 +95,7 @@ importers:
         version: 26.18.0(electron-builder-squirrel-windows@26.18.0)
       electron-vite:
         specifier: ^6.0.0
-        version: 6.0.0(vite@8.3.3(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+        version: 6.0.0(electron@45.3.2)(vite@8.3.3(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
       lucide-react:
         specifier: ^1.25.0
         version: 1.47.0(react@19.2.8)
@@ -3292,6 +3294,7 @@ packages:
     hasBin: true
     peerDependencies:
       '@swc/core': ^1.0.0
+      electron: '*'
       vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@swc/core':
@@ -8383,11 +8386,12 @@ snapshots:
 
   electron-to-chromium@1.5.452: {}
 
-  electron-vite@6.0.0(vite@8.3.3(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)):
+  electron-vite@6.0.0(electron@45.3.2)(vite@8.3.3(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)):
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-arrow-functions': 7.29.7(@babel/core@7.29.7)
       cac: 7.0.0
+      electron: 45.3.2
       magic-string: 1.4.5
       picocolors: 1.1.1
       rolldown: 1.2.14

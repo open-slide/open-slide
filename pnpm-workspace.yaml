@@ -5,3 +5,9 @@ packages:
 
 onlyBuiltDependencies:
   - electron
+
+# electron-vite resolves `electron` from its own location but doesn't declare it.
+packageExtensions:
+  electron-vite:
+    peerDependencies:
+      electron: "*"
