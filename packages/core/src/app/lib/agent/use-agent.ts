@@ -39,6 +39,9 @@ type State = {
   connectErrors: Partial<Record<AgentProviderId, string>>;
   newDeck: string | null;
   handoff: Handoff | null;
+  // Counts handoffs taken here, so one naming the session already active is
+  // still seen.
+  handoffs: number;
 };
 
 type Handoff = { slideId: string; sessionId: string };
@@ -118,6 +121,7 @@ let state: State = {
   connectErrors: {},
   newDeck: readStorage(NEW_DECK_KEY),
   handoff: parseHandoff(readStorage(HANDOFF_KEY)),
+  handoffs: 0,
 };
 
 const listeners = new Set<() => void>();
@@ -315,14 +319,13 @@ async function loadSessions(): Promise<void> {
   try {
     await loadSnapshot<{ sessions: AgentSessionSummary[] }>(
       '/__agent/sessions',
-      ({ sessions }) =>
-        setState((prev) => ({
-          sessions,
-          sessionsLoaded: true,
-          activeId:
-            prev.activeId && !sessions.some((s) => s.id === prev.activeId) ? null : prev.activeId,
-        })),
+      ({ sessions }) => setState({ sessions, sessionsLoaded: true }),
       (event) => event.type === 'session' || event.type === 'session-removed',
+    );
+    // Checked once the events the snapshot missed are back on top of it: a
+    // session created while it was out is not in it, but is still there.
+    setState((prev) =>
+      prev.activeId && !prev.sessions.some((s) => s.id === prev.activeId) ? { activeId: null } : {},
     );
   } catch {
     setState({ sessionsLoaded: true });
@@ -470,7 +473,7 @@ export function useSessionHandoff(slideId: string): void {
   useEffect(() => {
     if (handoff?.slideId !== slideId) return;
     writeStorage(HANDOFF_KEY, null);
-    setState({ handoff: null });
+    setState((prev) => ({ handoff: null, handoffs: prev.handoffs + 1 }));
     setActiveSession(handoff.sessionId);
     setDockOpen(true);
   }, [handoff, slideId]);

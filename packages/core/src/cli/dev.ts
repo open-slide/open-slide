@@ -29,6 +29,14 @@ export async function dev(opts: DevOptions = {}): Promise<void> {
 }
 
 async function startServer(opts: DevOptions): Promise<void> {
+  let server: ViteDevServer | undefined;
+  // A supervisor that crashes or is force-quit sends no signal; its closed IPC
+  // channel is the only notice, and without it the server would keep the port.
+  // It can close while the server is still starting, so this listens first.
+  process.once('disconnect', () => {
+    void Promise.resolve(server?.close()).finally(() => process.exit(0));
+  });
+
   const base = await createViteConfig({ userCwd: process.cwd() });
   const config = mergeConfig(base, {
     customLogger: createCliLogger(),
@@ -38,7 +46,7 @@ async function startServer(opts: DevOptions): Promise<void> {
       ...(opts.open !== undefined ? { open: opts.open } : {}),
     },
   });
-  const server = await createServer(config);
+  server = await createServer(config);
   await server.listen();
 
   printHeader(startupDuration());
@@ -52,11 +60,6 @@ async function startServer(opts: DevOptions): Promise<void> {
   if (process.send && address && typeof address === 'object') {
     process.send({ type: 'open-slide:listening', port: address.port });
   }
-  // A supervisor that crashes or is force-quit sends no signal; its closed IPC
-  // channel is the only notice, and without it the server would keep the port.
-  process.once('disconnect', () => {
-    void server.close().finally(() => process.exit(0));
-  });
 }
 
 // Vite's built-in `r` and `u` print URLs in its own house style; override

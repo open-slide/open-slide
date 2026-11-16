@@ -68,7 +68,7 @@ export function AgentPanel({
   const { status, loading, connected, provider, model, effort, modelChoices } = useAgentStatus();
   const { sessions, loaded: sessionsLoaded, activeId } = useAgentSessions();
   const session = useAgentSession(activeId);
-  const { request, autoApprove, newDeck } = useAgentState();
+  const { request, autoApprove, newDeck, handoffs } = useAgentState();
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
@@ -99,10 +99,12 @@ export function AgentPanel({
   }, [slideId, sessionsLoaded, activeId, sessions]);
   const isNewDeck = Boolean(context.slideId) && newDeck === context.slideId;
 
-  // A session handed over from another tab can arrive while history is showing.
+  // A session handed over from another tab can arrive while history is
+  // showing, and can be the one that is already active here.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: every handoff shows the chat again
   useEffect(() => {
     if (activeId) setView('chat');
-  }, [activeId]);
+  }, [activeId, handoffs]);
 
   const ensureSession = useCallback(
     async (fresh: boolean) => {

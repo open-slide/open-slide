@@ -170,7 +170,9 @@ function parseTurnSettings(raw: Record<string, unknown>): TurnSettings {
 
 const AGENT_BODY_LIMIT = 1024 * 1024;
 
-export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): void {
+// Returns what must finish before the server is gone: sessions are saved on a
+// debounce, and a flush nobody waits for is cut off when the process exits.
+export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () => Promise<void> {
   const providers = createProviders();
   const store = createSessionStore({
     file: path.join(ctx.userCwd, 'node_modules', '.open-slide', 'agent-sessions.json'),
@@ -186,10 +188,10 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
   });
 
   store.subscribe(broadcast);
-  server.httpServer?.on('close', () => {
+  const close = async () => {
     runner.stopAll();
-    void store.flush();
-  });
+    await store.flush();
+  };
 
   const installsInFlight = new Map<string, Promise<void>>();
 
@@ -323,4 +325,6 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
       json(res, 500, { error: String((err as Error).message ?? err) });
     }
   });
+
+  return close;
 }

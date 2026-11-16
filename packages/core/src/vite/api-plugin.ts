@@ -16,6 +16,7 @@ import { registerWatchers } from './routes/watchers.ts';
 // owned by a group, open the matching file under `routes/` — each file
 // leads with a comment-block manifest of its endpoints.
 export function apiPlugin(opts: ApiPluginOptions): Plugin {
+  let closeAgent: (() => Promise<void>) | null = null;
   return {
     name: 'open-slide:api',
     apply: 'serve',
@@ -31,7 +32,11 @@ export function apiPlugin(opts: ApiPluginOptions): Plugin {
       registerFolderRoutes(server, ctx);
       registerUpdateRoutes(server, ctx);
       registerRestartRoutes(server);
-      registerAgentRoutes(server, ctx);
+      closeAgent = registerAgentRoutes(server, ctx);
+    },
+    // Vite waits for this while it closes the server.
+    async closeBundle() {
+      await closeAgent?.();
     },
   };
 }
