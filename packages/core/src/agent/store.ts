@@ -65,6 +65,7 @@ export function createSessionStore(opts: { file: string | null }) {
   const sessions = new Map<string, AgentSession>();
   const listeners = new Set<Listener>();
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let closed = false;
   // Touch order breaks ties between sessions updated in the same millisecond.
   let seq = 0;
   const order = new Map<string, number>();
@@ -84,7 +85,7 @@ export function createSessionStore(opts: { file: string | null }) {
   };
 
   const scheduleSave = () => {
-    if (!opts.file) return;
+    if (!opts.file || closed) return;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
@@ -113,7 +114,7 @@ export function createSessionStore(opts: { file: string | null }) {
   let saving: Promise<void> = Promise.resolve();
   const save = () => {
     const file = opts.file;
-    if (!file) return saving;
+    if (!file || closed) return saving;
     saving = saving.then(() => writeSnapshot(file));
     return saving;
   };
@@ -255,6 +256,14 @@ export function createSessionStore(opts: { file: string | null }) {
     await save();
   }
 
+  // The file belongs to whichever store loads it next, so a change made here
+  // afterwards must not be written over what that one saves.
+  async function close(): Promise<void> {
+    const last = flush();
+    closed = true;
+    await last;
+  }
+
   return {
     list,
     get,
@@ -267,6 +276,7 @@ export function createSessionStore(opts: { file: string | null }) {
     appendDelta,
     subscribe,
     flush,
+    close,
     rev: () => rev,
   };
 }

@@ -57,6 +57,7 @@ export function createAgentRunner(opts: {
   const running = new Map<string, AbortController>();
   const pending = new Map<string, PendingPrompt>();
   const lastOptions = new Map<string, SendOptions>();
+  const turns = new Set<Promise<unknown>>();
 
   const now = () => new Date().toISOString();
 
@@ -274,17 +275,16 @@ export function createAgentRunner(opts: {
         });
       }
       store.patch(sessionId, { status: 'idle' });
-      if (onTurnEnd) {
-        void Promise.resolve()
-          .then(() => onTurnEnd({ sessionId, userItemId }))
-          .catch((err: unknown) => {
-            console.error('[open-slide] agent turn-end handler failed:', err);
-          });
-      }
+      if (!onTurnEnd) return;
+      return Promise.resolve()
+        .then(() => onTurnEnd({ sessionId, userItemId }))
+        .catch((err: unknown) => {
+          console.error('[open-slide] agent turn-end handler failed:', err);
+        });
     };
 
     const prompt = buildTurnPrompt(promptText, context);
-    void provider
+    const turn = provider
       .run({
         cwd: userCwd,
         writableRoots,
@@ -304,6 +304,8 @@ export function createAgentRunner(opts: {
         emit({ type: 'error', text: err instanceof Error ? err.message : String(err) });
       })
       .finally(finish);
+    turns.add(turn);
+    void turn.finally(() => turns.delete(turn));
   }
 
   function stop(sessionId: string): boolean {
@@ -376,8 +378,11 @@ export function createAgentRunner(opts: {
     return true;
   }
 
-  function stopAll(): void {
+  // Resolves once no turn is left to change the store: a stopped provider
+  // still reports its end, and the turn-end handler runs after that.
+  async function stopAll(): Promise<void> {
     for (const id of Array.from(running.keys())) stop(id);
+    await Promise.allSettled(turns);
   }
 
   return { send, stop, respond, isRunning, stopAll };

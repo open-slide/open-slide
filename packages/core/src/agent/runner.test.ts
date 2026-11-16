@@ -287,6 +287,45 @@ describe('createAgentRunner', () => {
     expect(runner.stop(session.id)).toBe(false);
   });
 
+  it('stopAll waits for stopped turns to end and their turn-end work to finish', async () => {
+    let releaseProvider = () => {};
+    let releaseTurnEnd = () => {};
+    const { store, runner } = setup(
+      async (opts) => {
+        await new Promise<void>((resolve) =>
+          opts.signal.addEventListener('abort', () => resolve()),
+        );
+        await new Promise<void>((resolve) => {
+          releaseProvider = resolve;
+        });
+      },
+      () =>
+        new Promise<void>((resolve) => {
+          releaseTurnEnd = resolve;
+        }),
+    );
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'go' });
+    await settle();
+
+    let stopped = false;
+    const stopping = runner.stopAll().then(() => {
+      stopped = true;
+    });
+    await settle();
+    expect(stopped).toBe(false);
+    expect(sessionOf(store, session.id).status).toBe('running');
+
+    releaseProvider();
+    await settle();
+    expect(sessionOf(store, session.id).items.at(-1)).toMatchObject({ aborted: true });
+    expect(stopped).toBe(false);
+
+    releaseTurnEnd();
+    await stopping;
+    expect(stopped).toBe(true);
+  });
+
   it('surfaces provider failures as error items', async () => {
     const { store, runner } = setup(async () => {
       throw new Error('not connected');

@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { ViteDevServer } from 'vite';
+import type { Connect, ViteDevServer } from 'vite';
 import { extractDeckSlug, stripDeckSlug } from '../../agent/prompt.ts';
 import { createProviders } from '../../agent/providers/index.ts';
 import {
@@ -169,6 +169,10 @@ function parseTurnSettings(raw: Record<string, unknown>): TurnSettings {
 }
 
 const AGENT_BODY_LIMIT = 1024 * 1024;
+// Short of the three seconds the desktop app gives the server to exit.
+const STOP_TIMEOUT_MS = 2000;
+
+class ClosingError extends Error {}
 
 // Returns what must finish before the server is gone: sessions are saved on a
 // debounce, and a flush nobody waits for is cut off when the process exits.
@@ -191,10 +195,24 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
   let closed: Promise<void> | null = null;
   const close = () => {
     closed ??= (async () => {
-      runner.stopAll();
-      await store.flush();
+      // A turn that ignores its abort must not keep the server from closing.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, STOP_TIMEOUT_MS);
+      });
+      await Promise.race([runner.stopAll(), timeout]);
+      clearTimeout(timer);
+      await store.close();
     })();
     return closed;
+  };
+
+  // A request can outlast the start of a close while its body arrives; what it
+  // asks for would run on an agent nothing is listening to any more.
+  const readOpenBody = async (req: Connect.IncomingMessage): Promise<unknown> => {
+    const body = await readBody(req, AGENT_BODY_LIMIT);
+    if (closed) throw new ClosingError();
+    return body;
   };
 
   const installsInFlight = new Map<string, Promise<void>>();
@@ -217,11 +235,12 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
       }
 
       if (!enabled) return json(res, 404, { error: 'agent panel disabled' });
+      if (closed && method !== 'GET') throw new ClosingError();
 
       if (method === 'POST' && url.pathname === '/install') {
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
-        const body = (await readBody(req, AGENT_BODY_LIMIT)) as { provider?: unknown };
+        const body = (await readOpenBody(req)) as { provider?: unknown };
         if (!isAgentProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
         const provider = providers[body.provider];
         const pm = await detectPackageManager(ctx.userCwd);
@@ -243,7 +262,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
       if (method === 'POST' && url.pathname === '/sessions') {
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
-        const body = (await readBody(req, AGENT_BODY_LIMIT)) as {
+        const body = (await readOpenBody(req)) as {
           provider?: unknown;
           slideId?: unknown;
         };
@@ -275,7 +294,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
         if (method === 'POST' && action === 'messages') {
           const guard = validateMutationRequest(req, { requireJsonBody: true });
           if (!guard.ok) return json(res, guard.status, { error: guard.error });
-          const body = (await readBody(req, AGENT_BODY_LIMIT)) as {
+          const body = (await readOpenBody(req)) as {
             text?: unknown;
             context?: unknown;
             autoApprove?: unknown;
@@ -313,7 +332,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
         if (method === 'POST' && action === 'respond') {
           const guard = validateMutationRequest(req, { requireJsonBody: true });
           if (!guard.ok) return json(res, guard.status, { error: guard.error });
-          const body = (await readBody(req, AGENT_BODY_LIMIT)) as Record<string, unknown>;
+          const body = (await readOpenBody(req)) as Record<string, unknown>;
           const payload = parseRespond(body);
           if (typeof body.itemId !== 'string' || !payload) {
             return json(res, 400, { error: 'invalid response' });
@@ -326,6 +345,9 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
       next();
     } catch (err) {
       if (err instanceof BodyTooLargeError) return json(res, 413, { error: err.message });
+      if (err instanceof ClosingError) {
+        return json(res, 503, { error: 'the dev server is shutting down' });
+      }
       json(res, 500, { error: String((err as Error).message ?? err) });
     }
   });
