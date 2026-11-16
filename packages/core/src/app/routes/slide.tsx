@@ -910,6 +910,14 @@ export function Slide() {
           ) : (
             <DesignProvider slideId={slideId}>
               <div className="relative flex min-h-0 flex-1 flex-col">
+                {stageError && (
+                  <SlideErrorBanner
+                    info={stageError}
+                    slideId={slideId}
+                    pageNumber={index + 1}
+                    stale={stageError === error}
+                  />
+                )}
                 <div className="flex min-h-0 flex-1 flex-col md:flex-row">
                   <ResizableRail
                     pages={pages}
@@ -947,14 +955,6 @@ export function Slide() {
                     <InspectOverlay />
                     <InlineEditLayer />
                     <SaveBar />
-                    {stageError && (
-                      <SlideErrorBanner
-                        info={stageError}
-                        slideId={slideId}
-                        pageNumber={index + 1}
-                        stale={stageError === error}
-                      />
-                    )}
                     {import.meta.env.DEV && <CommentLayer />}
                     {agentActivity && <AgentPresence activity={agentActivity} revision={pages} />}
                   </main>

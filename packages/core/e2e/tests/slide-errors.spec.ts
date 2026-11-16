@@ -88,7 +88,7 @@ test.describe('slide errors', () => {
       await expect(canvas.getByText('Healthy page')).toBeVisible();
 
       await fs.writeFile(file, BROKEN);
-      const banner = canvas.locator('[data-osd-slide-error="compile"]');
+      const banner = p.locator('[data-osd-slide-error="compile"]');
       await expect(banner).toBeVisible({ timeout: 15_000 });
       await expect(banner).toContainText('Showing the last working version');
       await expect(canvas.getByText('Healthy page')).toBeVisible();
@@ -112,7 +112,7 @@ test.describe('slide errors', () => {
       await openSlide(p, 'err-render', '?p=2');
       const canvas = editorCanvas(p);
 
-      const banner = canvas.locator('[data-osd-slide-error="render"]');
+      const banner = p.locator('[data-osd-slide-error="render"]');
       await expect(banner).toBeVisible();
       await expect(banner).toContainText('Page 2 failed to render');
       await expect(canvas.getByText('Page failed to render').first()).toBeVisible();
