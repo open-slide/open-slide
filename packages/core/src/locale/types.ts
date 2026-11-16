@@ -105,10 +105,6 @@ export type Locale = {
     resizeSidePanel: string;
     home: string;
     backToHome: string;
-    agentConnected: string;
-    agentConnectedTooltip: string;
-    agentDisconnected: string;
-    agentDisconnectedTooltip: string;
     download: string;
     copyLink: string;
     moreActions: string;

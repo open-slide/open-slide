@@ -97,11 +97,6 @@ export const zhCN: Locale = {
 
   slide: {
     resizeSidePanel: '调整侧栏宽度',
-    agentConnected: 'Agent 已连接',
-    agentConnectedTooltip: '目前的 slide 与 Inspector 选择会即时同步给 agent。',
-    agentDisconnected: 'Agent 已断开',
-    agentDisconnectedTooltip:
-      '已和 dev server 断开连接，agent 没办法再看到你目前的 slide 或 Inspector 选择。请重新启动 dev server 来恢复连接。',
     home: '首页',
     backToHome: '返回首页',
     download: '下载',

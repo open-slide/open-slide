@@ -97,12 +97,6 @@ export const ja: Locale = {
 
   slide: {
     resizeSidePanel: 'サイドパネルの幅を調整',
-    agentConnected: 'エージェント接続中',
-    agentConnectedTooltip:
-      '現在のスライドと Inspector の選択はエージェントにリアルタイムで同期されています。',
-    agentDisconnected: 'エージェント切断',
-    agentDisconnectedTooltip:
-      'dev server との接続が切れたため、現在のスライドや Inspector の選択がエージェントに届かなくなっています。dev server を再起動して接続を復旧してください。',
     home: 'ホーム',
     backToHome: 'ホームへ戻る',
     download: 'ダウンロード',

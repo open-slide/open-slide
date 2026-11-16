@@ -97,11 +97,6 @@ export const zhTW: Locale = {
 
   slide: {
     resizeSidePanel: '調整側欄寬度',
-    agentConnected: 'Agent 已連線',
-    agentConnectedTooltip: '目前的 slide 與 Inspector 選擇會即時同步給 agent。',
-    agentDisconnected: 'Agent 已斷線',
-    agentDisconnectedTooltip:
-      '已和 dev server 斷線，agent 沒辦法再看到你目前的 slide 或 Inspector 選擇。請重新啟動 dev server 來恢復連線。',
     home: '首頁',
     backToHome: '返回首頁',
     download: '下載',

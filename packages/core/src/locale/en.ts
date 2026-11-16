@@ -99,12 +99,6 @@ export const en: Locale = {
     resizeSidePanel: 'Resize side panel',
     home: 'Home',
     backToHome: 'Back to home',
-    agentConnected: 'Agent connected',
-    agentConnectedTooltip:
-      'The current slide and inspector selection are synced to your agent in real time.',
-    agentDisconnected: 'Agent disconnected',
-    agentDisconnectedTooltip:
-      'Lost connection to the dev server, so your agent can no longer see the current slide or inspector selection. Restart the dev server to restore the connection.',
     download: 'Download',
     copyLink: 'Copy link',
     moreActions: 'More actions',

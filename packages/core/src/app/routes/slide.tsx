@@ -62,7 +62,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   setDockOpen,
   useAgentActivity,
@@ -79,7 +78,6 @@ import {
   isTypingTarget,
 } from '@/lib/keys';
 import { readLastHomeLocation } from '@/lib/last-home-location';
-import { useAgentSocketConnected } from '@/lib/use-agent-socket';
 import { useClickPageNavigation } from '@/lib/use-click-page-navigation';
 import { useDocumentTitle } from '@/lib/use-document-title';
 import { useIsMobile } from '@/lib/use-is-mobile';
@@ -753,7 +751,6 @@ export function Slide() {
                   </TabsList>
                 </Tabs>
               )}
-              {import.meta.env.DEV && <AgentConnectedBadge />}
             </div>
 
             <div className="col-span-3 row-start-2 flex min-w-0 justify-center sm:col-span-1 sm:col-start-2 sm:row-start-1">
@@ -1158,47 +1155,6 @@ function SlideAgentDock({
     [slideId, slideTitle, pageNumber, totalPages, comments.length, selected],
   );
   return <AgentPanel context={context} onClose={() => setDockOpen(false)} />;
-}
-
-function AgentConnectedBadge() {
-  const t = useLocale();
-  const connected = useAgentSocketConnected();
-  return (
-    <TooltipProvider delay={200}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              aria-label={connected ? t.slide.agentConnected : t.slide.agentDisconnected}
-              className="ml-1 flex shrink-0 cursor-help items-center gap-1.5 rounded-[3px] border border-hairline bg-card px-1.5 py-0.5 text-[10.5px] text-foreground/85 outline-none transition-colors duration-150 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/30"
-            >
-              <span aria-hidden className="relative flex size-1.5 items-center justify-center">
-                {connected ? (
-                  <>
-                    <span className="absolute inline-flex size-full rounded-full bg-emerald-500 opacity-60 motion-safe:animate-ping" />
-                    <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
-                  </>
-                ) : (
-                  <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
-                )}
-              </span>
-              <span className="hidden xl:inline">
-                {connected ? t.slide.agentConnected : t.slide.agentDisconnected}
-              </span>
-            </button>
-          }
-        />
-        <TooltipContent
-          side="bottom"
-          align="start"
-          className="w-max max-w-[min(520px,calc(100vw-2rem))] text-center leading-relaxed"
-        >
-          {connected ? t.slide.agentConnectedTooltip : t.slide.agentDisconnectedTooltip}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
 }
 
 function SelectionReporter() {

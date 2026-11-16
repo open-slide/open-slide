@@ -101,12 +101,6 @@ export const es: Locale = {
     resizeSidePanel: 'Redimensionar panel lateral',
     home: 'Inicio',
     backToHome: 'Volver al inicio',
-    agentConnected: 'Agente conectado',
-    agentConnectedTooltip:
-      'La diapositiva actual y la selección del inspector se sincronizan con tu agente en tiempo real.',
-    agentDisconnected: 'Agente desconectado',
-    agentDisconnectedTooltip:
-      'Se perdió la conexión con el servidor de desarrollo, así que tu agente ya no ve la diapositiva actual ni la selección del inspector. Reinicia el servidor de desarrollo para restablecerla.',
     download: 'Descargar',
     copyLink: 'Copiar enlace',
     moreActions: 'Más acciones',
