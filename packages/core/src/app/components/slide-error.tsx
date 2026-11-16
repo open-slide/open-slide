@@ -122,12 +122,15 @@ export function CopyFixPromptButton({
 }
 
 function ErrorDetails({ info, className }: { info: SlideErrorInfo; className?: string }) {
-  const location = formatLocation(info);
+  const location = formatLocation(info, config.slidesDir ?? 'slides');
   const trace = info.kind === 'compile' ? null : (info.componentStack ?? info.stack);
   return (
     <div className={cn('flex min-w-0 flex-col gap-3', className)}>
       {location && (
-        <p className="truncate font-mono text-[11.5px] text-muted-foreground" title={location}>
+        <p
+          className="truncate font-mono text-[11.5px] text-muted-foreground"
+          title={formatLocation(info) ?? undefined}
+        >
           {location}
         </p>
       )}

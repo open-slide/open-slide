@@ -35,13 +35,24 @@ export function cleanDevUrls(text: string): string {
     .replace(/[?&]v=[0-9a-f]+/g, '');
 }
 
+// Oxc folds the code frame and position into `message` and leaves `loc` unset.
+const FRAME_LOCATION_RE = /\[\s*([^\]\s]+):(\d+):(\d+)\s*\]/;
+const TRANSFORM_PREFIX_RE = /^Transform failed with \d+ errors?:\s*/;
+
 export function fromViteError(err: ViteErrorPayload): SlideErrorInfo {
   const file = err.loc?.file ?? err.id;
+  const message = cleanDevUrls(err.message?.trim() ?? '').replace(TRANSFORM_PREFIX_RE, '');
+  const framed = message.match(FRAME_LOCATION_RE);
+  const loc = err.loc
+    ? { line: err.loc.line, column: err.loc.column }
+    : framed
+      ? { line: Number(framed[2]), column: Number(framed[3]) }
+      : undefined;
   return {
     kind: 'compile',
-    message: err.message?.trim() || 'Unknown compile error',
+    message: message || 'Unknown compile error',
     file: file ? cleanDevUrls(file) : undefined,
-    loc: err.loc ? { line: err.loc.line, column: err.loc.column } : undefined,
+    loc,
     frame: err.frame?.trim() || undefined,
     stack: err.stack?.trim() || undefined,
   };
@@ -140,9 +151,14 @@ export function describeRenderError(error: unknown, componentStack?: string): Sl
   };
 }
 
-export function formatLocation(info: SlideErrorInfo): string | null {
+export function formatLocation(info: SlideErrorInfo, slidesDir?: string): string | null {
   if (!info.file) return null;
-  return info.loc ? `${info.file}:${info.loc.line}:${info.loc.column}` : info.file;
+  let file = info.file;
+  if (slidesDir) {
+    const at = file.lastIndexOf(`/${slidesDir}/`);
+    if (at !== -1) file = file.slice(at + 1);
+  }
+  return info.loc ? `${file}:${info.loc.line}:${info.loc.column}` : file;
 }
 
 export function formatLoadError(info: SlideErrorInfo): string {

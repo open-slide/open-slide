@@ -4,6 +4,7 @@ import {
   cleanDevUrls,
   describeLoadError,
   describeRenderError,
+  formatLocation,
   fromViteError,
   isImportFailure,
   parseViteErrorPage,
@@ -80,6 +81,31 @@ describe('fromViteError', () => {
       frame: '3 |   return <div>)',
       stack: undefined,
     });
+  });
+});
+
+describe('fromViteError with an Oxc parse error', () => {
+  it('reads the position from the framed message and drops the cache-buster', () => {
+    const info = fromViteError({
+      message:
+        'Transform failed with 1 error:\n\n[PARSE_ERROR] Expected `>` but found `<`\n   ╭─[ slides/intro/index.tsx?t=0:9:3 ]\n 9 │   </div>',
+      id: '/Users/me/deck/slides/intro/index.tsx?t=1731700000000',
+    });
+    expect(info.message.startsWith('[PARSE_ERROR]')).toBe(true);
+    expect(info.message).toContain('[ slides/intro/index.tsx:9:3 ]');
+    expect(info.file).toBe('/Users/me/deck/slides/intro/index.tsx');
+    expect(info.loc).toEqual({ line: 9, column: 3 });
+  });
+});
+
+describe('formatLocation', () => {
+  it('shortens the path to start at the slides dir', () => {
+    const info = fromViteError({
+      message: 'x',
+      loc: { file: '/Users/me/deck/slides/intro/index.tsx', line: 2, column: 4 },
+    });
+    expect(formatLocation(info, 'slides')).toBe('slides/intro/index.tsx:2:4');
+    expect(formatLocation(info)).toBe('/Users/me/deck/slides/intro/index.tsx:2:4');
   });
 });
 
