@@ -12,7 +12,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { requestAgent, useAgentStatus } from '@/lib/agent/use-agent';
-import { findSlideSource } from '@/lib/inspector/fiber';
+import { findCallAnchor, findCallSite, findSlideSource } from '@/lib/inspector/fiber';
 import { useFreezeSlideMotion } from '@/lib/inspector/freeze-motion';
 import { type Point, type Rect, rectContains } from '@/lib/inspector/geometry';
 import {
@@ -181,9 +181,9 @@ export function CommentLayer() {
         // would match on every page; the stored page index decides.
         if (comment.page !== undefined && comment.page !== pageIndex) continue;
         const anchor = comment.target
-          ? canvas.root.querySelector<HTMLElement>(
+          ? (canvas.root.querySelector<HTMLElement>(
               `[data-slide-loc="${comment.target.line}:${comment.target.column}"]`,
-            )
+            ) ?? findCallAnchor(canvas.root, comment.target))
           : null;
         if (anchor) {
           pins[comment.id] = {
@@ -396,8 +396,23 @@ export function CommentLayer() {
               h: Math.round(draft.rect.height),
             }
           : undefined;
+      // A loc rendered more than once on the page belongs to a reused
+      // component; the marker goes on the call site so it names one instance.
+      const canvas = readCanvas();
+      const shared =
+        !!canvas &&
+        canvas.root.querySelectorAll(`[data-slide-loc="${target.line}:${target.column}"]`).length >
+          1;
+      const call = shared ? findCallSite(target.anchor) : null;
       try {
-        await add({ line: target.line, column: target.column, text, rect, page: pageIndex });
+        await add({
+          line: call?.line ?? target.line,
+          column: call?.column ?? target.column,
+          text,
+          rect,
+          page: pageIndex,
+          call: !!call,
+        });
         setDraft(null);
       } catch (err) {
         toast.error(`${t.inspector.commentAddFailed} ${String((err as Error).message ?? err)}`);
