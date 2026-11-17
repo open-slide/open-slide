@@ -10,16 +10,16 @@ import {
 } from '@/lib/agent/use-agent';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
-import type { AgentProviderId, AgentProviderStatus } from '../../../agent/types';
+import type { AgentProviderStatus } from '../../../agent/types';
 import { ProviderLogo } from './provider-logo';
 
-const CLI_INSTALL: Record<AgentProviderId, string> = {
+const CLI_INSTALL: Record<string, string> = {
   claude: 'npm install -g @anthropic-ai/claude-code',
   codex: 'npm install -g @openai/codex',
 };
 
 function needsCli(p: AgentProviderStatus): boolean {
-  return !p.cliFound && !p.ready;
+  return p.type !== 'acp' && !p.cliFound && !p.ready;
 }
 
 export function ConnectView() {
@@ -29,7 +29,7 @@ export function ConnectView() {
   const [checking, setChecking] = useState(false);
   const providers = status?.providers ?? [];
   const needCli = providers.length > 0 && providers.every(needsCli);
-  const anyMissing = providers.some(needsCli);
+  const anyMissing = providers.some((provider) => !provider.ready);
 
   const checkAgain = async () => {
     setChecking(true);
@@ -111,16 +111,19 @@ function ProviderCard({
   packageManager: string;
   installing: boolean;
   busy: boolean;
-  error: string | undefined;
+  error?: string;
   onConnect: () => void;
 }) {
   const t = useLocale();
-  const missing = needsCli(provider);
-  const cliLabel = provider.cliFound
-    ? provider.cliVersion
-      ? format(t.agent.cliFound, { version: provider.cliVersion })
-      : t.agent.cliFoundNoVersion
-    : t.agent.cliMissing;
+  const missing = provider.type === 'acp' ? !provider.cliFound : needsCli(provider);
+  const cliLabel =
+    provider.type === 'acp'
+      ? provider.cliCommand
+      : provider.cliFound
+        ? provider.cliVersion
+          ? format(t.agent.cliFound, { version: provider.cliVersion })
+          : t.agent.cliFoundNoVersion
+        : t.agent.cliMissing;
 
   return (
     <div className="rounded-[8px] border border-border bg-card p-3 shadow-edge">
@@ -150,7 +153,7 @@ function ProviderCard({
             <Loader2 className="size-3 animate-spin motion-reduce:animate-none" aria-hidden />
             {t.agent.connecting}
           </span>
-        ) : missing ? null : (
+        ) : missing || provider.type === 'acp' ? null : (
           <Button
             size="sm"
             variant={error ? 'outline' : 'default'}
@@ -164,19 +167,28 @@ function ProviderCard({
       {missing ? (
         <div className="mt-2.5 flex flex-col gap-1.5">
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            {format(t.agent.cliHint, { name: provider.name })}
+            {provider.type === 'acp'
+              ? format(t.agent.acpMissing, { command: provider.cliCommand })
+              : format(t.agent.cliHint, { name: provider.name })}
           </p>
-          <code className="block overflow-x-auto rounded-[5px] bg-muted px-2 py-1.5 font-mono text-[11px] whitespace-nowrap select-all">
-            {CLI_INSTALL[provider.id]}
-          </code>
+          {provider.type !== 'acp' && CLI_INSTALL[provider.id] && (
+            <code className="block overflow-x-auto rounded-[5px] bg-muted px-2 py-1.5 font-mono text-[11px] whitespace-nowrap select-all">
+              {CLI_INSTALL[provider.id]}
+            </code>
+          )}
         </div>
       ) : error && !installing ? (
         <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-destructive">{error}</p>
       ) : (
         <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          {provider.ready
-            ? `${provider.sdkPackage} v${provider.sdkVersion}`
-            : format(t.agent.connectInstallHint, { pkg: provider.sdkPackage, pm: packageManager })}
+          {provider.type === 'acp'
+            ? t.agent.acpConfigured
+            : provider.ready
+              ? `${provider.sdkPackage} v${provider.sdkVersion}`
+              : format(t.agent.connectInstallHint, {
+                  pkg: provider.sdkPackage,
+                  pm: packageManager,
+                })}
         </p>
       )}
     </div>

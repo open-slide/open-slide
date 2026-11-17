@@ -171,7 +171,11 @@ function parseTurnSettings(raw: Record<string, unknown>): TurnSettings {
 const AGENT_BODY_LIMIT = 1024 * 1024;
 
 export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): void {
-  const providers = createProviders();
+  const providers = createProviders(
+    ctx.agentProviders,
+    ctx.coreVersion,
+    ctx.agentBuiltinProviders ?? true,
+  );
   const store = createSessionStore({
     file: path.join(ctx.userCwd, 'node_modules', '.open-slide', 'agent-sessions.json'),
   });
@@ -242,8 +246,11 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
         const body = (await readBody(req, AGENT_BODY_LIMIT)) as { provider?: unknown };
-        if (!isAgentProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
+        if (!isAgentProviderId(body.provider, Object.keys(providers)))
+          return json(res, 400, { error: 'invalid provider' });
         const provider = providers[body.provider];
+        if (provider.type === 'acp')
+          return json(res, 400, { error: 'ACP providers do not require installation' });
         const pm = await detectPackageManager(ctx.userCwd);
         const pkg = provider.sdkPackage;
         let install = installsInFlight.get(pkg);
@@ -267,7 +274,8 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
           provider?: unknown;
           slideId?: unknown;
         };
-        if (!isAgentProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
+        if (!isAgentProviderId(body.provider, Object.keys(providers)))
+          return json(res, 400, { error: 'invalid provider' });
         const slideId =
           typeof body.slideId === 'string' && SLIDE_ID_RE.test(body.slideId) ? body.slideId : null;
         return json(res, 200, store.create(body.provider, slideId));
