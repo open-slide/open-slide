@@ -184,7 +184,10 @@ export function InspectOverlay() {
     };
     const targetAt = (event: PointerEvent): SelectedTarget | null => {
       const element = pickInspectorTarget(pickElement(event.clientX, event.clientY));
-      return element ? findSlideSource(element, slideId, { hostOnly: true }) : null;
+      // Leave hostOnly off. A shared component's host is authored outside
+      // slides/, so the only editable record is the call-site fiber. hostOnly
+      // skips that fiber and the tagged wrapper takes the click.
+      return element ? findSlideSource(element, slideId) : null;
     };
     const point = (event: PointerEvent, canvas: Canvas): Point => ({
       x: (event.clientX - canvas.rect.left) / canvas.scale,

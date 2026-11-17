@@ -151,4 +151,24 @@ test.describe('inspector editing', () => {
       'true',
     );
   });
+
+  test('selecting text inside an imported shared component opens the panel', async ({ page }) => {
+    await openSlide(page, 'shared-select');
+    await expect(page.locator('[data-inspector-ready]')).toBeVisible();
+    await editorCanvas(page).getByText('Shared heading click target').click();
+
+    const panel = page.locator('aside[data-inspector-ui]');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByPlaceholder('Element text')).toHaveValue('Shared heading click target');
+  });
+
+  test('selecting text inside a nested shared component opens the panel', async ({ page }) => {
+    await openSlide(page, 'shared-select');
+    await expect(page.locator('[data-inspector-ready]')).toBeVisible();
+    await editorCanvas(page).getByText('Nested shared heading').click();
+
+    const panel = page.locator('aside[data-inspector-ui]');
+    await expect(panel).toBeVisible();
+    await expect(panel.getByPlaceholder('Element text')).toHaveValue('Nested shared heading');
+  });
 });

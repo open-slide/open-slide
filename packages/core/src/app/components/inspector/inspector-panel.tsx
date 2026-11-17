@@ -78,7 +78,7 @@ type RangeStylePreview = {
 };
 
 function resolveSelectedTarget(target: SelectedTarget, slideId: string): SelectedTarget {
-  const hit = findSlideSource(target.anchor, slideId, { hostOnly: true });
+  const hit = findSlideSource(target.anchor, slideId);
   if (!hit) return target;
   if (hit.line === target.line && hit.column === target.column && hit.anchor === target.anchor) {
     return target;

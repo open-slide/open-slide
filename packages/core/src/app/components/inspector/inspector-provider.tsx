@@ -1339,7 +1339,9 @@ export function InspectorProvider({
           : (findRememberedTarget(root, target.canvasPath) ??
             root.querySelector<HTMLElement>(`[data-slide-loc="${target.line}:${target.column}"]`));
         if (!anchor) return target;
-        const hit = findSlideSource(anchor, slideId, { hostOnly: true });
+        // Same lookup as selection: a shared call site has to beat a tagged
+        // wrapper, or this effect puts the wrapper back on the next tick.
+        const hit = findSlideSource(anchor, slideId);
         if (
           !hit ||
           (hit.anchor === target.anchor && hit.line === target.line && hit.column === target.column)
