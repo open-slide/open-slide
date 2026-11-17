@@ -1,6 +1,7 @@
 import { readdirSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { app, crashReporter } from 'electron';
 import { type EventMessage, PostHog } from 'posthog-node';
 import type { ReportedError } from '../shared/types';
@@ -105,19 +106,48 @@ function redact(event: EventMessage): EventMessage {
   return { ...event, properties: JSON.parse(json) };
 }
 
+const FILE_URL_RE = /file:\/\/[^'"`\n]*/g;
 const LOCAL_URL_RE = /(https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?)[^\s"'`)]*/g;
 const QUOTED_PATH_RE = /(['"`])(?:\/|[A-Za-z]:[\\/]|\\\\)[^'"`\n]*\1/g;
 // An unquoted path may contain spaces, so it runs to the next quote, colon or line end.
 const POSIX_PATH_RE = /(?<![\w.:/<])\/(?:[^\s/'":]+\/)+[^'":\n]*/g;
 const WINDOWS_PATH_RE = /(?:\b[A-Za-z]:[\\/]|(?<![\w\\])\\\\)[^'":\n]+/g;
+const FRAME_RE = /^\s+at /;
+const RUNTIME_FRAME_RE = /(?:\(|at )(?:node:|native\b|<anonymous>)/;
 
 // Messages quote paths named after decks and dev-server URLs ending in deck ids.
 function scrubMessage(text: string): string {
   return text
+    .replace(FILE_URL_RE, 'file://<path>')
     .replace(LOCAL_URL_RE, '$1')
     .replace(QUOTED_PATH_RE, '$1<path>$1')
     .replace(POSIX_PATH_RE, '<path>')
     .replace(WINDOWS_PATH_RE, '<path>');
+}
+
+let ownCode: string[] | null = null;
+
+function isOwnFrame(line: string): boolean {
+  ownCode ??= (() => {
+    const root = app.getAppPath();
+    return [root, root.replaceAll('\\', '/'), pathToFileURL(root).href];
+  })();
+  return RUNTIME_FRAME_RE.test(line) || ownCode.some((root) => line.includes(root));
+}
+
+// Frames in the app's own bundle keep their location so they map to source; any other frame
+// could name a workspace file, so its location is dropped.
+function scrubStack(stack: string): string {
+  return stack
+    .split('\n')
+    .map((line) => {
+      if (!FRAME_RE.test(line)) return scrubMessage(line);
+      if (isOwnFrame(line)) return line;
+      return line.endsWith(')')
+        ? line.replace(/\(.*\)$/, '(<path>)')
+        : line.replace(/at .*$/, 'at <path>');
+    })
+    .join('\n');
 }
 
 export function scrubError(error: unknown): Error {
@@ -125,8 +155,7 @@ export function scrubError(error: unknown): Error {
   const message = scrubMessage(error.message);
   const clean = new Error(message);
   clean.name = error.name;
-  // A replacer function, so `$&` in the message is not expanded.
-  clean.stack = error.stack?.replace(error.message, () => message) ?? `${error.name}: ${message}`;
+  clean.stack = error.stack ? scrubStack(error.stack) : `${error.name}: ${message}`;
   return clean;
 }
 

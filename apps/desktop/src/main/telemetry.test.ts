@@ -8,7 +8,13 @@ const fixture = vi.hoisted(() => ({
 }));
 
 vi.mock('electron', () => ({
-  app: { isPackaged: true, getLocale: () => 'en-US', getPath: () => '/nowhere', on: () => {} },
+  app: {
+    isPackaged: true,
+    getLocale: () => 'en-US',
+    getPath: () => '/nowhere',
+    getAppPath: () => '/Applications/Open Slide.app/Contents/Resources/app.asar',
+    on: () => {},
+  },
   crashReporter: { start: () => {} },
 }));
 vi.mock('./settings', () => ({
@@ -213,5 +219,33 @@ describe('error scrubbing', () => {
     const { stack } = await scrub("Cannot open /Volumes/Client/Deck $& $'");
     expect(stack).toContain('Cannot open <path>');
     expect(stack).not.toContain('/Volumes/Client');
+  });
+
+  it('removes file URLs, spaces included', async () => {
+    expect((await scrub('Failed to load file:///Volumes/Client Alpha/Deck.pdf')).message).toBe(
+      'Failed to load file://<path>',
+    );
+  });
+
+  it('keeps frames in the app and drops the location of any other frame', async () => {
+    const { scrubError } = await import('./telemetry');
+    const error = new Error('boom');
+    const app = 'file:///Applications/Open%20Slide.app/Contents/Resources/app.asar';
+    error.stack = [
+      'Error: boom',
+      `    at render (${app}/out/renderer/assets/index.js:1:20)`,
+      '    at load (file:///Volumes/Client%20Alpha/slides/pitch/index.tsx:4:2)',
+      '    at http://localhost:5173/slides/pitch/index.tsx:9:1',
+      '    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)',
+    ].join('\n');
+    expect(scrubError(error).stack).toBe(
+      [
+        'Error: boom',
+        `    at render (${app}/out/renderer/assets/index.js:1:20)`,
+        '    at load (<path>)',
+        '    at <path>',
+        '    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)',
+      ].join('\n'),
+    );
   });
 });

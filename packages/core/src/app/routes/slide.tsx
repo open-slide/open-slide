@@ -108,7 +108,7 @@ import {
   exportSlideAsPptx,
   type PptxExportProgress,
 } from '../lib/export-pptx';
-import { remapNotesSessionCacheAfterReorder } from '../lib/inspector/use-notes';
+import { notesSaving, remapNotesSessionCacheAfterReorder } from '../lib/inspector/use-notes';
 import type { SlideModule } from '../lib/sdk';
 import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion';
 import { useSlideModule } from '../lib/use-slide-module';
@@ -284,6 +284,10 @@ export function Slide() {
   const reorderPage = useCallback(
     async (from: number, to: number) => {
       if (from === to) return;
+      if (notesSaving(slideId)) {
+        toast.error(t.slide.reorderNotesSaving);
+        return;
+      }
       const before = pages;
       const nextPages = [...before];
       const [moved] = nextPages.splice(from, 1);
@@ -320,7 +324,7 @@ export function Slide() {
         toast.error(`Reorder failed: ${String((err as Error).message ?? err)}`);
       }
     },
-    [pages, index, slideId, goTo],
+    [pages, index, slideId, goTo, t],
   );
 
   const duplicatePage = useCallback(

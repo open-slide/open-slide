@@ -43,7 +43,7 @@ function clone<T>(d: T): T {
 }
 
 export function DesignProvider({ slideId, children }: { slideId: string; children: ReactNode }) {
-  const { design, exists, warning, loaded, save } = useDesignFetch(slideId);
+  const { design, savedFrom, exists, warning, loaded, save } = useDesignFetch(slideId);
   const [draft, setDraft] = useState<DesignSystem | null>(null);
   const [committing, setCommitting] = useState(false);
   const history = useHistory();
@@ -53,14 +53,10 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
   const settledDraftRef = useRef<DesignSystem | null>(null);
   const [saveQueue] = useState(createSaveQueue);
   // When a save's response arrives as the new design, edits made since it was sent stay.
-  const sentRef = useRef<DesignSystem | null>(null);
-
   useEffect(() => {
-    const sent = sentRef.current;
-    sentRef.current = null;
-    if (!design || (sent && draftRef.current !== sent)) return;
+    if (!design || (savedFrom && draftRef.current !== savedFrom)) return;
     setDraft(clone(design));
-  }, [design]);
+  }, [design, savedFrom]);
 
   const dirty = useMemo(() => {
     if (!draft || !design) return false;
@@ -92,14 +88,12 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
       async () => {
         const saving = draftRef.current;
         if (!saving || saving === settledDraftRef.current) return null;
-        sentRef.current = saving;
         const r = await save(saving);
-        if (draftRef.current === saving) history.clear();
         if (r.ok) {
+          if (draftRef.current === saving) history.clear();
           settledDraftRef.current = saving;
           return null;
         }
-        sentRef.current = null;
         const error = r.error ?? 'Failed to save';
         toast.error(error);
         return error;

@@ -20,8 +20,8 @@ discarded.
 ## What is never sent
 
 - Slide content, deck names, themes, or assets
-- File or folder paths. They are stripped from error messages, and the home
-  directory is replaced with `~` in error stacks.
+- File or folder paths. They are stripped from error messages and stacks. A stack
+  keeps only frames in the app's own code, with the home directory replaced by `~`.
 - Agent prompts, replies, or account emails
 - Dev server, install, or sign-in logs
 

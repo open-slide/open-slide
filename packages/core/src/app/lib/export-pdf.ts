@@ -156,6 +156,7 @@ export async function exportSlideAsPdf(
 
   const previousTitle = document.title;
   document.title = slide.meta?.title ?? slideId;
+  let finished = false;
 
   try {
     await waitForFonts();
@@ -181,15 +182,16 @@ export async function exportSlideAsPdf(
 
     if (desktopHost?.printToPdf) {
       onProgress?.({ phase: 'saving', current: total, total, percent: 99 });
-      await desktopHost.printToPdf(`${document.title}.pdf`);
+      finished = await desktopHost.printToPdf(`${document.title}.pdf`);
     } else {
       onProgress?.({ phase: 'printing', current: total, total, percent: 99 });
       const printDone = waitForAfterPrint();
       window.print();
       await printDone;
+      finished = true;
     }
   } finally {
-    onProgress?.({ phase: 'done', current: total, total, percent: 100 });
+    if (finished) onProgress?.({ phase: 'done', current: total, total, percent: 100 });
     document.title = previousTitle;
     for (const r of reactRoots) r.unmount();
     root.remove();

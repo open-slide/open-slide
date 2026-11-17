@@ -153,13 +153,6 @@ type Bucket = {
   removed: boolean;
 };
 
-function hasBufferedOps(buckets: Map<string, Bucket>): boolean {
-  for (const b of buckets.values()) {
-    if (b.styleOps.size > 0 || b.textEdits.size > 0 || b.attrOps.size > 0) return true;
-  }
-  return false;
-}
-
 function createBucket(line: number, column: number): Bucket {
   return {
     line,
@@ -183,6 +176,13 @@ function bucketIsEmpty(bucket: Bucket): boolean {
     bucket.attrOps.size === 0 &&
     !bucket.removed
   );
+}
+
+function hasBufferedOps(buckets: Map<string, Bucket>): boolean {
+  for (const b of buckets.values()) {
+    if (!bucketIsEmpty(b)) return true;
+  }
+  return false;
 }
 
 export type DomTextPart = {

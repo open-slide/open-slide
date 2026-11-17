@@ -33,7 +33,7 @@ export function CreateWorkspaceDialog({
   const platform = state?.platform ?? 'darwin';
   const [name, setName] = useState('my-slides');
   const [parent, setParent] = useState('');
-  const [managers, setManagers] = useState<PackageManager[]>([]);
+  const [managers, setManagers] = useState<PackageManager[] | null>(null);
   const [manager, setManager] = useState<PackageManager>('npm');
   const [phase, setPhase] = useState<Phase>({ kind: 'form' });
   const [log, setLog] = useLog('create');
@@ -57,6 +57,7 @@ export function CreateWorkspaceDialog({
           preferred && available.includes(preferred) ? preferred : (available[0] ?? 'npm'),
         );
       },
+      () => setManagers([]),
     );
   }, [target, setLog]);
 
@@ -153,7 +154,9 @@ export function CreateWorkspaceDialog({
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Package manager</Label>
-              {managers.length > 0 ? (
+              {managers === null ? (
+                <LoadingLabel>Finding package managers</LoadingLabel>
+              ) : managers.length > 0 ? (
                 <Segmented
                   mono
                   value={manager}
@@ -186,11 +189,7 @@ export function CreateWorkspaceDialog({
               <Button variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                form="create-workspace"
-                disabled={!parent || managers.length === 0}
-              >
+              <Button type="submit" form="create-workspace" disabled={!parent || !managers?.length}>
                 Create
               </Button>
             </>

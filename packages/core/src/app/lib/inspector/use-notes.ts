@@ -19,8 +19,13 @@ const sessionCache = new Map<string, string>();
 // instead of the older text on disk.
 const detachedText = new Map<string, string>();
 onAbandon(() => detachedText.clear());
+// Shared by every editor, so a newer write cancels an older one to the same
+// notes even when the editor that started it has unmounted.
+const inflight = new Map<string, AbortController>();
+const dirtyEditors = new Set<() => Target | null>();
 const cacheKey = (slideId: string, index: number) => `${slideId}:${index}`;
 const writeKey = (key: string) => `notes:${key}`;
+const writing = (target: Target) => inflight.has(cacheKey(target.slideId, target.index));
 
 function remapCache(cache: Map<string, string>, slideId: string, order: number[]): void {
   const prev = new Map<number, string>();
@@ -34,6 +39,18 @@ function remapCache(cache: Map<string, string>, slideId: string, order: number[]
     const text = prev.get(oldIdx);
     if (text !== undefined) cache.set(cacheKey(slideId, newIdx), text);
   }
+}
+
+// Pending writes are bound to a page index, so a reorder must wait for them.
+export function notesSaving(slideId: string): boolean {
+  const prefix = `${slideId}:`;
+  for (const key of [...inflight.keys(), ...detachedText.keys()]) {
+    if (key.startsWith(prefix)) return true;
+  }
+  for (const dirtyTarget of dirtyEditors) {
+    if (dirtyTarget()?.slideId === slideId) return true;
+  }
+  return false;
 }
 
 // Remap the per-target cache after a reorder. `order[i]` is the original
@@ -53,7 +70,6 @@ export function useNotes(slideId: string, index: number, initial: string | undef
   const lastSavedRef = useRef(initialText);
   const dirtyRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inflightRef = useRef(new Map<string, AbortController>());
   const targetRef = useRef<Target>({ slideId, index });
   const valueRef = useRef(value);
   valueRef.current = value;
@@ -69,7 +85,6 @@ export function useNotes(slideId: string, index: number, initial: string | undef
   // to the same notes took over; writes to other notes are never cut off.
   const persist = useCallback(async (target: Target, text: string): Promise<string | null> => {
     const key = cacheKey(target.slideId, target.index);
-    const inflight = inflightRef.current;
     inflight.get(key)?.abort();
     const ctl = new AbortController();
     inflight.set(key, ctl);
@@ -151,7 +166,10 @@ export function useNotes(slideId: string, index: number, initial: string | undef
   }, [slideId, index, initialText, persistDetached, cancelTimer]);
 
   useEffect(() => {
+    const dirtyTarget = () => (dirtyRef.current ? targetRef.current : null);
+    dirtyEditors.add(dirtyTarget);
     return () => {
+      dirtyEditors.delete(dirtyTarget);
       cancelTimer();
       if (dirtyRef.current) persistDetached(targetRef.current, valueRef.current);
     };
@@ -159,7 +177,7 @@ export function useNotes(slideId: string, index: number, initial: string | undef
 
   useUnsavedSource({
     kind: 'autosave',
-    dirty: () => dirtyRef.current,
+    dirty: () => dirtyRef.current || writing(targetRef.current),
     save: () => {
       cancelTimer();
       return persistOrThrow(targetRef.current, valueRef.current);
@@ -167,7 +185,7 @@ export function useNotes(slideId: string, index: number, initial: string | undef
     discard: () => {
       cancelTimer();
       const { slideId: id, index: at } = targetRef.current;
-      inflightRef.current.get(cacheKey(id, at))?.abort();
+      inflight.get(cacheKey(id, at))?.abort();
       dirtyRef.current = false;
       setValueState(lastSavedRef.current);
       setStatus({ kind: 'idle' });
@@ -178,7 +196,8 @@ export function useNotes(slideId: string, index: number, initial: string | undef
     (next: string) => {
       setValueState(next);
       valueRef.current = next;
-      dirtyRef.current = next !== lastSavedRef.current;
+      // Text put back to the last save still goes out after a write in flight lands.
+      dirtyRef.current = next !== lastSavedRef.current || writing(targetRef.current);
       cancelTimer();
       if (!dirtyRef.current) {
         setStatus({ kind: 'idle' });

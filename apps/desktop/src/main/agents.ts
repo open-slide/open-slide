@@ -50,6 +50,7 @@ const AGENTS: Record<AgentId, AgentSpec> = {
     statusArgs: ['login', 'status'],
     parseStatus(code, output) {
       const line = output.trim().split('\n').pop()?.trim() ?? '';
+      if (code === null) return { signedIn: null, account: null };
       return code === 0
         ? { signedIn: true, account: line || null }
         : { signedIn: false, account: null };

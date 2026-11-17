@@ -113,6 +113,7 @@ export const en: Locale = {
     imagePptxExportFailed: 'PPTX export failed',
     pdfExportSafariUnsupported:
       'Export as PDF is not supported on Safari. Please try a Chromium-based browser instead.',
+    reorderNotesSaving: 'Speaker notes are still saving. Try moving the page again in a moment.',
     present: 'Present',
     presentMenuAria: 'Present options',
     presentInWindow: 'Play',

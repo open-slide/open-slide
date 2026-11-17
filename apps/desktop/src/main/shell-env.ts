@@ -68,6 +68,7 @@ function readLoginEnv(): Promise<NodeJS.ProcessEnv | null> {
       ['-ilc', script],
       {
         timeout: TIMEOUT_MS,
+        killSignal: 'SIGKILL',
         maxBuffer: 4 * 1024 * 1024,
         env: { ...process.env, DISABLE_AUTO_UPDATE: 'true' },
       },

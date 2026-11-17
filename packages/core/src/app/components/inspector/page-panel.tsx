@@ -25,6 +25,8 @@ type PageState = {
   preview: string | null;
   source: BackgroundSource;
   target: SelectedTarget | null;
+  // Only an inline background can be reset; one from a class stays put.
+  inline: boolean;
   steps: number;
 };
 
@@ -65,9 +67,7 @@ export function PagePanel({ page }: { page: PageInfo }) {
               value={state.color ?? '#ffffff'}
               dim={!state.color}
               onChange={setBackground}
-              onClear={
-                page.themed && state.source === 'page' ? () => setBackground(null) : undefined
-              }
+              onClear={page.themed && state.inline ? () => setBackground(null) : undefined}
             />
           ) : (
             <Field label={t.inspector.pageBackground}>
@@ -207,7 +207,7 @@ function readPageState(
   const themeColor = opaqueHex(themeBackground);
   if (!painted) {
     const target = chain.map(ownTarget).find(Boolean) ?? null;
-    return { color: themeColor, preview: null, source: 'theme', target, steps };
+    return { color: themeColor, preview: null, source: 'theme', target, inline: false, steps };
   }
 
   const style = getComputedStyle(painted);
@@ -232,6 +232,7 @@ function readPageState(
             ? 'page'
             : 'shared',
     target,
+    inline: ownBackground,
     steps,
   };
 }
