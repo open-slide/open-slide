@@ -42,6 +42,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import { hasOnlyInlineTextChildren } from '@/lib/inspector/inline-text';
+import { sameSlideLoc } from '@/lib/inspector/slide-loc';
 import { styleContext } from '@/lib/inspector/text-selection';
 import type { EditOp } from '@/lib/inspector/use-editor';
 import { useAgentSocketConnected } from '@/lib/use-agent-socket';
@@ -80,10 +81,13 @@ type RangeStylePreview = {
 function resolveSelectedTarget(target: SelectedTarget, slideId: string): SelectedTarget {
   const hit = findSlideSource(target.anchor, slideId, { hostOnly: true });
   if (!hit) return target;
-  if (hit.line === target.line && hit.column === target.column && hit.anchor === target.anchor) {
+  if (
+    sameSlideLoc(hit, { file: target.file ?? null, line: target.line, column: target.column }) &&
+    hit.anchor === target.anchor
+  ) {
     return target;
   }
-  return { line: hit.line, column: hit.column, anchor: hit.anchor };
+  return { file: hit.file, line: hit.line, column: hit.column, anchor: hit.anchor };
 }
 
 export function InspectorPanel({
@@ -139,7 +143,7 @@ export function InspectorPanel({
       if (!selected) return;
       const target = resolveSelectedTarget(selected, slideId);
       if (target !== selected) setSelected(target);
-      bufferOps(target.line, target.column, target.anchor, ops);
+      bufferOps(target.line, target.column, target.anchor, ops, target.file);
       if (target.anchor.isConnected) setSnapshot(readSnapshot(target.anchor));
     },
     [selected, setSelected, slideId, bufferOps],
@@ -215,6 +219,7 @@ export function InspectorPanel({
           value: op.value,
           prevText: snapshot.text ?? undefined,
         })),
+        target.file,
       );
       setRangeStylePreview((current) => ({
         anchor: target.anchor,
@@ -243,6 +248,7 @@ export function InspectorPanel({
         target.column,
         target.anchor,
         styleOps.map((op) => ({ ...op, prevText: snapshot.text ?? undefined })),
+        target.file,
       );
       if (target.anchor.isConnected) setSnapshot(readSnapshot(target.anchor));
       return;

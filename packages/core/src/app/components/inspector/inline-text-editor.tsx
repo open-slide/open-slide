@@ -1,7 +1,7 @@
 import { AlignCenter, AlignLeft, AlignRight, Bold, Italic, Minus, Plus } from 'lucide-react';
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useHistory } from '@/components/history-provider';
-import { findSlideSource } from '@/lib/inspector/fiber';
+import { findSlideSource, type SlideSourceHit } from '@/lib/inspector/fiber';
 import {
   isEditableTextContainer,
   isInspectableEventTarget,
@@ -26,11 +26,7 @@ const RANGE_STYLE_KEYS = new Set(['fontSize', 'fontWeight', 'fontStyle', 'fontFa
 const TOOLBAR_GAP = 8;
 const TOOLBAR_HEIGHT = 36;
 
-function pickEditableAnchor(
-  x: number,
-  y: number,
-  slideId: string,
-): { line: number; column: number; anchor: HTMLElement } | null {
+function pickEditableAnchor(x: number, y: number, slideId: string): SlideSourceHit | null {
   const el = pickInspectorTarget(pickElement(x, y));
   if (!el) return null;
   const hit = findSlideSource(el, slideId, { hostOnly: true });
@@ -179,8 +175,14 @@ function ActiveInlineEditor({
     const prevText = previousTextRef.current;
     if (value === prevText) return;
     previousTextRef.current = value;
-    bufferOps(target.line, target.column, anchor, [{ kind: 'set-text', value, prevText }]);
-  }, [anchor, target.line, target.column, bufferOps]);
+    bufferOps(
+      target.line,
+      target.column,
+      anchor,
+      [{ kind: 'set-text', value, prevText }],
+      target.file,
+    );
+  }, [anchor, target.line, target.column, target.file, bufferOps]);
 
   const applyStyleOps = useCallback(
     (ops: EditOp[]) => {
@@ -199,6 +201,7 @@ function ActiveInlineEditor({
             ? { ...op, kind: 'set-text-range-style', ...range, prevText }
             : { ...op, prevText };
         }),
+        target.file,
       );
       if (range) restoreTextSelection(anchor, range);
       if (
@@ -210,7 +213,7 @@ function ActiveInlineEditor({
       }
       return true;
     },
-    [anchor, target.line, target.column, bufferOps, commit],
+    [anchor, target.line, target.column, target.file, bufferOps, commit],
   );
 
   useEffect(() => registerInlineStyle(applyStyleOps), [registerInlineStyle, applyStyleOps]);
