@@ -7,10 +7,11 @@ import {
   type WebContents,
   WebContentsView,
 } from 'electron';
-import { SPARE_PATH, TAB_STRIP_HEIGHT, type TabInfo } from '../shared/types';
+import { SPARE_PATH, type SwitcherState, TAB_STRIP_HEIGHT, type TabInfo } from '../shared/types';
+import { DeckCovers } from './covers';
 import { showContextMenu } from './menu';
 import type { DeckSession } from './settings';
-import { moveTab } from './tab-order';
+import { moveTab, recencyOrder } from './tab-order';
 import {
   type LeaveIntent,
   type Prompt,
@@ -31,9 +32,19 @@ type Tab = {
   pendingPath: string | null;
 };
 
+// One hold of Ctrl: `order` is fixed when it starts, most recently used first.
+type Switching = {
+  order: string[];
+  index: number;
+  shown: boolean;
+  timer: NodeJS.Timeout | null;
+};
+
 type TabManagerOptions = {
   window: BrowserWindow;
   viewPreload: string;
+  shellPreload: string;
+  loadShell: (contents: WebContents, route: string) => void;
   onChange: () => void;
   prompt: Prompt;
 };
@@ -50,6 +61,10 @@ const ADOPT_TIMEOUT_MS = 1500;
 const WARM_SETTLE_MS = 15_000;
 const CRASH_WINDOW_MS = 60_000;
 const MAX_CRASH_RELOADS = 3;
+// A quick Ctrl+Tab flips to the previous tab before the switcher ever shows.
+const SWITCHER_DELAY_MS = 150;
+// A hidden view keeps its last frame, so the switcher paints itself empty first.
+const SWITCHER_HIDE_MS = 100;
 
 // Controls act like native ones: no pointer cursor, no selection, no drag ghosts.
 const NATIVE_CSS = `
@@ -101,12 +116,31 @@ export class TabManager {
   private readonly unsaved = new UnsavedChannel();
   private readonly guard: UnsavedGuard;
   private readonly allowedUnloads = new WeakSet<WebContents>();
+  private recent: string[];
+  private switcher: WebContentsView | null = null;
+  private switching: Switching | null = null;
+  private hideTimer: NodeJS.Timeout | null = null;
+  private readonly covers: DeckCovers;
 
   constructor(private readonly opts: TabManagerOptions) {
     this.guard = new UnsavedGuard(opts.prompt);
     const home = this.makeTab('home', null);
     this.tabs = [home];
     this.activeId = home.id;
+    this.recent = [home.id];
+    this.covers = new DeckCovers({
+      idle: () => this.settled(),
+      onChange: () => {
+        if (this.switching?.shown) this.publishSwitch();
+      },
+    });
+    opts.window.webContents.on('before-input-event', (e, input) => this.onInput(e, input));
+    // Focusing a view can raise its window, so the keys are only handed back
+    // once the window is in front again.
+    opts.window.on('blur', () => this.closeSwitcher());
+    opts.window.on('focus', () => {
+      if (this.strayKeys()) this.focusOwner();
+    });
     // Hidden views are only resized once the drag settles, so a live resize
     // relayouts one renderer instead of every warm one.
     opts.window.on('resize', () => this.layout(false));
@@ -137,6 +171,11 @@ export class TabManager {
       this.spare?.webContents === contents ||
       this.tabs.some((t) => t.view?.webContents === contents)
     );
+  }
+
+  get switcherContents(): WebContents | null {
+    const contents = this.switcher?.webContents;
+    return contents && !contents.isDestroyed() ? contents : null;
   }
 
   hosts(contents: WebContents): boolean {
@@ -183,7 +222,9 @@ export class TabManager {
     }));
     this.tabs = [home, ...decks];
     this.activeId = decks.find((t) => t.slideId === session.active)?.id ?? home.id;
+    this.recent = [this.activeId];
     this.baseUrl = null;
+    this.covers.setBaseUrl(null);
     this.fullscreenTab = null;
     this.changed();
   }
@@ -202,17 +243,24 @@ export class TabManager {
     }
     this.layout();
     this.scheduleWarm();
+    this.covers.setBaseUrl(url);
   }
 
   setOverlay(open: boolean) {
     if (this.overlay === open) return;
     this.overlay = open;
+    if (open) this.endSwitch(false);
     this.layout();
   }
 
   activate(id: string) {
     if (!this.tabs.some((t) => t.id === id)) return;
+    this.closeSwitcher();
+    const previous = this.active();
     this.activeId = id;
+    this.recent = [id, ...this.recent.filter((other) => other !== id)];
+    // It may have been edited while it was in front.
+    if (previous?.slideId && previous.id !== id) this.covers.refresh(previous.slideId);
     this.layout();
     this.active()?.view?.webContents.focus();
     this.changed();
@@ -271,6 +319,7 @@ export class TabManager {
     if (!gone.length) return;
     const index = this.tabs.findIndex((t) => t.id === this.activeId);
     this.tabs = this.tabs.filter((t) => !gone.includes(t));
+    this.recent = this.recent.filter((id) => this.tabs.some((t) => t.id === id));
     for (const tab of gone) this.destroyView(tab);
     if (this.fullscreenTab && gone.includes(this.fullscreenTab)) this.leaveHtmlFullscreen();
     if (this.tabs.some((t) => t.id === this.activeId)) {
@@ -362,10 +411,21 @@ export class TabManager {
     return this.active()?.view?.webContents ?? null;
   }
 
+  pickSwitch(id: unknown) {
+    const session = this.switching;
+    if (!session) return;
+    const index = typeof id === 'string' ? session.order.indexOf(id) : -1;
+    if (index >= 0) session.index = index;
+    this.endSwitch(index >= 0);
+  }
+
   destroy() {
+    this.closeSwitcher();
     for (const tab of this.tabs) this.destroyView(tab);
     this.destroySpare();
+    this.destroySwitcher();
     this.cancelWarm();
+    this.covers.clear();
     for (const popup of this.popups) {
       if (!popup.isDestroyed()) popup.close();
     }
@@ -382,7 +442,179 @@ export class TabManager {
   }
 
   private changed() {
+    this.syncCovers();
     this.opts.onChange();
+  }
+
+  private syncCovers() {
+    this.covers.sync(this.tabs.flatMap((t) => (t.slideId ? [t.slideId] : [])));
+  }
+
+  // Nothing the user is waiting on is still loading.
+  private settled(): boolean {
+    const contents = this.active()?.view?.webContents;
+    return !!contents && this.loaded.has(contents) && !this.tabs.some((t) => t.loading);
+  }
+
+  private focusOwner() {
+    if (this.switching) this.switcherContents?.focus();
+    else if (this.overlay) this.opts.window.webContents.focus();
+    else (this.fullscreenTab ?? this.active())?.view?.webContents.focus();
+  }
+
+  // A view takes the keys the moment its first page starts loading, hidden or not.
+  private keepKeys(view: WebContentsView) {
+    view.webContents.on('focus', () => {
+      if (!view.getVisible() && this.opts.window.isFocused()) this.focusOwner();
+    });
+  }
+
+  private strayKeys(): boolean {
+    return [...this.tabs.map((t) => t.view), this.spare, this.switcher].some(
+      (view) =>
+        view &&
+        !view.webContents.isDestroyed() &&
+        !view.getVisible() &&
+        view.webContents.isFocused(),
+    );
+  }
+
+  private onInput(event: Electron.Event, input: Electron.Input) {
+    const down = input.type === 'keyDown';
+    const tab = input.key === 'Tab' && input.control && !input.alt && !input.meta;
+    const delta = input.shift ? -1 : 1;
+    if (!this.switching) {
+      if (down && tab && this.beginSwitch(delta)) event.preventDefault();
+      return;
+    }
+    // Nothing is swallowed from here on: the release of Ctrl has to arrive.
+    if (down && input.key === 'Escape') this.endSwitch(false);
+    else if (input.key === 'Control' ? !down : !input.control) this.endSwitch(true);
+    else if (!down) return;
+    else if (tab) this.stepSwitch(delta);
+    else if (input.key === 'ArrowRight' || input.key === 'ArrowDown') this.stepSwitch(1);
+    else if (input.key === 'ArrowLeft' || input.key === 'ArrowUp') this.stepSwitch(-1);
+    else if (input.key === 'Enter') this.endSwitch(true);
+  }
+
+  private beginSwitch(delta: number): boolean {
+    if (!this.baseUrl || this.overlay || this.fullscreenTab || this.tabs.length < 2) return false;
+    const order = recencyOrder(
+      this.tabs.map((t) => t.id),
+      [this.activeId, ...this.recent],
+    );
+    this.switching = {
+      order,
+      index: delta > 0 ? 1 : order.length - 1,
+      shown: false,
+      timer: setTimeout(() => this.revealSwitcher(), SWITCHER_DELAY_MS),
+    };
+    if (this.hideTimer) clearTimeout(this.hideTimer);
+    this.hideTimer = null;
+    const win = this.opts.window;
+    const view = this.switcher ?? this.createSwitcher();
+    // Adding it again raises it above the tab views created since.
+    win.contentView.addChildView(view);
+    const { width, height } = win.getContentBounds();
+    view.setBounds({ x: 0, y: 0, width, height });
+    view.setVisible(true);
+    // A page whose key-down was swallowed is sent no key-ups until its next
+    // key-down, so the switcher takes the keys and sees Ctrl let go.
+    view.webContents.focus();
+    return true;
+  }
+
+  private stepSwitch(delta: number) {
+    const session = this.switching;
+    if (!session) return;
+    const count = session.order.length;
+    session.index = (session.index + delta + count) % count;
+    if (session.shown) this.publishSwitch();
+    else this.revealSwitcher();
+  }
+
+  private revealSwitcher() {
+    const session = this.switching;
+    if (!session || session.shown) return;
+    if (session.timer) clearTimeout(session.timer);
+    session.timer = null;
+    session.shown = true;
+    const slideId = this.active()?.slideId;
+    if (slideId) this.covers.refresh(slideId);
+    this.publishSwitch();
+  }
+
+  private endSwitch(commit: boolean) {
+    const session = this.switching;
+    if (!session) return;
+    const target = session.order[session.index];
+    this.closeSwitcher();
+    if (commit && target !== this.activeId && this.tabs.some((t) => t.id === target)) {
+      this.activate(target);
+    } else {
+      this.focusOwner();
+    }
+  }
+
+  private closeSwitcher() {
+    const session = this.switching;
+    if (!session) return;
+    if (session.timer) clearTimeout(session.timer);
+    this.switching = null;
+    this.publishSwitch();
+    const hide = () => {
+      this.hideTimer = null;
+      if (this.switcherContents) this.switcher?.setVisible(false);
+    };
+    if (session.shown) this.hideTimer = setTimeout(hide, SWITCHER_HIDE_MS);
+    else hide();
+  }
+
+  private publishSwitch() {
+    this.switcherContents?.send('switcher:state', this.switchState());
+  }
+
+  private switchState(): SwitcherState | null {
+    const session = this.switching;
+    if (!session?.shown) return null;
+    const tabs = session.order.flatMap((id) => {
+      const tab = this.tabs.find((t) => t.id === id);
+      if (!tab) return [];
+      const cover = tab.slideId ? this.covers.get(tab.slideId) : null;
+      return [{ id, kind: tab.kind, title: tab.title, cover }];
+    });
+    return { tabs, selectedId: session.order[session.index] };
+  }
+
+  private createSwitcher(): WebContentsView {
+    const view = new WebContentsView({
+      webPreferences: { preload: this.opts.shellPreload, sandbox: true, contextIsolation: true },
+    });
+    view.setBackgroundColor('#00000000');
+    view.setVisible(false);
+    const contents = view.webContents;
+    this.keepKeys(view);
+    contents.on('before-input-event', (e, input) => this.onInput(e, input));
+    // A session can start before the page is there to hear about it.
+    contents.on('did-finish-load', () => this.publishSwitch());
+    contents.on('will-navigate', (e) => e.preventDefault());
+    contents.on('render-process-gone', () => {
+      if (this.switcher !== view) return;
+      this.endSwitch(false);
+      this.destroySwitcher();
+    });
+    this.opts.window.contentView.addChildView(view);
+    this.opts.loadShell(contents, 'switcher');
+    this.switcher = view;
+    return view;
+  }
+
+  private destroySwitcher() {
+    const view = this.switcher;
+    this.switcher = null;
+    if (this.hideTimer) clearTimeout(this.hideTimer);
+    this.hideTimer = null;
+    if (view) this.disposeView(view);
   }
 
   private makeTab(kind: Tab['kind'], slideId: string | null): Tab {
@@ -425,9 +657,12 @@ export class TabManager {
       if (shown && !this.revealed.has(contents)) {
         this.revealed.add(contents);
         contents.setBackgroundThrottling(true);
+        // It could not take the keys while it was hidden.
+        this.focusOwner();
       }
     }
     if (this.spare && includeHidden) this.spare.setBounds(bounds(TAB_STRIP_HEIGHT));
+    if (this.switcher && (includeHidden || this.switching)) this.switcher.setBounds(bounds(0));
   }
 
   private isShowable(contents: WebContents): boolean {
@@ -454,6 +689,7 @@ export class TabManager {
       this.loaded.add(contents);
       this.layout();
       this.scheduleWarm();
+      this.syncCovers();
       setTimeout(() => {
         if (contents.isDestroyed() || this.revealed.has(contents)) return;
         if (!this.adopting.has(contents)) contents.setBackgroundThrottling(true);
@@ -464,6 +700,8 @@ export class TabManager {
       if (isMainFrame) markLoaded();
     });
     contents.on('dom-ready', () => void contents.insertCSS(NATIVE_CSS));
+    contents.on('before-input-event', (e, input) => this.onInput(e, input));
+    this.keepKeys(view);
     this.opts.window.contentView.addChildView(view);
     return view;
   }
@@ -525,7 +763,7 @@ export class TabManager {
   }
 
   // One background load at a time, after whatever the user is waiting on:
-  // restored tabs first, then a spare for the next deck.
+  // restored tabs first, then a spare for the next deck, then the tab switcher.
   private warm() {
     if (!this.baseUrl || this.opts.window.isDestroyed()) return;
     const views = [...this.tabs.map((t) => t.view), this.spare];
@@ -536,6 +774,8 @@ export class TabManager {
       this.layout();
     } else if (!this.spare) {
       this.createSpare();
+    } else if (!this.switcher && this.tabs.length > 1) {
+      this.createSwitcher();
     }
   }
 

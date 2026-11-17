@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { moveTab } from './tab-order';
+import { moveTab, recencyOrder } from './tab-order';
 
 const tabs = ['H', 'A', 'B', 'C', 'D'];
 
@@ -28,5 +28,15 @@ describe('moveTab', () => {
   it('ignores an index that is not an integer', () => {
     expect(moveTab(tabs, 2, Number.NaN)).toEqual(tabs);
     expect(moveTab(tabs, 2, 'x' as unknown as number)).toEqual(tabs);
+  });
+});
+
+describe('recencyOrder', () => {
+  it('puts the most recently used tabs first', () => {
+    expect(recencyOrder(tabs, ['C', 'A', 'H'])).toEqual(['C', 'A', 'H', 'B', 'D']);
+  });
+
+  it('skips tabs that have closed and ones listed twice', () => {
+    expect(recencyOrder(tabs, ['C', 'X', 'C', 'B'])).toEqual(['C', 'B', 'H', 'A', 'D']);
   });
 });

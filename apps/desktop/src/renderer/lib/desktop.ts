@@ -5,6 +5,7 @@ import type {
   LoginState,
   LogTask,
   ShellApi,
+  SwitcherState,
   TaskResult,
 } from '../../shared/types';
 
@@ -51,6 +52,14 @@ desktop.onState(appState.set);
 
 export function useAppState(): AppState | null {
   return useSyncExternalStore(appState.subscribe, appState.get);
+}
+
+// Subscribed at load: the first state can arrive before any component mounts.
+const switcher = createStore<SwitcherState | null>(null);
+desktop.switcher.onState(switcher.set);
+
+export function useSwitcher(): SwitcherState | null {
+  return useSyncExternalStore(switcher.subscribe, switcher.get);
 }
 
 const logins = createStore<Partial<Record<AgentId, LoginState>>>({});

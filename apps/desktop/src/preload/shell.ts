@@ -42,6 +42,10 @@ const api: ShellApi = {
     move: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),
     showMenu: (id) => ipcRenderer.send('tabs:menu', id),
   },
+  switcher: {
+    onState: (listener) => subscribe('switcher:state', listener),
+    pick: (id) => ipcRenderer.send('switcher:pick', id),
+  },
   workspace: {
     choose: () => ipcRenderer.invoke('workspace:choose'),
     chooseParent: () => ipcRenderer.invoke('workspace:choose-parent'),

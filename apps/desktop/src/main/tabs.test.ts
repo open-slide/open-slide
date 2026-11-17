@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { BrowserWindow, MessageBoxOptions } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { UnsavedAction, UnsavedOutcome, UnsavedStatus } from '../shared/types';
+import type { SwitcherState, UnsavedAction, UnsavedOutcome, UnsavedStatus } from '../shared/types';
 
 // What a page's guard would answer, keyed by the URL the view shows.
 type PageScript = {
@@ -11,7 +11,7 @@ type PageScript = {
 };
 
 const fixture = vi.hoisted(() => ({
-  views: [] as { webContents: FakeContents }[],
+  views: [] as { webContents: FakeContents; visible: boolean }[],
   // Stands in for the IPC route a page's reply takes back to the manager.
   deliver: (_contents: unknown, _request: unknown, _payload: unknown) => {},
 }));
@@ -21,6 +21,8 @@ class FakeContents extends EventEmitter {
   closed = false;
   loading = false;
   reloads = 0;
+  focuses = 0;
+  focused = false;
   sent: unknown[][] = [];
   script: PageScript = { status: { drafts: false, pending: false } };
   navigationHistory = { clear: () => {}, canGoBack: () => false, goBack: () => {} };
@@ -61,7 +63,12 @@ class FakeContents extends EventEmitter {
   isLoadingMainFrame() {
     return this.loading;
   }
-  focus() {}
+  focus() {
+    this.focuses++;
+  }
+  isFocused() {
+    return this.focused;
+  }
   setBackgroundThrottling() {}
   setWindowOpenHandler() {}
   insertCSS() {
@@ -76,11 +83,17 @@ vi.mock('electron', () => ({
   Menu: { buildFromTemplate: () => ({ popup: () => {} }) },
   WebContentsView: class {
     webContents = new FakeContents();
+    visible = true;
     constructor() {
       fixture.views.push(this);
     }
     setBackgroundColor() {}
-    setVisible() {}
+    setVisible(visible: boolean) {
+      this.visible = visible;
+    }
+    getVisible() {
+      return this.visible;
+    }
     setBounds() {}
   },
 }));
@@ -91,8 +104,11 @@ const BASE = 'http://localhost:5173';
 
 function setup(...answers: string[]) {
   const shown: MessageBoxOptions[] = [];
+  const switcher: { contents: FakeContents | null } = { contents: null };
   const window = Object.assign(new EventEmitter(), {
+    webContents: new FakeContents(),
     isDestroyed: () => false,
+    isFocused: () => true,
     isFullScreen: () => false,
     setFullScreen: () => {},
     getContentBounds: () => ({ x: 0, y: 0, width: 1200, height: 800 }),
@@ -101,6 +117,10 @@ function setup(...answers: string[]) {
   const manager = new TabManager({
     window: window as unknown as BrowserWindow,
     viewPreload: '/preload.cjs',
+    shellPreload: '/shell.cjs',
+    loadShell: (contents) => {
+      switcher.contents = contents as unknown as FakeContents;
+    },
     onChange: () => {},
     prompt: async (options) => {
       shown.push(options);
@@ -127,8 +147,24 @@ function setup(...answers: string[]) {
     return { id, contents };
   };
   const titles = () => manager.info.tabs.map((t) => t.slideId ?? 'home');
-  return { manager, open, shown, titles };
+  const active = () => {
+    const { tabs, activeTabId } = manager.info;
+    return tabs.find((t) => t.id === activeTabId)?.slideId ?? 'home';
+  };
+  return { manager, open, shown, titles, active, window, switcher };
 }
+
+type Key = { key: string; type?: 'keyDown' | 'keyUp'; control?: boolean; shift?: boolean };
+
+// True when the manager swallowed the key.
+function press(contents: FakeContents | null, { key, type = 'keyDown', ...mods }: Key): boolean {
+  const event = { preventDefault: vi.fn() };
+  const input = { type, key, control: true, shift: false, alt: false, meta: false, ...mods };
+  contents?.emit('before-input-event', event, input);
+  return event.preventDefault.mock.calls.length > 0;
+}
+
+const CTRL_UP: Key = { key: 'Control', type: 'keyUp', control: false };
 
 const DRAFT: PageScript = { status: { drafts: true, pending: false } };
 
@@ -281,5 +317,157 @@ describe('TabManager unsaved work', () => {
 
     expect(await closing).toBe(false);
     expect(deck.contents.closed).toBe(false);
+  });
+});
+
+describe('TabManager tab switcher', () => {
+  beforeEach(() => {
+    fixture.views = [];
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const published = (contents: FakeContents | null) =>
+    (contents?.sent ?? []).filter(([c]) => c === 'switcher:state').map(([, state]) => state);
+  const picture = (state: unknown) => {
+    const { tabs, selectedId } = state as SwitcherState;
+    return tabs.map((t) => (t.id === selectedId ? `[${t.title}]` : t.title)).join(' ');
+  };
+
+  it('flips to the previous tab on a quick Ctrl+Tab without showing anything', async () => {
+    const { open, active, switcher } = setup();
+    await open('first');
+    const second = await open('second');
+
+    expect(press(second.contents, { key: 'Tab' })).toBe(true);
+    // The swallowed page hears no key-ups, so the switcher has taken the keys.
+    expect(switcher.contents?.focuses).toBe(1);
+    expect(press(switcher.contents, CTRL_UP)).toBe(false);
+
+    expect(active()).toBe('first');
+    expect(published(switcher.contents)).toEqual([null]);
+    expect(fixture.views.find((v) => v.webContents === switcher.contents)?.visible).toBe(false);
+  });
+
+  it('lists the tabs most recent first once Ctrl is held, and walks them', async () => {
+    const { open, active, switcher } = setup();
+    await open('first');
+    const second = await open('second');
+
+    press(second.contents, { key: 'Tab' });
+    await vi.advanceTimersByTimeAsync(150);
+    expect(picture(published(switcher.contents).at(-1))).toBe('second [first] Home');
+
+    press(switcher.contents, { key: 'Tab' });
+    expect(picture(published(switcher.contents).at(-1))).toBe('second first [Home]');
+    press(switcher.contents, { key: 'Tab', shift: true });
+    press(switcher.contents, { key: 'ArrowLeft' });
+    expect(picture(published(switcher.contents).at(-1))).toBe('[second] first Home');
+    press(switcher.contents, { key: 'Tab', shift: true });
+    press(switcher.contents, { key: 'Tab', type: 'keyUp' });
+    expect(active()).toBe('second');
+
+    press(switcher.contents, CTRL_UP);
+    expect(active()).toBe('home');
+    expect(published(switcher.contents).at(-1)).toBeNull();
+  });
+
+  it('shows at once when Tab is pressed again before the delay', async () => {
+    const { open, switcher } = setup();
+    await open('first');
+    const second = await open('second');
+
+    press(second.contents, { key: 'Tab' });
+    press(switcher.contents, { key: 'Tab' });
+
+    expect(picture(published(switcher.contents).at(-1))).toBe('second first [Home]');
+  });
+
+  it('leaves the tab alone on Escape or a click outside, and gives it the keys back', async () => {
+    const { manager, open, active, switcher } = setup();
+    await open('first');
+    const second = await open('second');
+
+    for (const dismiss of [
+      () => press(switcher.contents, { key: 'Escape' }),
+      () => manager.pickSwitch(null),
+    ]) {
+      press(second.contents, { key: 'Tab' });
+      await vi.advanceTimersByTimeAsync(150);
+      const before = second.contents.focuses;
+      dismiss();
+      expect(active()).toBe('second');
+      expect(published(switcher.contents).at(-1)).toBeNull();
+      expect(second.contents.focuses).toBe(before + 1);
+      await vi.advanceTimersByTimeAsync(100);
+    }
+  });
+
+  it('closes when the window loses focus, and only takes the keys back once it returns', async () => {
+    const { open, active, window, switcher } = setup();
+    await open('first');
+    const second = await open('second');
+
+    press(second.contents, { key: 'Tab' });
+    await vi.advanceTimersByTimeAsync(150);
+    const shell = switcher.contents as FakeContents;
+    const before = second.contents.focuses;
+    shell.focused = true;
+    window.emit('blur');
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(active()).toBe('second');
+    expect(published(shell).at(-1)).toBeNull();
+    expect(second.contents.focuses).toBe(before);
+
+    window.emit('focus');
+    expect(second.contents.focuses).toBe(before + 1);
+  });
+
+  it('switches to a tab that is clicked', async () => {
+    const { manager, open, active } = setup();
+    const first = await open('first');
+    const second = await open('second');
+
+    press(second.contents, { key: 'Tab' });
+    await vi.advanceTimersByTimeAsync(150);
+    manager.pickSwitch(first.id);
+
+    expect(active()).toBe('first');
+  });
+
+  it('commits when a key arrives after Ctrl was let go unseen', async () => {
+    const { open, active, switcher } = setup();
+    await open('first');
+    const second = await open('second');
+
+    press(second.contents, { key: 'Tab' });
+    press(switcher.contents, { key: 'a', control: false });
+
+    expect(active()).toBe('first');
+  });
+
+  it('hands the keys back when a hidden view takes them as it loads', async () => {
+    const { open } = setup();
+    const first = await open('first');
+    const second = await open('second');
+    const before = second.contents.focuses;
+
+    first.contents.emit('focus');
+    expect(second.contents.focuses).toBe(before + 1);
+
+    second.contents.emit('focus');
+    expect(second.contents.focuses).toBe(before + 1);
+  });
+
+  it('passes Ctrl+Tab through when there is nothing to switch between', async () => {
+    const alone = setup();
+    expect(press(alone.window.webContents, { key: 'Tab' })).toBe(false);
+
+    const covered = setup();
+    const deck = await covered.open('first');
+    covered.manager.setOverlay(true);
+    expect(press(deck.contents, { key: 'Tab' })).toBe(false);
+    expect(covered.active()).toBe('first');
   });
 });

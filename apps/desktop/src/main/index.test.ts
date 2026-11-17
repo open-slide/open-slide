@@ -35,6 +35,7 @@ vi.mock('electron', async () => {
       setWindowOpenHandler: () => {},
       isDestroyed: () => this.dead,
       isLoading: () => false,
+      loadFile: () => Promise.resolve(),
     });
     constructor() {
       super();
@@ -59,9 +60,6 @@ vi.mock('electron', async () => {
       this.emit('show');
     }
     focus() {}
-    loadFile() {
-      return Promise.resolve();
-    }
     getNormalBounds() {
       return { x: 0, y: 0, width: 1000, height: 800 };
     }

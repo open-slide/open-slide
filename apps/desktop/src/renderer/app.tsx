@@ -14,6 +14,7 @@ import { type CreateTarget, CreateWorkspaceDialog } from './components/create-wo
 import { ServerScreen } from './components/server-screen';
 import { SettingsWindow } from './components/settings';
 import { TabStrip } from './components/tab-strip';
+import { TabSwitcher } from './components/tab-switcher';
 import { Welcome } from './components/welcome';
 import { desktop, useAppState, useWindowAppearance } from './lib/desktop';
 import { openWorkspace, useWorkspaceActions } from './lib/workspace-actions';
@@ -39,6 +40,7 @@ export function App() {
 
 function Shell() {
   useWindowAppearance();
+  if (route === 'switcher') return <TabSwitcher />;
   return route === 'settings' ? <SettingsWindow /> : <MainWindow />;
 }
 

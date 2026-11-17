@@ -114,14 +114,18 @@ export function installMenu(actions: MenuActions, recent: string[]) {
         { role: 'zoom' },
         { type: 'separator' },
         { label: 'Home', accelerator: 'CmdOrCtrl+Shift+H', click: actions.goHome },
+        // Ctrl+Tab belongs to the tab switcher, which reads the keys itself; off
+        // macOS the menu only displays it.
         {
           label: 'Show Next Tab',
           accelerator: isMac ? 'Cmd+Shift+]' : 'Ctrl+Tab',
+          registerAccelerator: isMac,
           click: () => actions.cycleTab(1),
         },
         {
           label: 'Show Previous Tab',
           accelerator: isMac ? 'Cmd+Shift+[' : 'Ctrl+Shift+Tab',
+          registerAccelerator: isMac,
           click: () => actions.cycleTab(-1),
         },
         ...tabItems,

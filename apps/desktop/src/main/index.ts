@@ -143,8 +143,10 @@ function shellWindowOf(contents: WebContents | null): BrowserWindow | null {
   return shellWindows().find((w) => w.webContents === contents) ?? null;
 }
 
+// The tab switcher is a shell page too, drawn in a view above the tabs.
 function sendAll(channel: string, payload: unknown) {
   for (const win of shellWindows()) win.webContents.send(channel, payload);
+  tabs?.switcherContents?.send(channel, payload);
 }
 
 let menuRecent: string | null = null;
@@ -282,11 +284,11 @@ function applyMaterial(win: BrowserWindow) {
   win.setBackgroundColor(windowBackground());
 }
 
-function loadShell(win: BrowserWindow, hash?: string) {
+function loadShell(contents: WebContents, hash?: string) {
   if (process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}${hash ? `#${hash}` : ''}`);
+    void contents.loadURL(`${process.env.ELECTRON_RENDERER_URL}${hash ? `#${hash}` : ''}`);
   } else {
-    void win.loadFile(path.join(import.meta.dirname, '../renderer/index.html'), { hash });
+    void contents.loadFile(path.join(import.meta.dirname, '../renderer/index.html'), { hash });
   }
 }
 
@@ -352,7 +354,7 @@ function openSettingsWindow() {
   win.on('closed', () => {
     if (settingsWindow === win) settingsWindow = null;
   });
-  loadShell(win, 'settings');
+  loadShell(win.webContents, 'settings');
 }
 
 function fitSettingsWindow(win: BrowserWindow, height: number) {
@@ -390,6 +392,8 @@ function createWindow(): BrowserWindow {
   const manager = new TabManager({
     window: win,
     viewPreload: VIEW_PRELOAD,
+    shellPreload: SHELL_PRELOAD,
+    loadShell,
     onChange: () => {
       workspaces.persistSession();
       broadcast();
@@ -432,7 +436,7 @@ function createWindow(): BrowserWindow {
     if (tabs === manager) tabs = null;
     if (window === win) window = null;
   });
-  loadShell(win);
+  loadShell(win.webContents);
   return win;
 }
 
@@ -516,7 +520,7 @@ function playIntro() {
     if (!released) window?.focus();
   });
   broadcast();
-  loadShell(win, 'intro');
+  loadShell(win.webContents, 'intro');
 }
 
 function replayIntro() {
@@ -531,7 +535,7 @@ function reducedMotion(): boolean {
 }
 
 function fromShell(e: IpcMainEvent | IpcMainInvokeEvent): boolean {
-  return shellWindowOf(e.sender) !== null;
+  return shellWindowOf(e.sender) !== null || e.sender === tabs?.switcherContents;
 }
 
 function handle<A extends unknown[], R>(channel: string, fn: (...args: A) => R | Promise<R>) {
@@ -731,6 +735,7 @@ function registerIpc() {
   listen('tabs:close', (id: string) => void tabs?.close(String(id)));
   listen('tabs:move', (id: string, index: number) => tabs?.move(String(id), index));
   listen('tabs:menu', (id: string) => tabs?.showMenu(String(id)));
+  listen('switcher:pick', (id: unknown) => tabs?.pickSwitch(id));
 
   handle('workspace:choose', () => workspaces.choose());
   handle('workspace:choose-parent', async () => {

@@ -35,6 +35,12 @@ export type TabInfo = {
   loading: boolean;
 };
 
+// A deck's cover is its first page as a data URL, or null until it has been captured.
+export type SwitcherTab = Pick<TabInfo, 'id' | 'kind' | 'title'> & { cover: string | null };
+
+// Tabs in most-recently-used order.
+export type SwitcherState = { tabs: SwitcherTab[]; selectedId: string };
+
 export type WorkspaceInfo = { root: string; name: string };
 
 // The id lets a surface dismiss the failure it showed, not one that replaced it.
@@ -162,6 +168,11 @@ export type ShellApi = {
     close(id: string): void;
     move(id: string, toIndex: number): void;
     showMenu(id: string): void;
+  };
+  switcher: {
+    onState(listener: (state: SwitcherState | null) => void): () => void;
+    // Null dismisses the switcher without switching.
+    pick(id: string | null): void;
   };
   workspace: {
     // An empty folder that still needs setting up, or null once nothing is left to do.

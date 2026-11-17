@@ -54,8 +54,20 @@ textarea,
   background-color: oklch(0 0 0 / 0.3);
 }
 
-html[data-route="intro"] body {
+html[data-route="intro"] body,
+html[data-route="switcher"] body {
   background-color: transparent;
+}
+
+@keyframes switcher-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+.switcher-in {
+  animation: switcher-in 120ms var(--ease-swift) both;
 }
 
 @keyframes ob-fade {
@@ -266,6 +278,10 @@ html[data-route="intro"] body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .switcher-in {
+    animation: none;
+  }
+
   .ob-in,
   .ob-stage-in,
   .ob-scene-in,
