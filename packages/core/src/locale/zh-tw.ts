@@ -113,7 +113,6 @@ export const zhTW: Locale = {
     imagePptxExportFailed: 'PPTX 匯出失敗',
     pdfExportSafariUnsupported:
       '匯出 PDF 目前不支援 Safari 裝置，請嘗試用 Chromium 基底瀏覽器替代。',
-    reorderNotesSaving: '演講備忘仍在儲存中，請稍後再移動頁面。',
     present: '簡報',
     presentMenuAria: '簡報選項',
     presentInWindow: '播放',

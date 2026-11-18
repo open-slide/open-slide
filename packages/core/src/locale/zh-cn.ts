@@ -113,7 +113,6 @@ export const zhCN: Locale = {
     imagePptxExportFailed: 'PPTX 导出失败',
     pdfExportSafariUnsupported:
       '导出 PDF 目前不支持 Safari 设备，请尝试使用基于 Chromium 的浏览器替代。',
-    reorderNotesSaving: '演讲备注仍在保存中，请稍后再移动页面。',
     present: '演示',
     presentMenuAria: '演示选项',
     presentInWindow: '播放',

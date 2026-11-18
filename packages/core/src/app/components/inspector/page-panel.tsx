@@ -55,7 +55,7 @@ export function PagePanel({ page }: { page: PageInfo }) {
           : null;
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div data-page-panel className="flex min-h-full flex-col">
       <div className="px-3.5 pt-3.5 pb-1 text-[12px] font-medium">
         {format(t.inspector.pageLabel, { page: page.index + 1, total: page.total })}
       </div>

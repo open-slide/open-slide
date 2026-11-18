@@ -1,5 +1,13 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { applyNotesEdit, renderNoteLiteral } from './notes-plugin.ts';
+import {
+  reorderDefaultExportPagesInSource,
+  reorderNotesArrayInSource,
+} from '../editing/slide-ops.ts';
+import { withFileLock } from './file-lock.ts';
+import { applyNotesEdit, renderNoteLiteral, saveNotes } from './notes-plugin.ts';
 import { hasRecentWrite, RECENT_WRITE_WINDOW_MS, recordWrite } from './recent-writes.ts';
 
 describe('renderNoteLiteral', () => {
@@ -161,5 +169,49 @@ describe('recent-writes window', () => {
     expect(hasRecentWrite(file, now + RECENT_WRITE_WINDOW_MS)).toBe(false);
     // The expired entry is pruned, so a subsequent check stays false too.
     expect(hasRecentWrite(file, now + RECENT_WRITE_WINDOW_MS + 5_000)).toBe(false);
+  });
+});
+
+describe('saveNotes', () => {
+  async function slideFile(source: string) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'open-slide-notes-'));
+    const file = path.join(dir, 'index.tsx');
+    await fs.writeFile(file, source, 'utf8');
+    return file;
+  }
+
+  it('keeps every edit when saves to one file run in parallel', async () => {
+    const file = await slideFile('export default [A, B, C];\n');
+    const results = await Promise.all([
+      saveNotes(file, 0, 'zero'),
+      saveNotes(file, 1, 'one'),
+      saveNotes(file, 2, 'two'),
+    ]);
+    expect(results.every((r) => r.ok)).toBe(true);
+    const source = await fs.readFile(file, 'utf8');
+    expect(source).toContain('"zero",\n  "one",\n  "two",');
+  });
+
+  it('applies a save queued behind a page reorder to the reordered file', async () => {
+    const file = await slideFile('export default [A, B];\n\nexport const notes = ["a", "b"];\n');
+    let release = () => {};
+    let read = () => {};
+    const sourceRead = new Promise<void>((resolve) => (read = resolve));
+    const reorder = withFileLock(file, async () => {
+      const source = await fs.readFile(file, 'utf8');
+      const released = new Promise<void>((resolve) => (release = resolve));
+      read();
+      await released;
+      const pages = reorderDefaultExportPagesInSource(source, [1, 0]);
+      const next = pages && reorderNotesArrayInSource(pages, [1, 0]);
+      if (next) await fs.writeFile(file, next, 'utf8');
+    });
+    const save = saveNotes(file, 0, 'b2');
+    await sourceRead;
+    release();
+    await Promise.all([reorder, save]);
+    const source = await fs.readFile(file, 'utf8');
+    expect(source).toContain('export default [B, A]');
+    expect(source).toContain('"b2",\n  "a",');
   });
 });

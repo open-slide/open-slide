@@ -118,7 +118,6 @@ export type Locale = {
     pptxExportFailed: string;
     imagePptxExportFailed: string;
     pdfExportSafariUnsupported: string;
-    reorderNotesSaving: string;
     present: string;
     presentMenuAria: string;
     presentInWindow: string;

@@ -150,9 +150,15 @@ test.describe('slide viewer', () => {
       await expect(page.getByRole('button', { name: 'Go to page 4' })).toBeVisible();
 
       await page.getByRole('button', { name: 'Go to page 4' }).click({ button: 'right' });
+      const deleted = page.waitForResponse(
+        (res) =>
+          res.url().endsWith('/__slides/thumb-ops/pages/3') && res.request().method() === 'DELETE',
+      );
       await page.getByRole('menuitem', { name: 'Delete' }).click();
+      expect((await deleted).ok()).toBe(true);
       await expect(page.getByRole('button', { name: 'Go to page 4' })).toHaveCount(0);
     } finally {
+      await page.close();
       await deleteSlide(request, 'thumb-ops');
     }
   });
@@ -193,6 +199,46 @@ test.describe('slide viewer', () => {
       await expect.poll(() => readSlideSource('notes-ui')).toContain('Drawer note text');
     } finally {
       await deleteSlide(request, 'notes-ui');
+    }
+  });
+
+  test('switching pages saves a note restored while its previous save is in flight', async ({
+    page,
+    request,
+  }) => {
+    const slideId = 'notes-reverted';
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await duplicateSlide(request, 'alpha', slideId);
+      await openSlide(page, slideId);
+      await page.getByRole('button', { name: /Notes/ }).click();
+      const notes = page.locator('[data-notes-drawer] textarea');
+      const original = 'Alpha speaker note';
+      await expect(notes).toHaveValue(original);
+      await page.route(
+        '**/__notes',
+        async (route) => {
+          const response = await route.fetch();
+          await held;
+          await route.fulfill({ response });
+        },
+        { times: 1 },
+      );
+      await notes.fill('Temporary note');
+      await expect.poll(() => readSlideSource(slideId)).toContain('Temporary note');
+      await notes.fill(original);
+      // Keep focus in the editor so the page switch itself has to flush the note.
+      await page.getByRole('button', { name: 'Go to page 2' }).dispatchEvent('click');
+      await expect(page).toHaveURL(/[?&]p=2/);
+      await expect.poll(() => readSlideSource(slideId)).toContain(original);
+    } finally {
+      release();
+      await page.unrouteAll({ behavior: 'wait' });
+      await page.close();
+      await deleteSlide(request, slideId);
     }
   });
 });

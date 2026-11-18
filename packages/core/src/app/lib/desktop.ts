@@ -2,6 +2,7 @@ import { useTheme } from 'next-themes';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { DesktopHost, HapticPattern } from './desktop-host';
+import { deckIdFromPath, isHomePath, stripBase } from './desktop-routes';
 import { slideIds } from './slides';
 import { hasUnsaved, settleUnsaved, unsavedStatus } from './unsaved';
 
@@ -22,21 +23,7 @@ if (desktopHost) {
   });
 }
 
-const DECK_PATH_RE = /^\/s\/([^/]+)\/?$/;
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
-
-function stripBase(pathname: string): string {
-  return BASE && pathname.startsWith(BASE) ? pathname.slice(BASE.length) || '/' : pathname;
-}
-
-function deckIdFromPath(pathname: string): string | null {
-  const m = DECK_PATH_RE.exec(stripBase(pathname));
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
-function isHomePath(pathname: string): boolean {
-  return !stripBase(pathname).startsWith('/s/');
-}
 
 // True when the host took over, so the caller skips its own navigation.
 export function openDeckInHost(slideId: string): boolean {
@@ -66,14 +53,14 @@ function interceptLinkClick(host: DesktopHost, e: MouseEvent) {
   if (anchor.hasAttribute('download')) return;
   const url = new URL(anchor.href);
   if (url.origin !== window.location.origin) return;
-  const currentDeck = deckIdFromPath(window.location.pathname);
-  const targetDeck = deckIdFromPath(url.pathname);
+  const currentDeck = deckIdFromPath(window.location.pathname, BASE);
+  const targetDeck = deckIdFromPath(url.pathname, BASE);
   if (targetDeck && targetDeck !== currentDeck) {
     e.preventDefault();
     host.openDeck(targetDeck);
-  } else if (currentDeck && isHomePath(url.pathname)) {
+  } else if (currentDeck && isHomePath(url.pathname, BASE)) {
     e.preventDefault();
-    host.openHome(stripBase(url.pathname) + url.search);
+    host.openHome(stripBase(url.pathname, BASE) + url.search);
   }
 }
 
@@ -93,7 +80,7 @@ export function DesktopBridge() {
     () =>
       desktopHost?.onNavigate((path) => {
         // A pre-warmed page's slide list predates decks created after it booted.
-        const deck = deckIdFromPath(path);
+        const deck = deckIdFromPath(path, BASE);
         if (deck && !slideIds.includes(deck)) {
           window.location.replace(`${BASE}${path}`);
           return;

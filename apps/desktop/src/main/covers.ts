@@ -13,15 +13,12 @@ type DeckCoversOptions = {
   onChange: () => void;
 };
 
-// Renders each open deck's first page in a hidden offscreen window, through
-// core's preview route, and keeps the result as a small JPEG data URL.
 export class DeckCovers {
   private baseUrl: string | null = null;
   private readonly covers = new Map<string, string>();
   private readonly queue = new Set<string>();
   private readonly failed = new Set<string>();
-  private current: string | null = null;
-  private generation = 0;
+  private current: { slideId: string; dropped: boolean } | null = null;
   private window: BrowserWindow | null = null;
   private closeTimer: NodeJS.Timeout | null = null;
 
@@ -40,25 +37,26 @@ export class DeckCovers {
   // Queues the decks that have no cover yet and forgets the ones no longer open.
   sync(slideIds: string[]) {
     const open = new Set(slideIds);
+    if (this.current && !open.has(this.current.slideId)) this.current.dropped = true;
     for (const known of [this.covers, this.queue, this.failed]) {
       for (const id of [...known.keys()]) {
         if (!open.has(id)) known.delete(id);
       }
     }
     for (const id of open) {
-      if (!this.covers.has(id) && !this.failed.has(id) && id !== this.current) this.queue.add(id);
+      if (!this.covers.has(id) && !this.failed.has(id) && !this.capturing(id)) this.queue.add(id);
     }
     this.pump();
   }
 
   refresh(slideId: string) {
     this.failed.delete(slideId);
-    if (slideId !== this.current) this.queue.add(slideId);
+    if (!this.capturing(slideId)) this.queue.add(slideId);
     this.pump();
   }
 
   clear() {
-    this.generation++;
+    if (this.current) this.current.dropped = true;
     this.covers.clear();
     this.queue.clear();
     this.failed.clear();
@@ -73,13 +71,13 @@ export class DeckCovers {
       return;
     }
     this.queue.delete(slideId);
-    this.current = slideId;
-    const generation = this.generation;
+    const capture = { slideId, dropped: false };
+    this.current = capture;
     void this.capture(slideId)
       .catch(() => null)
       .then((cover) => {
         this.current = null;
-        if (generation === this.generation) {
+        if (!capture.dropped) {
           if (cover) {
             this.covers.set(slideId, cover);
             this.opts.onChange();
@@ -89,6 +87,10 @@ export class DeckCovers {
         }
         this.pump();
       });
+  }
+
+  private capturing(slideId: string): boolean {
+    return this.current?.slideId === slideId && !this.current.dropped;
   }
 
   private async capture(slideId: string): Promise<string | null> {

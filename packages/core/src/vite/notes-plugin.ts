@@ -5,6 +5,7 @@ import type { Plugin, ViteDevServer } from 'vite';
 import { parseSource } from '../editing/babel-walk.ts';
 import { resolveSlideEntry } from '../editing/slide-ops.ts';
 import { validateMutationRequest } from '../http/request-guard.ts';
+import { withFileLock } from './file-lock.ts';
 import { hasRecentWrite, recordWrite } from './recent-writes.ts';
 import { json, readBody, readSlideSource } from './routes/context.ts';
 
@@ -143,6 +144,25 @@ export function applyNotesEdit(source: string, index: number, text: string): App
   return { ok: true, source: next };
 }
 
+export type SaveNotesResult =
+  | { ok: true; changed: boolean }
+  | { ok: false; status: number; error: string };
+
+export function saveNotes(file: string, index: number, text: string): Promise<SaveNotesResult> {
+  return withFileLock(file, async () => {
+    const source = await readSlideSource(file);
+    if (source === null) return { ok: false, status: 404, error: 'slide not found' };
+    const result = applyNotesEdit(source, index, text);
+    if (!result.ok) return result;
+    const changed = result.source !== source;
+    if (changed) {
+      recordWrite(file);
+      await fs.writeFile(file, result.source, 'utf8');
+    }
+    return { ok: true, changed };
+  });
+}
+
 export type NotesPluginOptions = {
   userCwd: string;
   slidesDir?: string;
@@ -176,17 +196,9 @@ export function notesPlugin(opts: NotesPluginOptions): Plugin {
           if (typeof body.index !== 'number') return json(res, 400, { error: 'missing index' });
           if (typeof body.text !== 'string') return json(res, 400, { error: 'missing text' });
 
-          const source = await readSlideSource(file);
-          if (source === null) return json(res, 404, { error: 'slide not found' });
-
-          const result = applyNotesEdit(source, body.index, body.text);
+          const result = await saveNotes(file, body.index, body.text);
           if (!result.ok) return json(res, result.status, { error: result.error });
-          const changed = result.source !== source;
-          if (changed) {
-            recordWrite(file);
-            await fs.writeFile(file, result.source, 'utf8');
-          }
-          return json(res, 200, { ok: true, changed });
+          return json(res, 200, { ok: true, changed: result.changed });
         } catch (err) {
           json(res, 500, { error: String((err as Error).message ?? err) });
         }

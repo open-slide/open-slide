@@ -108,7 +108,7 @@ import {
   exportSlideAsPptx,
   type PptxExportProgress,
 } from '../lib/export-pptx';
-import { notesSaving, remapNotesSessionCacheAfterReorder } from '../lib/inspector/use-notes';
+import { changeNotesPages } from '../lib/inspector/use-notes';
 import type { SlideModule } from '../lib/sdk';
 import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion';
 import { useSlideModule } from '../lib/use-slide-module';
@@ -116,6 +116,12 @@ import { useSlideModule } from '../lib/use-slide-module';
 const { showSlideUi, showSlideBrowser, allowHtmlDownload } = config.build;
 
 const noop = () => {};
+
+type PagePlan = {
+  order: number[];
+  request: string;
+  init: RequestInit;
+};
 
 export function Slide() {
   const { slideId = '' } = useParams();
@@ -256,19 +262,23 @@ export function Slide() {
     [navigate],
   );
 
-  const goTo = useCallback(
+  const showPage = useCallback(
     (i: number) => {
-      const clamped = Math.max(0, Math.min(pageCount - 1, i));
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          next.set('p', String(clamped + 1));
+          next.set('p', String(i + 1));
           return next;
         },
         { replace: true },
       );
     },
-    [pageCount, setSearchParams],
+    [setSearchParams],
+  );
+
+  const goTo = useCallback(
+    (i: number) => showPage(Math.max(0, Math.min(pageCount - 1, i))),
+    [pageCount, showPage],
   );
 
   // While an agent writes this deck page by page, jump to each page as it
@@ -281,108 +291,111 @@ export function Slide() {
     seenPageCount.current = pageCount;
   }, [agentWriting, pageCount, goTo]);
 
+  const pagesRef = useRef(pages);
+  pagesRef.current = pages;
+  const indexRef = useRef(index);
+  indexRef.current = index;
+
+  // Notes can be mid-save when a page op is asked for, so the op is planned from
+  // the pages and position current once those writes settle.
+  const changePages = useCallback(
+    (plan: (order: number[]) => PagePlan | null) =>
+      changeNotesPages(slideId, () => {
+        const before = pagesRef.current;
+        const at = indexRef.current;
+        const next = plan(before.map((_, i) => i));
+        if (!next) return null;
+        const position = next.order.indexOf(at);
+        const nextIndex = position < 0 ? Math.min(at, next.order.length - 1) : position;
+        return {
+          order: next.order,
+          apply: async () => {
+            setPages(next.order.map((i) => before[i]));
+            if (nextIndex !== at) showPage(nextIndex);
+            try {
+              const res = await fetch(next.request, next.init);
+              if (!res.ok) {
+                const detail = await res.json().catch(() => ({ error: res.statusText }));
+                throw new Error(detail.error ?? `HTTP ${res.status}`);
+              }
+            } catch (err) {
+              setPages(before);
+              if (nextIndex !== at) showPage(at);
+              throw err;
+            }
+          },
+        };
+      }),
+    [slideId, showPage],
+  );
+
   const reorderPage = useCallback(
     async (from: number, to: number) => {
       if (from === to) return;
-      if (notesSaving(slideId)) {
-        toast.error(t.slide.reorderNotesSaving);
-        return;
-      }
-      const before = pages;
-      const nextPages = [...before];
-      const [moved] = nextPages.splice(from, 1);
-      nextPages.splice(to, 0, moved);
-      setPages(nextPages);
-
-      const order = before.map((_, i) => i);
-      const [movedIdx] = order.splice(from, 1);
-      order.splice(to, 0, movedIdx);
-
-      remapNotesSessionCacheAfterReorder(slideId, order);
-
-      // Keep the user looking at the same page they were on before the drag.
-      let nextIndex = index;
-      if (index === from) nextIndex = to;
-      else if (from < index && to >= index) nextIndex = index - 1;
-      else if (from > index && to <= index) nextIndex = index + 1;
-      if (nextIndex !== index) goTo(nextIndex);
-
       try {
-        const res = await fetch(`/__slides/${encodeURIComponent(slideId)}/reorder`, {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ order }),
+        await changePages((order) => {
+          if (from < 0 || to < 0 || from >= order.length || to >= order.length) return null;
+          const [moved] = order.splice(from, 1);
+          order.splice(to, 0, moved);
+          return {
+            order,
+            request: `/__slides/${encodeURIComponent(slideId)}/reorder`,
+            init: {
+              method: 'PUT',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ order }),
+            },
+          };
         });
-        if (!res.ok) {
-          const detail = await res.json().catch(() => ({ error: res.statusText }));
-          throw new Error(detail.error ?? `HTTP ${res.status}`);
-        }
       } catch (err) {
-        setPages(before);
-        const inverse = order.map((_, i) => order.indexOf(i));
-        remapNotesSessionCacheAfterReorder(slideId, inverse);
         toast.error(`Reorder failed: ${String((err as Error).message ?? err)}`);
       }
     },
-    [pages, index, slideId, goTo, t],
+    [slideId, changePages],
   );
 
   const duplicatePage = useCallback(
     async (i: number) => {
-      const before = pages;
-      if (i < 0 || i >= before.length) return;
-      const nextPages = [...before];
-      nextPages.splice(i + 1, 0, before[i]);
-      setPages(nextPages);
-      if (index > i) goTo(index + 1);
-
       try {
-        const res = await fetch(`/__slides/${encodeURIComponent(slideId)}/pages/${i}/duplicate`, {
-          method: 'POST',
+        const changed = await changePages((order) => {
+          if (i < 0 || i >= order.length) return null;
+          order.splice(i + 1, 0, i);
+          return {
+            order,
+            request: `/__slides/${encodeURIComponent(slideId)}/pages/${i}/duplicate`,
+            init: { method: 'POST' },
+          };
         });
-        if (!res.ok) {
-          const detail = await res.json().catch(() => ({ error: res.statusText }));
-          throw new Error(detail.error ?? `HTTP ${res.status}`);
-        }
-        toast.success(format(t.thumbnailRail.toastDuplicated, { n: i + 1 }));
+        if (changed) toast.success(format(t.thumbnailRail.toastDuplicated, { n: i + 1 }));
       } catch (err) {
-        setPages(before);
         toast.error(
           `${t.thumbnailRail.toastDuplicateFailed}: ${String((err as Error).message ?? err)}`,
         );
       }
     },
-    [pages, index, slideId, goTo, t.thumbnailRail],
+    [slideId, changePages, t.thumbnailRail],
   );
 
   const deletePage = useCallback(
     async (i: number) => {
-      const before = pages;
-      if (i < 0 || i >= before.length || before.length <= 1) return;
-      const nextPages = before.slice(0, i).concat(before.slice(i + 1));
-      setPages(nextPages);
-      if (index >= i && index > 0) {
-        const target = index === i ? Math.min(index, nextPages.length - 1) : index - 1;
-        goTo(target);
-      }
-
       try {
-        const res = await fetch(`/__slides/${encodeURIComponent(slideId)}/pages/${i}`, {
-          method: 'DELETE',
+        const changed = await changePages((order) => {
+          if (i < 0 || i >= order.length || order.length <= 1) return null;
+          order.splice(i, 1);
+          return {
+            order,
+            request: `/__slides/${encodeURIComponent(slideId)}/pages/${i}`,
+            init: { method: 'DELETE' },
+          };
         });
-        if (!res.ok) {
-          const detail = await res.json().catch(() => ({ error: res.statusText }));
-          throw new Error(detail.error ?? `HTTP ${res.status}`);
-        }
-        toast.success(format(t.thumbnailRail.toastDeleted, { n: i + 1 }));
+        if (changed) toast.success(format(t.thumbnailRail.toastDeleted, { n: i + 1 }));
       } catch (err) {
-        setPages(before);
         toast.error(
           `${t.thumbnailRail.toastDeleteFailed}: ${String((err as Error).message ?? err)}`,
         );
       }
     },
-    [pages, index, slideId, goTo, t.thumbnailRail],
+    [slideId, changePages, t.thumbnailRail],
   );
 
   const thumbnailActions = useMemo<ThumbnailActions | undefined>(

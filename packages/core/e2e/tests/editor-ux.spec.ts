@@ -5,6 +5,7 @@ import {
   duplicateSlide,
   editorCanvas,
   openSlide,
+  pagePanel,
   readSlideSource,
   slideSourcePath,
 } from './helpers.ts';
@@ -89,11 +90,7 @@ test.describe('editor interaction flow', () => {
     request,
   }) => {
     const { panel, headline, body } = await openEditor(page, request, 'ux-stable-canvas');
-    await expect(
-      panel.getByText('Click an object to format it. Double-click text to edit.', {
-        exact: true,
-      }),
-    ).toBeVisible();
+    await expect(pagePanel(page)).toBeVisible();
     const canvas = editorCanvas(page).locator('[data-osd-canvas]');
     const original = await canvas.boundingBox();
     if (!original) throw new Error('Slide canvas has no bounding box');
@@ -109,11 +106,7 @@ test.describe('editor interaction flow', () => {
     await expectSameBox(canvas, original);
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-selection-frame]')).toHaveCount(0);
-    await expect(
-      panel.getByText('Click an object to format it. Double-click text to edit.', {
-        exact: true,
-      }),
-    ).toBeVisible();
+    await expect(pagePanel(page)).toBeVisible();
     await expectSameBox(canvas, original);
     await headline.click();
     await expectSameBox(canvas, original);
@@ -139,11 +132,7 @@ test.describe('editor interaction flow', () => {
     );
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-selection-frame]')).toHaveCount(0);
-    await expect(
-      panel.getByText('Click an object to format it. Double-click text to edit.', {
-        exact: true,
-      }),
-    ).toBeVisible();
+    await expect(pagePanel(page)).toBeVisible();
   });
 
   test('sidebar formatting applies to the highlighted word and shares inline shortcuts', async ({

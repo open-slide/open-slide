@@ -2,15 +2,17 @@ import { type ChildProcess, fork } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync } from 'node:fs';
 import net from 'node:net';
+import {
+  CACHE_DIR_ENV,
+  DEV_SUPERVISED_ENV,
+  listeningPort,
+  MANAGED_CORE_ENV,
+  RESTART_EXIT_CODE,
+} from '../../../../packages/core/src/supervision';
 import type { PackageManager, ServerStatus } from '../shared/types';
 import { stripAnsi } from './process';
 import { bundledCore, needsInstall } from './workspace';
 
-// Must match what core reads in packages/core/src/cli/dev.ts and src/vite.
-const DEV_SUPERVISED_ENV = 'OPEN_SLIDE_DEV_SUPERVISED';
-const RESTART_EXIT_CODE = 52;
-const CACHE_DIR_ENV = 'OPEN_SLIDE_CACHE_DIR';
-const MANAGED_CORE_ENV = 'OPEN_SLIDE_MANAGED_CORE';
 const LISTEN_TIMEOUT_MS = 60_000;
 const LOG_LIMIT = 200 * 1024;
 
@@ -225,9 +227,8 @@ export class DevServer extends EventEmitter<ServerEvents> {
     }, LISTEN_TIMEOUT_MS);
 
     child.on('message', (message) => {
-      if (generation !== this.generation || typeof message !== 'object' || message === null) return;
-      const { type, port } = message as { type?: unknown; port?: unknown };
-      if (type !== 'open-slide:listening' || typeof port !== 'number') return;
+      const port = listeningPort(message);
+      if (generation !== this.generation || port === null) return;
       clearTimeout(timeout);
       this.port = port;
       this.ports.set(root, port);

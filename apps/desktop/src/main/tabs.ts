@@ -7,6 +7,7 @@ import {
   type WebContents,
   WebContentsView,
 } from 'electron';
+import { deckIdFromPath, isHomePath } from '../../../../packages/core/src/app/lib/desktop-routes';
 import { SPARE_PATH, type SwitcherState, TAB_STRIP_HEIGHT, type TabInfo } from '../shared/types';
 import { DeckCovers } from './covers';
 import { showContextMenu } from './menu';
@@ -49,7 +50,6 @@ type TabManagerOptions = {
   prompt: Prompt;
 };
 
-const DECK_ROOT_RE = /^\/s\/([^/]+)\/?$/;
 const PRESENTER_RE = /^\/s\/[^/]+\/presenter\/?$/;
 const DEFAULT_TITLE = 'open-slide';
 // Each warm tab is a renderer running the unbundled dev app; past this,
@@ -78,20 +78,6 @@ html, body { overscroll-behavior: none; }
 }
 :is(a, img):not([draggable="true"]) { -webkit-user-drag: none; }
 `;
-
-function deckIdFromPath(pathname: string): string | null {
-  const m = DECK_ROOT_RE.exec(pathname);
-  if (!m) return null;
-  try {
-    return decodeURIComponent(m[1]);
-  } catch {
-    return null;
-  }
-}
-
-function isHomePath(pathname: string): boolean {
-  return !pathname.startsWith('/s/');
-}
 
 function openOutside(url: string) {
   if (isHttpUrl(url)) void shell.openExternal(url);

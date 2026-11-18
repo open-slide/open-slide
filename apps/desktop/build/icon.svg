@@ -29,7 +29,7 @@
       <feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#FE5226" flood-opacity="0.32"/>
       <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#8A2306" flood-opacity="0.22"/>
     </filter>
-  
+
     <filter id="icon-shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
       <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.22"/>
       <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.12"/>

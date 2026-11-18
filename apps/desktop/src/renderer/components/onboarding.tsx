@@ -21,6 +21,7 @@ import { ProviderLogo } from '@/components/agent/provider-logo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { AgentInfo } from '../../shared/types';
+import { type AgentStatus, agentStatus, agentStatusTone } from '../lib/agent-status';
 import { desktop, TELEMETRY_DOCS_URL } from '../lib/desktop';
 import { baseName } from '../lib/paths';
 import type { WorkspaceChoiceProps } from '../lib/workspace-actions';
@@ -348,7 +349,7 @@ function Progress({ step, onSelect }: { step: number; onSelect: (step: number) =
 }
 
 function AgentList() {
-  const { agents, login, signIn, signOut, dismiss } = useAgents();
+  const { agents, login, signOutError, signIn, signOut, dismiss } = useAgents();
   return (
     <div className="w-full">
       <div className="overflow-hidden rounded-[12px] border border-border bg-card text-left shadow-edge">
@@ -362,6 +363,7 @@ function AgentList() {
               key={agent.id}
               agent={agent}
               login={login(agent.id)}
+              signOutError={signOutError(agent.id)}
               className={cn(i > 0 && 'border-t border-hairline')}
               onSignIn={() => signIn(agent.id)}
               onSignOut={() => void signOut(agent.id)}
@@ -377,9 +379,17 @@ function AgentList() {
   );
 }
 
+const ROW_STATUS_LABELS: Record<Exclude<AgentStatus, 'signed-in'>, string> = {
+  unavailable: 'Unavailable on this platform',
+  'not-installed': 'Downloads when you sign in',
+  'signed-out': 'Not signed in',
+  unknown: 'Status unknown',
+};
+
 function AgentRow({
   agent,
   login,
+  signOutError,
   className,
   onSignIn,
   onSignOut,
@@ -387,19 +397,15 @@ function AgentRow({
 }: {
   agent: AgentInfo;
   login: Login;
+  signOutError: string | null;
   className?: string;
   onSignIn: () => void;
   onSignOut: () => void;
   onDismiss: () => void;
 }) {
-  const available = agent.cliPath !== null || agent.cliInstallable;
-  const status = !available
-    ? { tone: 'warn' as const, label: 'Unavailable on this platform' }
-    : agent.cliPath === null
-      ? { tone: 'off' as const, label: 'Downloads when you sign in' }
-      : agent.signedIn
-        ? { tone: 'ok' as const, label: agent.account ?? 'Signed in' }
-        : { tone: 'off' as const, label: 'Not signed in' };
+  const status = agentStatus(agent);
+  const available = status !== 'unavailable';
+  const label = status === 'signed-in' ? (agent.account ?? 'Signed in') : ROW_STATUS_LABELS[status];
 
   return (
     <div className={cn('px-4 py-3', className)}>
@@ -407,7 +413,7 @@ function AgentRow({
         <span
           className={cn(
             'flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-muted transition-shadow duration-500',
-            agent.signedIn && 'shadow-[0_0_0_1.5px_var(--color-emerald-500)]',
+            status === 'signed-in' && 'shadow-[0_0_0_1.5px_var(--color-emerald-500)]',
           )}
         >
           <ProviderLogo provider={agent.id} className="size-4" />
@@ -415,8 +421,8 @@ function AgentRow({
         <div className="min-w-0 flex-1">
           <p className="font-heading text-[13.5px] font-semibold tracking-tight">{agent.name}</p>
           <p className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-muted-foreground">
-            <StatusDot tone={status.tone} />
-            <span className="selectable truncate">{status.label}</span>
+            <StatusDot tone={agentStatusTone(status)} />
+            <span className="selectable truncate">{label}</span>
           </p>
         </div>
         {available && (
@@ -439,6 +445,11 @@ function AgentRow({
           <BrowserHint url={login.url} linkLabel="Open it again" className="text-[12px]" />
           <LoginCodeForm id={agent.id} />
         </div>
+      )}
+      {signOutError && (
+        <p className="selectable mt-2 pl-11 text-[12px] text-destructive">
+          Couldn’t sign out: {signOutError}
+        </p>
       )}
       {!login.running && login.error && (
         <p className="mt-2 pl-11 text-[12px] text-destructive">

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { AGENT_IDS, type AgentId, type AgentInfo, type LoginState } from '../../shared/types';
+import { type AgentStatus, agentStatus, agentStatusTone } from '../lib/agent-status';
 import { desktop, settle, useLogins } from '../lib/desktop';
 import { tildify } from '../lib/paths';
 import {
@@ -121,6 +122,14 @@ export function AgentsSection() {
   );
 }
 
+const STATUS_LABELS: Record<AgentStatus, string> = {
+  unavailable: 'Unavailable',
+  'not-installed': 'Not installed',
+  'signed-in': 'Signed in',
+  'signed-out': 'Not signed in',
+  unknown: 'Status unknown',
+};
+
 function AgentCard({
   agent,
   login,
@@ -136,16 +145,8 @@ function AgentCard({
   onSignOut: () => void;
   onDismiss: () => void;
 }) {
-  const available = agent.cliPath !== null || agent.cliInstallable;
-  const status = !available
-    ? { tone: 'warn' as const, label: 'Unavailable' }
-    : agent.cliPath === null
-      ? { tone: 'off' as const, label: 'Not installed' }
-      : agent.signedIn
-        ? { tone: 'ok' as const, label: 'Signed in' }
-        : agent.signedIn === false
-          ? { tone: 'off' as const, label: 'Not signed in' }
-          : { tone: 'off' as const, label: 'Status unknown' };
+  const status = agentStatus(agent);
+  const available = status !== 'unavailable';
 
   return (
     <SectionCard>
@@ -156,9 +157,9 @@ function AgentCard({
             {agent.name}
           </h3>
           <p className="mt-1 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-            <StatusDot tone={status.tone} />
-            {status.label}
-            {agent.signedIn && agent.account && (
+            <StatusDot tone={agentStatusTone(status)} />
+            {STATUS_LABELS[status]}
+            {status === 'signed-in' && agent.account && (
               <span className="selectable truncate text-foreground/80">· {agent.account}</span>
             )}
           </p>

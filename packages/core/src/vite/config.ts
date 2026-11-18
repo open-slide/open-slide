@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import type { InlineConfig } from 'vite';
+import { CACHE_DIR_ENV } from '../supervision.ts';
 import { apiPlugin } from './api-plugin.ts';
 import { currentPlugin } from './current-plugin.ts';
 import { designPlugin } from './design-plugin.ts';
@@ -95,7 +96,7 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
       serverInfoPlugin({ userCwd }),
     ],
     // The default cache sits inside core's package, which a bundling host ships read-only.
-    cacheDir: process.env.OPEN_SLIDE_CACHE_DIR || undefined,
+    cacheDir: process.env[CACHE_DIR_ENV] || undefined,
     resolve: {
       alias: [
         { find: '@', replacement: APP_ROOT },

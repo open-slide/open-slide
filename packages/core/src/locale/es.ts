@@ -115,8 +115,6 @@ export const es: Locale = {
     imagePptxExportFailed: 'Error al exportar PPTX',
     pdfExportSafariUnsupported:
       'Exportar como PDF no está disponible en Safari. Prueba con un navegador basado en Chromium.',
-    reorderNotesSaving:
-      'Las notas del ponente aún se están guardando. Vuelve a mover la página en un momento.',
     present: 'Presentar',
     presentMenuAria: 'Opciones de presentación',
     presentInWindow: 'Reproducir',

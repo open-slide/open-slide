@@ -143,4 +143,60 @@ describe('DeckCovers', () => {
     expect(covers.get('roadmap')).toBeNull();
     expect(state.changes).toBe(0);
   });
+
+  it('drops a capture that was under way when its deck was closed', async () => {
+    const { covers, state } = setup();
+    fixture.states.roadmap = 'error';
+    let release = () => {};
+    fixture.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    covers.sync(['roadmap']);
+    await vi.waitFor(() => expect(fixture.loads).toHaveLength(1));
+    covers.sync([]);
+    release();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    fixture.states.roadmap = 'ready';
+    covers.sync(['roadmap']);
+    await vi.waitFor(() => expect(covers.get('roadmap')).not.toBeNull());
+    expect(fixture.loads).toHaveLength(2);
+    expect(state.changes).toBe(1);
+  });
+
+  it('pictures a deck again when it was closed and reopened mid-capture', async () => {
+    const { covers, state } = setup();
+    let release = () => {};
+    fixture.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    covers.sync(['roadmap']);
+    await vi.waitFor(() => expect(fixture.loads).toHaveLength(1));
+    covers.sync([]);
+    covers.sync(['roadmap']);
+    release();
+
+    await vi.waitFor(() => expect(fixture.loads).toHaveLength(2));
+    await vi.waitFor(() => expect(state.changes).toBe(1));
+    expect(covers.get('roadmap')).not.toBeNull();
+  });
+
+  it('pictures a deck again when the workspace changed mid-capture and it is still open', async () => {
+    const { covers, state } = setup();
+    let release = () => {};
+    fixture.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    covers.sync(['roadmap']);
+    await vi.waitFor(() => expect(fixture.loads).toHaveLength(1));
+    covers.clear();
+    covers.sync(['roadmap']);
+    release();
+
+    await vi.waitFor(() => expect(state.changes).toBe(1));
+    expect(fixture.loads).toHaveLength(2);
+  });
 });
