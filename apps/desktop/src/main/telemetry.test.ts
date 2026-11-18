@@ -50,8 +50,11 @@ async function load() {
   return telemetry;
 }
 
-async function sent(event: string): Promise<boolean> {
-  for (let i = 0; i < 50; i++) {
+// The SDK gzips on the libuv threadpool, so a fixed number of ticks is not enough on a slow
+// machine. Date and setImmediate stay real while setTimeout is faked.
+async function sent(event: string, timeoutMs = 2000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
     if (fixture.requests.join('\n').includes(event)) return true;
     await new Promise((resolve) => setImmediate(resolve));
   }
