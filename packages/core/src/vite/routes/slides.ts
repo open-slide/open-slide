@@ -21,7 +21,7 @@ import { validateMutationRequest } from '../../http/request-guard.ts';
 import { withFileLock } from '../file-lock.ts';
 import { invalidateSlidesModule } from '../open-slide-plugin.ts';
 import { recordWrite } from '../recent-writes.ts';
-import { type ApiContext, json, readBody } from './context.ts';
+import { type ApiContext, decodePathSegment, json, readBody } from './context.ts';
 
 // POST   /__slides                        create a blank slide → { slideId }
 // PUT    /__slides/:id/reorder            reorder pages { order: number[] } → { layout }
@@ -74,8 +74,9 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
         if (!requestCheck.ok) {
           return json(res, requestCheck.status, { error: requestCheck.error });
         }
-        const slideId = reorderMatch[1];
-        if (!SLIDE_ID_RE.test(slideId)) return json(res, 400, { error: 'invalid slideId' });
+        const slideId = decodePathSegment(reorderMatch[1]);
+        if (!slideId || !SLIDE_ID_RE.test(slideId))
+          return json(res, 400, { error: 'invalid slideId' });
 
         const body = (await readBody(req)) as { order?: unknown };
         if (!Array.isArray(body.order)) return json(res, 400, { error: 'invalid order' });
@@ -118,10 +119,11 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
 
       const pageOpMatch = url.pathname.match(/^\/([^/]+)\/pages\/(\d+)(?:\/([a-z]+))?$/);
       if (pageOpMatch) {
-        const slideId = pageOpMatch[1];
+        const slideId = decodePathSegment(pageOpMatch[1]);
         const pageIndex = Number.parseInt(pageOpMatch[2], 10);
         const op = pageOpMatch[3];
-        if (!SLIDE_ID_RE.test(slideId)) return json(res, 400, { error: 'invalid slideId' });
+        if (!slideId || !SLIDE_ID_RE.test(slideId))
+          return json(res, 400, { error: 'invalid slideId' });
         if (!Number.isInteger(pageIndex) || pageIndex < 0)
           return json(res, 400, { error: 'invalid page index' });
 
@@ -178,8 +180,9 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
         if (!requestCheck.ok) {
           return json(res, requestCheck.status, { error: requestCheck.error });
         }
-        const slideId = duplicateMatch[1];
-        if (!SLIDE_ID_RE.test(slideId)) return json(res, 400, { error: 'invalid slideId' });
+        const slideId = decodePathSegment(duplicateMatch[1]);
+        if (!slideId || !SLIDE_ID_RE.test(slideId))
+          return json(res, 400, { error: 'invalid slideId' });
 
         const body = (await readBody(req)) as DuplicateSlideBody;
         if (body.newId !== undefined && typeof body.newId !== 'string') {
@@ -200,8 +203,9 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
 
       const idMatch = url.pathname.match(/^\/([^/]+)$/);
       if (!idMatch) return next();
-      const slideId = idMatch[1];
-      if (!SLIDE_ID_RE.test(slideId)) return json(res, 400, { error: 'invalid slideId' });
+      const slideId = decodePathSegment(idMatch[1]);
+      if (!slideId || !SLIDE_ID_RE.test(slideId))
+        return json(res, 400, { error: 'invalid slideId' });
 
       if (method === 'PATCH') {
         const requestCheck = validateMutationRequest(req, { requireJsonBody: true });
