@@ -16,6 +16,10 @@ npm run preview     # serves dist/ for sanity-checking
 `dist/` is portable. Drop it on Vercel, Cloudflare Pages, Netlify, Zeabur,
 GitHub Pages — anything that hosts files.
 
+If a coding agent is driving the deck, it can also upload `dist/` as a single
+tarball to [deed.page](https://deed.page) with no account; send the
+`X-Spa: 1` header so deep links into a deck resolve.
+
 ## From the toolbar
 
 The **Export** menu in the slide toolbar exports the active deck directly:
