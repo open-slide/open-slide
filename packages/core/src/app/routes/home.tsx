@@ -592,7 +592,7 @@ function SlideCard({
                   <button
                     type="button"
                     onClick={(e) => e.stopPropagation()}
-                    className="flex size-7 items-center justify-center rounded-[5px] bg-card/90 text-foreground shadow-edge ring-1 ring-border opacity-0 outline-none backdrop-blur hover:bg-card group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-ring/40 aria-expanded:opacity-100 motion-safe:transition-opacity motion-safe:duration-150"
+                    className="flex size-7 items-center justify-center rounded-[5px] bg-material text-foreground shadow-edge ring-1 ring-border opacity-0 outline-none backdrop-blur-xl backdrop-saturate-150 hover:bg-card group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-ring/40 aria-expanded:opacity-100 motion-safe:transition-opacity motion-safe:duration-150"
                     aria-label={tCard.home.slideActions}
                   >
                     <MoreHorizontal className="size-3.5" />

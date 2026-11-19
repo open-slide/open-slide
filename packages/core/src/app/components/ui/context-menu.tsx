@@ -74,7 +74,7 @@ function ContextMenuSubContent({
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-sub-content"
           className={cn(
-            'z-50 min-w-[9rem] overflow-hidden rounded-[8px] border border-border bg-popover/90 backdrop-blur-xl backdrop-saturate-150 p-1 text-popover-foreground shadow-floating outline-none',
+            'z-50 min-w-[9rem] overflow-hidden rounded-[8px] border border-border bg-material backdrop-blur-xl backdrop-saturate-150 p-1 text-popover-foreground shadow-floating outline-none',
             'transition-[transform,scale,opacity] data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0',
             className,
           )}
@@ -96,7 +96,7 @@ function ContextMenuContent({
           data-slot="context-menu-content"
           className={cn(
             'z-50 max-h-(--available-height) min-w-[9rem] origin-(--transform-origin)',
-            'overflow-x-hidden overflow-y-auto rounded-[8px] border border-border bg-popover/90 backdrop-blur-xl backdrop-saturate-150 p-1 text-popover-foreground shadow-floating outline-none',
+            'overflow-x-hidden overflow-y-auto rounded-[8px] border border-border bg-material backdrop-blur-xl backdrop-saturate-150 p-1 text-popover-foreground shadow-floating outline-none',
             'transition-[transform,scale,opacity] data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0',
             className,
           )}

@@ -175,7 +175,7 @@ export function AssetPickerDialog({
             <div className="absolute inset-0 bg-brand/5" />
             <div className="absolute inset-1 rounded-[8px] border border-dashed border-brand/40" />
             <div className="absolute inset-x-0 bottom-4 flex justify-center">
-              <div className="flex items-center gap-2 rounded-[6px] border border-border bg-card px-3 py-1.5 text-[12px] font-medium shadow-floating">
+              <div className="flex items-center gap-2 rounded-[6px] border border-border bg-material px-3 py-1.5 text-[12px] font-medium shadow-floating backdrop-blur-xl backdrop-saturate-150">
                 <ArrowDownToLine className="size-3.5 text-brand" />
                 <span>{t.asset.dropToUpload}</span>
               </div>

@@ -48,6 +48,7 @@
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
+  --color-material: var(--material);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-canvas: var(--canvas);
@@ -93,6 +94,9 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
+  /* Translucent fill for floating surfaces; pair with backdrop-blur-xl
+     backdrop-saturate-150 so it reads like a native menu material. */
+  --material: oklch(1 0 0 / 0.72);
 
   --primary: oklch(0.185 0 0);
   --primary-foreground: oklch(0.985 0 0);
@@ -135,6 +139,7 @@
   --card-foreground: oklch(0.93 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.93 0 0);
+  --material: oklch(0.22 0 0 / 0.72);
 
   --primary: oklch(0.925 0 0);
   --primary-foreground: oklch(0.17 0 0);
