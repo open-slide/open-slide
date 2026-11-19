@@ -341,38 +341,55 @@ describe('TabManager tab switcher', () => {
     expect(fixture.views.find((v) => v.webContents === switcher.contents)?.visible).toBe(false);
   });
 
-  it('lists the tabs most recent first once Ctrl is held, and walks them', async () => {
+  it('lists the decks most recent first once Ctrl is held, and walks them', async () => {
     const { open, active, switcher } = setup();
     await open('first');
-    const second = await open('second');
+    await open('second');
+    const third = await open('third');
 
-    press(second.contents, { key: 'Tab' });
+    press(third.contents, { key: 'Tab' });
     await vi.advanceTimersByTimeAsync(150);
-    expect(picture(published(switcher.contents).at(-1))).toBe('second [first] Home');
+    expect(picture(published(switcher.contents).at(-1))).toBe('third [second] first');
 
     press(switcher.contents, { key: 'Tab' });
-    expect(picture(published(switcher.contents).at(-1))).toBe('second first [Home]');
-    press(switcher.contents, { key: 'Tab', shift: true });
+    expect(picture(published(switcher.contents).at(-1))).toBe('third second [first]');
+    press(switcher.contents, { key: 'Tab' });
+    press(switcher.contents, { key: 'ArrowRight' });
     press(switcher.contents, { key: 'ArrowLeft' });
-    expect(picture(published(switcher.contents).at(-1))).toBe('[second] first Home');
+    expect(picture(published(switcher.contents).at(-1))).toBe('[third] second first');
     press(switcher.contents, { key: 'Tab', shift: true });
     press(switcher.contents, { key: 'Tab', type: 'keyUp' });
-    expect(active()).toBe('second');
+    expect(active()).toBe('third');
 
     press(switcher.contents, CTRL_UP);
-    expect(active()).toBe('home');
+    expect(active()).toBe('first');
     expect(published(switcher.contents).at(-1)).toBeNull();
   });
 
   it('shows at once when Tab is pressed again before the delay', async () => {
     const { open, switcher } = setup();
     await open('first');
-    const second = await open('second');
+    await open('second');
+    const third = await open('third');
 
-    press(second.contents, { key: 'Tab' });
+    press(third.contents, { key: 'Tab' });
     press(switcher.contents, { key: 'Tab' });
 
-    expect(picture(published(switcher.contents).at(-1))).toBe('second first [Home]');
+    expect(picture(published(switcher.contents).at(-1))).toBe('third second [first]');
+  });
+
+  it('leaves Home out, and goes from Home to the last deck', async () => {
+    const { manager, open, active, window, switcher } = setup();
+    await open('first');
+    await open('second');
+    manager.activate(manager.info.tabs[0].id);
+
+    press(window.webContents, { key: 'Tab' });
+    await vi.advanceTimersByTimeAsync(150);
+    expect(picture(published(switcher.contents).at(-1))).toBe('[second] first');
+
+    press(switcher.contents, CTRL_UP);
+    expect(active()).toBe('second');
   });
 
   it('leaves the tab alone on Escape or a click outside, and gives it the keys back', async () => {
@@ -455,6 +472,10 @@ describe('TabManager tab switcher', () => {
   it('passes Ctrl+Tab through when there is nothing to switch between', async () => {
     const alone = setup();
     expect(press(alone.window.webContents, { key: 'Tab' })).toBe(false);
+
+    const single = setup();
+    const only = await single.open('first');
+    expect(press(only.contents, { key: 'Tab' })).toBe(false);
 
     const covered = setup();
     const deck = await covered.open('first');
