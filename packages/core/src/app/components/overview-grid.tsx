@@ -112,7 +112,7 @@ export function OverviewGrid({
       aria-modal="true"
       aria-label={t.present.overviewDialogAria}
       className={cn(
-        'absolute inset-0 z-50 flex flex-col backdrop-blur-sm',
+        'absolute inset-0 z-50 flex flex-col backdrop-blur-2xl backdrop-saturate-150',
         'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150',
         styles.surface,
       )}
@@ -335,7 +335,7 @@ type OverviewStyles = {
 };
 
 const presentStyles = {
-  surface: 'bg-black/95',
+  surface: 'bg-black/80',
   eyebrow: 'text-white/55',
   thumbFocused: 'bg-white/10',
   thumbHover: 'hover:bg-white/5',
@@ -349,7 +349,7 @@ const presentStyles = {
 } as const;
 
 const editorStyles = {
-  surface: 'bg-background/95',
+  surface: 'bg-background/80',
   eyebrow: 'text-muted-foreground',
   thumbFocused: 'bg-muted',
   thumbHover: 'hover:bg-muted/60',

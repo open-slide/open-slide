@@ -450,7 +450,7 @@ function CurrentThumbnailButton({
               onActivate(true);
             }}
             className={cn(
-              'pointer-events-auto absolute left-1/2 z-30 -translate-x-1/2 bg-card/95 shadow-floating backdrop-blur-sm',
+              'pointer-events-auto absolute left-1/2 z-30 -translate-x-1/2 bg-material shadow-floating backdrop-blur-xl backdrop-saturate-150',
               'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-150',
               direction === 'above' ? 'top-3' : 'bottom-3',
             )}

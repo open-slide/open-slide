@@ -53,7 +53,7 @@ function AgentPresencePill({ activity }: { activity: AgentActivity }) {
     <button
       type="button"
       onClick={() => setDockOpen(true)}
-      className="island-enter absolute top-2 left-1/2 z-20 flex h-7 max-w-[min(420px,calc(100%-1rem))] -translate-x-1/2 items-center gap-2 rounded-full border border-hairline bg-popover/90 px-2.5 text-[11.5px] shadow-floating backdrop-blur-md md:top-3"
+      className="island-enter absolute top-2 left-1/2 z-20 flex h-7 max-w-[min(420px,calc(100%-1rem))] -translate-x-1/2 items-center gap-2 rounded-full border border-hairline bg-material px-2.5 text-[11.5px] shadow-floating backdrop-blur-xl backdrop-saturate-150 md:top-3"
     >
       <ProviderLogo provider={activity.provider} className="size-3.5 shrink-0" />
       <span className="shrink-0 font-medium">
