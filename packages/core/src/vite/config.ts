@@ -5,12 +5,14 @@ import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import type { InlineConfig } from 'vite';
+import { CACHE_DIR_ENV } from '../supervision.ts';
 import { apiPlugin } from './api-plugin.ts';
 import { currentPlugin } from './current-plugin.ts';
 import { designPlugin } from './design-plugin.ts';
 import { locTagsPlugin } from './loc-tags-plugin.ts';
 import { notesPlugin } from './notes-plugin.ts';
 import { loadUserConfig, type OpenSlideConfig, openSlidePlugin } from './open-slide-plugin.ts';
+import { isManagedCore } from './routes/update.ts';
 import { serverInfoPlugin } from './server-info-plugin.ts';
 import { themesPlugin } from './themes-plugin.ts';
 
@@ -70,7 +72,8 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
   const assetsAbs = path.resolve(userCwd, assetsDir);
 
   return {
-    base: config.base ?? '/',
+    // A managed host addresses every tab from the server root.
+    base: isManagedCore() ? '/' : (config.base ?? '/'),
     root: APP_ROOT,
     configFile: false,
     envDir: userCwd,
@@ -92,11 +95,20 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
       currentPlugin({ userCwd, slidesDir }),
       serverInfoPlugin({ userCwd }),
     ],
+    // The default cache sits inside core's package, which a bundling host ships read-only.
+    cacheDir: process.env[CACHE_DIR_ENV] || undefined,
     resolve: {
-      alias: {
-        '@': APP_ROOT,
-        '@assets': assetsAbs,
-      },
+      alias: [
+        { find: '@', replacement: APP_ROOT },
+        { find: '@assets', replacement: assetsAbs },
+        // Slides may sit in a workspace with no install or another core version
+        // than the one serving them, so always hand them the running core.
+        { find: /^@open-slide\/core$/, replacement: path.join(PKG_ROOT, 'dist', 'index.js') },
+        {
+          find: /^@open-slide\/core\/locale$/,
+          replacement: path.join(PKG_ROOT, 'dist', 'locale', 'index.js'),
+        },
+      ],
       // A workspace that still declares its own react (e.g. scaffolded before
       // v2) would otherwise load two copies — core's and the workspace's —
       // which crashes the production bundle with React error #525.

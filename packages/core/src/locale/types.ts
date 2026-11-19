@@ -105,10 +105,6 @@ export type Locale = {
     resizeSidePanel: string;
     home: string;
     backToHome: string;
-    agentConnected: string;
-    agentConnectedTooltip: string;
-    agentDisconnected: string;
-    agentDisconnectedTooltip: string;
     download: string;
     copyLink: string;
     moreActions: string;
@@ -209,7 +205,6 @@ export type Locale = {
     previewMode: string;
     closeFormatPanel: string;
     editText: string;
-    emptySelectionTitle: string;
     emptySelectionHint: string;
     textSelectionHint: string;
     elementText: string;
@@ -219,6 +214,17 @@ export type Locale = {
     rotateHandle: string;
     resizeHandle: string;
     arrangeSection: string;
+    pageLabel: string;
+    pageBackground: string;
+    pageBackgroundTheme: string;
+    pageBackgroundShared: string;
+    pageBackgroundComplex: string;
+    pageTransition: string;
+    pageTransitionInherited: string;
+    pageSteps: string;
+    pageStepsCount: Plural;
+    pageNone: string;
+    transitionKinds: Record<'fade' | 'slide' | 'zoom' | 'wipe' | 'morph' | 'custom', string>;
     selectionCount: string;
     positionLabel: string;
     positionX: string;
@@ -488,6 +494,7 @@ export type Locale = {
     /** template: "Processing page {current} of {total}" */
     processing: string;
     printing: string;
+    saving: string;
     done: string;
   };
 

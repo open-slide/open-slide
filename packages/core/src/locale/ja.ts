@@ -97,12 +97,6 @@ export const ja: Locale = {
 
   slide: {
     resizeSidePanel: 'サイドパネルの幅を調整',
-    agentConnected: 'エージェント接続中',
-    agentConnectedTooltip:
-      '現在のスライドと Inspector の選択はエージェントにリアルタイムで同期されています。',
-    agentDisconnected: 'エージェント切断',
-    agentDisconnectedTooltip:
-      'dev server との接続が切れたため、現在のスライドや Inspector の選択がエージェントに届かなくなっています。dev server を再起動して接続を復旧してください。',
     home: 'ホーム',
     backToHome: 'ホームへ戻る',
     download: 'ダウンロード',
@@ -204,7 +198,6 @@ export const ja: Locale = {
     previewMode: 'プレビュー',
     closeFormatPanel: 'フォーマットパネルを閉じる',
     editText: 'スライドで編集',
-    emptySelectionTitle: 'オブジェクトを選択',
     emptySelectionHint:
       'オブジェクトをクリックして書式を設定します。テキストをダブルクリックして編集します。',
     textSelectionHint: '選択したテキストに書式を適用します。',
@@ -215,6 +208,24 @@ export const ja: Locale = {
     rotateHandle: '要素を回転',
     resizeHandle: 'サイズ変更（{handle}）',
     arrangeSection: '配置',
+    pageLabel: '{page} / {total} ページ',
+    pageBackground: '背景',
+    pageBackgroundTheme: 'テーマに従う',
+    pageBackgroundShared: '複数ページで共有',
+    pageBackgroundComplex: 'グラデーションまたは画像',
+    pageTransition: 'トランジション',
+    pageTransitionInherited: 'デッキの既定',
+    pageSteps: 'ステップ',
+    pageStepsCount: { one: '1 ステップ', other: '{count} ステップ' },
+    pageNone: 'なし',
+    transitionKinds: {
+      fade: 'フェード',
+      slide: 'スライド',
+      zoom: 'ズーム',
+      wipe: 'ワイプ',
+      morph: 'モーフ',
+      custom: 'カスタム',
+    },
     selectionCount: '{count} 個の要素を選択中',
     positionLabel: '位置',
     positionX: '水平位置',
@@ -465,6 +476,7 @@ export const ja: Locale = {
     title: 'PDF を書き出し中',
     processing: 'ページ {current} / {total} を処理中',
     printing: '印刷ダイアログを開いています…',
+    saving: 'PDF を保存しています…',
     done: '完了',
   },
 

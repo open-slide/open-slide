@@ -27,6 +27,10 @@ export function editorCanvas(page: Page): Locator {
   return page.locator('main[data-inspector-root]');
 }
 
+export function pagePanel(page: Page): Locator {
+  return page.locator('[data-page-panel]');
+}
+
 // The first visit per page load holds an asset-warm loading gate (up to 15s).
 // A slide duplicated moments earlier can also 404 until the slides virtual
 // module refreshes (watcher debounce), and the server's full-reload broadcast

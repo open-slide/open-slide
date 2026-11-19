@@ -3,6 +3,8 @@ import type { DesignSystem } from '../../lib/design';
 
 type FetchedState = {
   design: DesignSystem | null;
+  // The draft whose save returned `design`, or null when it was fetched.
+  savedFrom: Partial<DesignSystem> | null;
   exists: boolean;
   warning: string | null;
   loaded: boolean;
@@ -15,6 +17,7 @@ export type UseDesignReturn = FetchedState & {
 export function useDesign(slideId: string): UseDesignReturn {
   const [state, setState] = useState<FetchedState>({
     design: null,
+    savedFrom: null,
     exists: false,
     warning: null,
     loaded: false,
@@ -35,6 +38,7 @@ export function useDesign(slideId: string): UseDesignReturn {
       };
       setState({
         design: body.design,
+        savedFrom: null,
         exists: body.exists,
         warning: body.warning,
         loaded: true,
@@ -45,7 +49,7 @@ export function useDesign(slideId: string): UseDesignReturn {
   }, []);
 
   useEffect(() => {
-    setState({ design: null, exists: false, warning: null, loaded: false });
+    setState({ design: null, savedFrom: null, exists: false, warning: null, loaded: false });
     void refresh();
   }, [refresh]);
 
@@ -71,6 +75,7 @@ export function useDesign(slideId: string): UseDesignReturn {
         setState((s) => ({
           ...s,
           design: body.design ?? s.design,
+          savedFrom: patch,
           exists: true,
           warning: null,
         }));

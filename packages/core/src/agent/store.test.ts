@@ -61,6 +61,8 @@ describe('createSessionStore', () => {
       'item',
       'session',
     ]);
+    expect(events.map((e) => e.rev)).toEqual(events.map((_, i) => i + 1));
+    expect(store.rev()).toBe(events.length);
   });
 
   it('ignores deltas for non-assistant items and unknown ids', () => {
@@ -126,6 +128,31 @@ describe('createSessionStore', () => {
     await Promise.all([first, store.flush(), store.flush()]);
 
     expect(createSessionStore({ file }).get(s.id)?.title).toBe('Latest');
+  });
+
+  it('writes what it holds when closed, and nothing after', async () => {
+    const file = path.join(dir, 'sessions.json');
+    const store = createSessionStore({ file });
+    const s = store.create('claude', 'deck');
+    store.patch(s.id, { title: 'Before' });
+    await store.close();
+
+    store.patch(s.id, { title: 'After' });
+    await store.flush();
+
+    expect(createSessionStore({ file }).get(s.id)?.title).toBe('Before');
+  });
+
+  it('leaves out a change made while it is still closing', async () => {
+    const file = path.join(dir, 'sessions.json');
+    const store = createSessionStore({ file });
+    const s = store.create('claude', 'deck');
+    store.patch(s.id, { title: 'Before' });
+    const closing = store.close();
+    store.patch(s.id, { title: 'After' });
+    await closing;
+
+    expect(createSessionStore({ file }).get(s.id)?.title).toBe('Before');
   });
 
   it('removes sessions and caps the idle backlog', () => {

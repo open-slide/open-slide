@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import logo from '@/assets/open-slide.svg';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { haptic } from '@/lib/desktop';
 import type { Folder, FolderIcon } from '@/lib/sdk';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
@@ -53,6 +54,8 @@ export function Sidebar({
 }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; before: boolean } | null>(null);
+  // Survives the dragleave that clears dropTarget between rows, so each new slot ticks once.
+  const lastDropSlot = useRef<string | null>(null);
 
   const finishReorder = (toId: string, before: boolean) => {
     const fromId = dragId;
@@ -129,14 +132,8 @@ export function Sidebar({
 
   return (
     <aside className="group/side relative flex h-full w-[16.5rem] shrink-0 flex-col bg-sidebar text-sidebar-foreground">
-      <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
-        <img
-          src={logo}
-          alt=""
-          aria-hidden
-          draggable={false}
-          className="size-6 shrink-0 select-none"
-        />
+      <div className="flex select-none items-center gap-2.5 px-4 pt-4 pb-3">
+        <img src={logo} alt="" aria-hidden draggable={false} className="size-6 shrink-0" />
         <h1 className="font-heading text-[13.5px] font-semibold tracking-tight">
           {t.home.appTitle}
         </h1>
@@ -239,6 +236,7 @@ export function Sidebar({
                 e.dataTransfer.setData(FOLDER_DND_MIME, folder.id);
                 e.dataTransfer.effectAllowed = 'move';
                 setDragId(folder.id);
+                lastDropSlot.current = null;
               }}
               onDragEnd={() => {
                 setDragId(null);
@@ -250,6 +248,11 @@ export function Sidebar({
                 e.dataTransfer.dropEffect = 'move';
                 const rect = e.currentTarget.getBoundingClientRect();
                 const isBefore = e.clientY < rect.top + rect.height / 2;
+                const slot = `${folder.id}:${isBefore}`;
+                if (lastDropSlot.current !== null && lastDropSlot.current !== slot) {
+                  haptic('levelChange');
+                }
+                lastDropSlot.current = slot;
                 if (!dropTarget || dropTarget.id !== folder.id || dropTarget.before !== isBefore) {
                   setDropTarget({ id: folder.id, before: isBefore });
                 }

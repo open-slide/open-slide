@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ViteDevServer } from 'vite';
 import { validateMutationRequest } from '../../http/request-guard.ts';
+import { MANAGED_CORE_ENV } from '../../supervision.ts';
 import { type ApiContext, json } from './context.ts';
 
 // GET /__update-check  → { current, latest, outdated }
@@ -15,6 +16,10 @@ import { type ApiContext, json } from './context.ts';
 const PKG = '@open-slide/core';
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = 300_000;
+
+// Set by a host that runs its own bundled core, so installing into the
+// workspace would not change what runs.
+export const isManagedCore = () => process.env[MANAGED_CORE_ENV] === '1';
 
 type CheckResult = { current: string; latest: string | null; outdated: boolean };
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
@@ -181,7 +186,7 @@ async function updatePackage(ctx: ApiContext): Promise<UpdateResult> {
 export function registerUpdateRoutes(server: ViteDevServer, ctx: ApiContext): void {
   server.middlewares.use('/__update-check', async (req, res, next) => {
     if ((req.method ?? 'GET') !== 'GET') return next();
-    const latest = await fetchLatest(Date.now());
+    const latest = isManagedCore() ? null : await fetchLatest(Date.now());
     const result: CheckResult = {
       current: ctx.coreVersion,
       latest,
@@ -196,6 +201,9 @@ export function registerUpdateRoutes(server: ViteDevServer, ctx: ApiContext): vo
 
     const guard = validateMutationRequest(req);
     if (!guard.ok) return json(res, guard.status, { error: guard.error });
+    if (isManagedCore()) {
+      return json(res, 409, { error: 'open-slide is updated by the app that runs it.' });
+    }
 
     try {
       updateInFlight ??= updatePackage(ctx).finally(() => {

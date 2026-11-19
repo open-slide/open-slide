@@ -1,5 +1,4 @@
 import fs from 'node:fs/promises';
-import type { ServerResponse } from 'node:http';
 import path from 'node:path';
 import type { ViteDevServer } from 'vite';
 import { extractDeckSlug, stripDeckSlug } from '../../agent/prompt.ts';
@@ -32,19 +31,20 @@ import { readManifest, writeManifest } from '../../files/folders.ts';
 import { isLoopbackRequest, validateMutationRequest } from '../../http/request-guard.ts';
 import { invalidateSlidesModule } from '../open-slide-plugin.ts';
 import { recordWrite } from '../recent-writes.ts';
+import { createAgentBroadcast } from './agent-events.ts';
 import { type ApiContext, BodyTooLargeError, json, readBody } from './context.ts';
 import { detectPackageManager } from './update.ts';
 
 // GET    /__agent/status                      → AgentStatus
 // POST   /__agent/install                     { provider } → { ok }
-// GET    /__agent/sessions                    → { sessions: AgentSessionSummary[] }
+// GET    /__agent/sessions                    → { sessions: AgentSessionSummary[], rev }
 // POST   /__agent/sessions                    { provider, slideId? } → AgentSession
-// GET    /__agent/sessions/:id                → AgentSession
+// GET    /__agent/sessions/:id                → AgentSession & { rev }
 // DELETE /__agent/sessions/:id                → { ok }
 // POST   /__agent/sessions/:id/messages       { text, context?, autoApprove?, model?, effort?, edit? } → { ok }
 // POST   /__agent/sessions/:id/stop           → { ok }
 // POST   /__agent/sessions/:id/respond        { itemId, answers? | allow? | cancel?, context?, autoApprove?, model?, effort? } → { ok }
-// GET    /__agent/events                      → server-sent turn progress
+// Turn progress streams as the `open-slide:agent` HMR event.
 
 function parseContext(raw: unknown): AgentTurnContext | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -91,6 +91,7 @@ async function renamePlaceholderDeck(
   ctx: ApiContext,
   store: SessionStore,
   broadcast: (event: AgentStreamEvent) => void,
+  closing: () => boolean,
   turn: TurnEnd,
 ): Promise<void> {
   const session = store.get(turn.sessionId);
@@ -124,6 +125,8 @@ async function renamePlaceholderDeck(
   // A new turn may have started while the file was read; it must not lose the
   // folder it is writing into.
   if (store.list().some((s) => s.slideId === slideId && s.status === 'running')) return;
+  // Once closing, the new name could reach the store after its last save.
+  if (closing()) return;
   recordWrite(entry);
   const renamed = await renameSlideDir(ctx.slidesRoot, slideId, desired);
   if (!renamed.ok) return;
@@ -169,39 +172,50 @@ function parseTurnSettings(raw: Record<string, unknown>): TurnSettings {
 }
 
 const AGENT_BODY_LIMIT = 1024 * 1024;
+// Short of the three seconds the desktop app gives the server to exit.
+const STOP_TIMEOUT_MS = 2000;
 
-export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): void {
+class ClosingError extends Error {}
+
+// Returns what must finish before the server is gone, since a debounced
+// session save nobody waits for is cut off when the process exits.
+export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () => Promise<void> {
   const providers = createProviders();
   const store = createSessionStore({
     file: path.join(ctx.userCwd, 'node_modules', '.open-slide', 'agent-sessions.json'),
   });
-  // Agent output goes over its own stream rather than the HMR socket, which
-  // every network client can subscribe to when the server runs with --host.
-  const streams = new Set<ServerResponse>();
-  const broadcast = (event: AgentStreamEvent) => {
-    const frame = `data: ${JSON.stringify(event)}\n\n`;
-    for (const stream of streams) stream.write(frame);
-  };
-  const heartbeat = setInterval(() => {
-    for (const stream of streams) stream.write(': ping\n\n');
-  }, 25_000);
-  heartbeat.unref();
+  const broadcast = createAgentBroadcast(server.ws, ctx.agentEnabled);
+  let closed: Promise<void> | null = null;
 
   const runner: AgentRunner = createAgentRunner({
     userCwd: ctx.userCwd,
     writableRoots: [ctx.slidesRoot, ctx.globalAssetsRoot],
     store,
     providers,
-    onTurnEnd: (turn) => renamePlaceholderDeck(server, ctx, store, broadcast, turn),
+    onTurnEnd: (turn) =>
+      renamePlaceholderDeck(server, ctx, store, broadcast, () => closed !== null, turn),
   });
 
   store.subscribe(broadcast);
-  server.httpServer?.on('close', () => {
-    clearInterval(heartbeat);
-    for (const stream of streams) stream.end();
-    runner.stopAll();
-    void store.flush();
-  });
+  const close = () => {
+    closed ??= (async () => {
+      // A turn that ignores its abort must not keep the server from closing.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, STOP_TIMEOUT_MS);
+      });
+      await Promise.race([runner.stopAll(), timeout]);
+      clearTimeout(timer);
+      await store.close();
+    })();
+    return closed;
+  };
+
+  // A request whose body is still arriving can outlast the start of a close.
+  // Call it in the same tick as the change it guards.
+  const assertOpen = () => {
+    if (closed) throw new ClosingError();
+  };
 
   const installsInFlight = new Map<string, Promise<void>>();
 
@@ -223,25 +237,13 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
       }
 
       if (!enabled) return json(res, 404, { error: 'agent panel disabled' });
-
-      if (method === 'GET' && url.pathname === '/events') {
-        res.writeHead(200, {
-          'content-type': 'text/event-stream',
-          'cache-control': 'no-store',
-          connection: 'keep-alive',
-        });
-        res.write(': connected\n\n');
-        streams.add(res);
-        const drop = () => streams.delete(res);
-        res.on('close', drop);
-        res.on('error', drop);
-        return;
-      }
+      if (method !== 'GET') assertOpen();
 
       if (method === 'POST' && url.pathname === '/install') {
         const guard = validateMutationRequest(req, { requireJsonBody: true });
         if (!guard.ok) return json(res, guard.status, { error: guard.error });
         const body = (await readBody(req, AGENT_BODY_LIMIT)) as { provider?: unknown };
+        assertOpen();
         if (!isAgentProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
         const provider = providers[body.provider];
         const pm = await detectPackageManager(ctx.userCwd);
@@ -257,7 +259,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
 
       if (method === 'GET' && url.pathname === '/sessions') {
         res.setHeader('cache-control', 'no-store');
-        return json(res, 200, { sessions: store.list() });
+        return json(res, 200, { sessions: store.list(), rev: store.rev() });
       }
 
       if (method === 'POST' && url.pathname === '/sessions') {
@@ -267,6 +269,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
           provider?: unknown;
           slideId?: unknown;
         };
+        assertOpen();
         if (!isAgentProviderId(body.provider)) return json(res, 400, { error: 'invalid provider' });
         const slideId =
           typeof body.slideId === 'string' && SLIDE_ID_RE.test(body.slideId) ? body.slideId : null;
@@ -281,7 +284,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
 
         if (method === 'GET' && !action) {
           res.setHeader('cache-control', 'no-store');
-          return json(res, 200, session);
+          return json(res, 200, { ...session, rev: store.rev() });
         }
 
         if (method === 'DELETE' && !action) {
@@ -303,6 +306,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
             effort?: unknown;
             edit?: unknown;
           };
+          assertOpen();
           if (typeof body.text !== 'string' || !body.text.trim()) {
             return json(res, 400, { error: 'missing text' });
           }
@@ -334,6 +338,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
           const guard = validateMutationRequest(req, { requireJsonBody: true });
           if (!guard.ok) return json(res, guard.status, { error: guard.error });
           const body = (await readBody(req, AGENT_BODY_LIMIT)) as Record<string, unknown>;
+          assertOpen();
           const payload = parseRespond(body);
           if (typeof body.itemId !== 'string' || !payload) {
             return json(res, 400, { error: 'invalid response' });
@@ -346,7 +351,12 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): voi
       next();
     } catch (err) {
       if (err instanceof BodyTooLargeError) return json(res, 413, { error: err.message });
+      if (err instanceof ClosingError) {
+        return json(res, 503, { error: 'the dev server is shutting down' });
+      }
       json(res, 500, { error: String((err as Error).message ?? err) });
     }
   });
+
+  return close;
 }

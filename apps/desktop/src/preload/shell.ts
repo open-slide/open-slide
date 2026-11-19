@@ -1,0 +1,78 @@
+import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron';
+import type { ShellApi } from '../shared/types';
+
+function subscribe<T>(channel: string, listener: (payload: T) => void): () => void {
+  const wrapped = (_e: IpcRendererEvent, payload: T) => listener(payload);
+  ipcRenderer.on(channel, wrapped);
+  return () => ipcRenderer.off(channel, wrapped);
+}
+
+const api: ShellApi = {
+  getState: () => ipcRenderer.invoke('state:get'),
+  onState: (listener) => subscribe('state', listener),
+  onLog: (listener) => subscribe('log', listener),
+  onCommand: (listener) => subscribe('command', listener),
+  setOverlay: (open) => ipcRenderer.send('overlay:set', open),
+  openExternal: (url) => ipcRenderer.send('external:open', url),
+  sendCommand: (command) => ipcRenderer.send('shell:command', command),
+  haptic: (pattern) => ipcRenderer.send('host:haptic', pattern),
+  reportError: (error) => ipcRenderer.send('telemetry:error', error),
+  window: {
+    isFocused: () => ipcRenderer.invoke('window:is-focused'),
+    onFocus: (listener) => subscribe('window:focus', listener),
+    fitContent: (height) => ipcRenderer.send('window:fit-content', height),
+    openSettings: () => ipcRenderer.send('settings:open-window'),
+  },
+  onboarding: {
+    finish: () => ipcRenderer.send('onboarding:finish'),
+  },
+  intro: {
+    target: () => ipcRenderer.invoke('intro:target'),
+    reveal: () => ipcRenderer.send('intro:reveal'),
+    done: (skipped) => ipcRenderer.send('intro:done', skipped),
+    close: () => ipcRenderer.send('intro:close'),
+  },
+  settings: {
+    get: () => ipcRenderer.invoke('settings:get'),
+    update: (patch) => ipcRenderer.invoke('settings:update', patch),
+  },
+  tabs: {
+    activate: (id) => ipcRenderer.send('tabs:activate', id),
+    close: (id) => ipcRenderer.send('tabs:close', id),
+    move: (id, toIndex) => ipcRenderer.send('tabs:move', id, toIndex),
+    showMenu: (id) => ipcRenderer.send('tabs:menu', id),
+  },
+  switcher: {
+    onState: (listener) => subscribe('switcher:state', listener),
+    pick: (id) => ipcRenderer.send('switcher:pick', id),
+  },
+  workspace: {
+    choose: () => ipcRenderer.invoke('workspace:choose'),
+    chooseParent: () => ipcRenderer.invoke('workspace:choose-parent'),
+    defaultParent: () => ipcRenderer.invoke('workspace:default-parent'),
+    packageManagers: () => ipcRenderer.invoke('workspace:package-managers'),
+    open: (path) => ipcRenderer.invoke('workspace:open', path),
+    create: (request) => ipcRenderer.invoke('workspace:create', request),
+    createDefault: () => ipcRenderer.invoke('workspace:create-default'),
+    install: () => ipcRenderer.invoke('workspace:install'),
+    reveal: () => ipcRenderer.send('workspace:reveal'),
+    forget: (path) => ipcRenderer.send('workspace:forget', path),
+    dismissError: (id) => ipcRenderer.send('workspace:dismiss-error', id),
+  },
+  server: {
+    restart: () => ipcRenderer.send('server:restart'),
+    log: () => ipcRenderer.invoke('server:log'),
+  },
+  agents: {
+    list: () => ipcRenderer.invoke('agents:list'),
+    login: (id) => ipcRenderer.invoke('agents:login', id),
+    logout: (id) => ipcRenderer.invoke('agents:logout', id),
+    sendLoginInput: (id, text) => ipcRenderer.send('agents:login-input', id, text),
+    cancelLogin: (id) => ipcRenderer.send('agents:login-cancel', id),
+    dismissLogin: (id) => ipcRenderer.send('agents:login-dismiss', id),
+    logins: () => ipcRenderer.invoke('agents:logins'),
+    onLoginState: (listener) => subscribe('agents:login-state', listener),
+  },
+};
+
+contextBridge.exposeInMainWorld('desktop', api);

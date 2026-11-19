@@ -5,6 +5,7 @@ import {
   duplicateSlide,
   editorCanvas,
   openSlide,
+  pagePanel,
   readSlideSource,
   slideSourcePath,
 } from './helpers.ts';
@@ -484,7 +485,7 @@ export default [Only] satisfies Page[];
     await expectGeometry(second, { x: beforeSecond.x, y: beforeSecond.y });
     await page.keyboard.press('Escape');
     await expect(page.locator('aside[data-inspector-ui]')).toBeVisible();
-    await expect(page.getByText('Select an object', { exact: true })).toBeVisible();
+    await expect(pagePanel(page)).toBeVisible();
     const fullCanvas = await canvas.boundingBox();
     if (!fullCanvas) throw new Error('Slide canvas has no bounding box');
     await page.mouse.move(fullCanvas.x - 5, fullCanvas.y - 5);

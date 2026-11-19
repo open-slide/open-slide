@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { haptic } from '@/lib/desktop';
 import type { Folder, FolderIcon } from '@/lib/sdk';
 import { useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
@@ -131,7 +132,9 @@ export function FolderItem({
   const handleDragEnter = (e: React.DragEvent) => {
     if (!isSlideDrag(e)) return;
     dragDepth.current += 1;
-    if (dragDepth.current === 1) setDragOver(true);
+    if (dragDepth.current !== 1) return;
+    setDragOver(true);
+    haptic('generic');
   };
   const handleDragOver = (e: React.DragEvent) => {
     if (!isSlideDrag(e)) return;

@@ -65,6 +65,7 @@ export function createSessionStore(opts: { file: string | null }) {
   const sessions = new Map<string, AgentSession>();
   const listeners = new Set<Listener>();
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let closed = false;
   // Touch order breaks ties between sessions updated in the same millisecond.
   let seq = 0;
   const order = new Map<string, number>();
@@ -76,12 +77,15 @@ export function createSessionStore(opts: { file: string | null }) {
     }
   }
 
+  let rev = 0;
+
   const emit = (event: AgentStreamEvent) => {
-    for (const l of listeners) l(event);
+    const numbered = { ...event, rev: ++rev };
+    for (const l of listeners) l(numbered);
   };
 
   const scheduleSave = () => {
-    if (!opts.file) return;
+    if (!opts.file || closed) return;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
@@ -89,15 +93,11 @@ export function createSessionStore(opts: { file: string | null }) {
     }, SAVE_DEBOUNCE_MS);
   };
 
-  const writeSnapshot = async (file: string) => {
-    const body: PersistedShape = {
-      version: 1,
-      sessions: list().flatMap((s) => sessions.get(s.id) ?? []),
-    };
+  const writeSnapshot = async (file: string, body: string) => {
     const tmp = `${file}.tmp`;
     try {
       await fs.mkdir(path.dirname(file), { recursive: true });
-      await fs.writeFile(tmp, JSON.stringify(body), { encoding: 'utf8', mode: 0o600 });
+      await fs.writeFile(tmp, body, { encoding: 'utf8', mode: 0o600 });
       await fs.rename(tmp, file);
     } catch (err) {
       console.error('[open-slide] failed to save agent sessions:', err);
@@ -106,12 +106,17 @@ export function createSessionStore(opts: { file: string | null }) {
   };
 
   // Saves share one temp file, so a flush racing a debounced save must wait
-  // for it rather than interleave writes and renames.
+  // for it rather than interleave writes and renames. The body is taken when
+  // the save is queued, so a closing store's last write has nothing from after close.
   let saving: Promise<void> = Promise.resolve();
   const save = () => {
     const file = opts.file;
-    if (!file) return saving;
-    saving = saving.then(() => writeSnapshot(file));
+    if (!file || closed) return saving;
+    const body = JSON.stringify({
+      version: 1,
+      sessions: list().flatMap((s) => sessions.get(s.id) ?? []),
+    } satisfies PersistedShape);
+    saving = saving.then(() => writeSnapshot(file, body));
     return saving;
   };
 
@@ -252,6 +257,13 @@ export function createSessionStore(opts: { file: string | null }) {
     await save();
   }
 
+  // The file belongs to whichever store loads it next; later changes here must not overwrite it.
+  async function close(): Promise<void> {
+    const last = flush();
+    closed = true;
+    await last;
+  }
+
   return {
     list,
     get,
@@ -264,5 +276,7 @@ export function createSessionStore(opts: { file: string | null }) {
     appendDelta,
     subscribe,
     flush,
+    close,
+    rev: () => rev,
   };
 }

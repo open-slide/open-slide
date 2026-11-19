@@ -1,4 +1,4 @@
-import { findSpawnableCli, importWorkspacePackage } from '../detect.ts';
+import { findSpawnableCli, importAgentPackage } from '../detect.ts';
 import {
   type AgentProvider,
   clipDetail,
@@ -181,7 +181,7 @@ export function createClaudeProvider(): AgentProvider {
       return CLAUDE_MODELS;
     },
     async run(opts: ProviderRunOptions): Promise<void> {
-      const sdk = await importWorkspacePackage<ClaudeSdkModule>(opts.cwd, CLAUDE_SDK_PACKAGE);
+      const sdk = await importAgentPackage<ClaudeSdkModule>(opts.cwd, CLAUDE_SDK_PACKAGE);
       if (!sdk || typeof sdk.query !== 'function') throw new ProviderUnavailableError(this);
 
       const mapper = createClaudeMapper(opts.emit, opts.cwd);

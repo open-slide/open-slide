@@ -1,9 +1,27 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
+
+@custom-variant data-active {
+  &:where([data-state="active"]),
+  &:where([data-active]:not([data-active="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) {
+    @slot;
+  }
+}
+
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) {
+    @slot;
+  }
+}
 
 @theme inline {
   --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -194,6 +212,16 @@
   .folio {
     @apply nums font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground;
   }
+}
+
+/* Lets the desktop window's native material show through the chrome; content
+   cards stay opaque, so nothing should scroll beneath a chrome surface. */
+html[data-translucent] {
+  --sidebar: transparent;
+}
+
+html[data-translucent] body {
+  background-color: transparent;
 }
 
 /*

@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { useHistory } from '@/components/history-provider';
 import { type DesignSystem, designToCssVars } from '../../lib/design';
 import { shuffleDesign } from '../../lib/design-presets';
+import { createSaveQueue, useUnsavedSource } from '../../lib/unsaved';
 import { useDesign as useDesignFetch } from './use-design';
 
 type DesignCtx = {
@@ -42,16 +43,20 @@ function clone<T>(d: T): T {
 }
 
 export function DesignProvider({ slideId, children }: { slideId: string; children: ReactNode }) {
-  const { design, exists, warning, loaded, save } = useDesignFetch(slideId);
+  const { design, savedFrom, exists, warning, loaded, save } = useDesignFetch(slideId);
   const [draft, setDraft] = useState<DesignSystem | null>(null);
   const [committing, setCommitting] = useState(false);
   const history = useHistory();
   const draftRef = useRef<DesignSystem | null>(null);
   draftRef.current = draft;
-
+  // A save or discard only reaches `dirty` on the next render; this answers in between.
+  const settledDraftRef = useRef<DesignSystem | null>(null);
+  const [saveQueue] = useState(createSaveQueue);
+  // When a save's response arrives as the new design, edits made since it was sent stay.
   useEffect(() => {
-    if (design) setDraft(clone(design));
-  }, [design]);
+    if (!design || (savedFrom && draftRef.current !== savedFrom)) return;
+    setDraft(clone(design));
+  }, [design, savedFrom]);
 
   const dirty = useMemo(() => {
     if (!draft || !design) return false;
@@ -74,19 +79,51 @@ export function DesignProvider({ slideId, children }: { slideId: string; childre
     [history],
   );
 
-  const commit = useCallback(async () => {
-    if (!draft) return;
+  // Each save sends the draft as it stands when its turn comes: two in flight
+  // could answer out of order and put an older design back over the draft.
+  const write = useCallback((): Promise<string | null> => {
+    if (!draftRef.current) return Promise.resolve(null);
     setCommitting(true);
-    const r = await save(draft);
-    setCommitting(false);
-    if (!r.ok) toast.error(r.error ?? 'Failed to save');
-    history.clear();
-  }, [draft, save, history]);
+    return saveQueue.run(
+      async () => {
+        const saving = draftRef.current;
+        if (!saving || saving === settledDraftRef.current) return null;
+        const r = await save(saving);
+        if (r.ok) {
+          if (draftRef.current === saving) history.clear();
+          settledDraftRef.current = saving;
+          return null;
+        }
+        const error = r.error ?? 'Failed to save';
+        toast.error(error);
+        return error;
+      },
+      () => setCommitting(false),
+    );
+  }, [saveQueue, save, history]);
+
+  const commit = useCallback(async () => {
+    await write();
+  }, [write]);
 
   const discard = useCallback(() => {
+    settledDraftRef.current = draftRef.current;
     if (design) setDraft(clone(design));
     history.clear();
   }, [design, history]);
+
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  useUnsavedSource({
+    kind: 'draft',
+    dirty: () =>
+      saveQueue.busy() || (dirtyRef.current && draftRef.current !== settledDraftRef.current),
+    save: async () => {
+      const error = await write();
+      if (error) throw new Error(error);
+    },
+    discard,
+  });
 
   const shuffle = useCallback(() => {
     const prev = draftRef.current;

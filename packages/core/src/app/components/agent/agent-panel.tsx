@@ -23,6 +23,7 @@ import {
   consumeRequest,
   createSession,
   deleteSession,
+  openSessionInHost,
   readyProviders,
   resolveModelChoice,
   respond,
@@ -67,7 +68,7 @@ export function AgentPanel({
   const { status, loading, connected, provider, model, effort, modelChoices } = useAgentStatus();
   const { sessions, loaded: sessionsLoaded, activeId } = useAgentSessions();
   const session = useAgentSession(activeId);
-  const { request, autoApprove, newDeck } = useAgentState();
+  const { request, autoApprove, newDeck, handoffs } = useAgentState();
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
@@ -97,6 +98,12 @@ export function AgentPanel({
     if (active?.slideId && active.slideId !== slideId) setActiveSession(null);
   }, [slideId, sessionsLoaded, activeId, sessions]);
   const isNewDeck = Boolean(context.slideId) && newDeck === context.slideId;
+
+  // A handoff from another tab can arrive while history shows, naming the active session.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: every handoff shows the chat again
+  useEffect(() => {
+    if (activeId) setView('chat');
+  }, [activeId, handoffs]);
 
   const ensureSession = useCallback(
     async (fresh: boolean) => {
@@ -300,9 +307,11 @@ export function AgentPanel({
           activeId={activeId}
           slideId={context.slideId ?? null}
           onSelect={(s) => {
-            setActiveSession(s.id);
             setView('chat');
-            if (s.slideId && s.slideId !== context.slideId) navigate(`/s/${s.slideId}`);
+            const deck = s.slideId && s.slideId !== context.slideId ? s.slideId : null;
+            if (deck && openSessionInHost(deck, s.id)) return;
+            setActiveSession(s.id);
+            if (deck) navigate(`/s/${deck}`);
           }}
           onDelete={async (id) => {
             try {

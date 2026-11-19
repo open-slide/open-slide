@@ -28,6 +28,7 @@ import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-edi
 import { independentTargets } from '@/lib/inspector/visual-dom';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
+import { createSaveQueue, createWriteLedger, trackWrite, useUnsavedSource } from '@/lib/unsaved';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
 import { AssetPickerDialog } from './asset-picker-dialog';
@@ -128,6 +129,10 @@ export type InlineEditTarget = SelectedTarget & {
 export type InlineTextSelection = { start: number; end: number };
 type InlineStyleHandler = (ops: EditOp[]) => boolean;
 
+// Shared across providers so a save retried after its provider unmounted skips
+// properties that a newer provider has saved since.
+const editLedger = createWriteLedger();
+
 type AssetAttrOp = { assetPath: string; previewUrl: string };
 type Sequenced<T> = T & { seq: number };
 type StyleOp = { value: string | null; prevText?: string };
@@ -175,6 +180,13 @@ function bucketIsEmpty(bucket: Bucket): boolean {
     bucket.attrOps.size === 0 &&
     !bucket.removed
   );
+}
+
+function hasBufferedOps(buckets: Map<string, Bucket>): boolean {
+  for (const b of buckets.values()) {
+    if (!bucketIsEmpty(b)) return true;
+  }
+  return false;
 }
 
 export type DomTextPart = {
@@ -530,7 +542,8 @@ export function InspectorProvider({
     new WeakMap<HTMLElement, { text: string; html: TextDomSnapshot }>(),
   );
   const instanceCounterRef = useRef(0);
-  const pendingSeqRef = useRef(0);
+  const [commitQueue] = useState(createSaveQueue);
+  const commitFailureRef = useRef<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [committing, setCommitting] = useState(false);
   const [cropTarget, setCropTarget] = useState<{
@@ -648,12 +661,16 @@ export function InspectorProvider({
         pendingRef.current.set(key, bucket);
       }
       const style = (anchor?.style ?? {}) as unknown as Record<string, string>;
+      // Every key is read before any is written: clearing a shorthand such as
+      // `background` also clears the longhands a later op in the batch sets.
       for (const op of ops) {
-        const seq = ++pendingSeqRef.current;
+        if (op.kind === 'set-style' && anchor && !bucket.origStyle.has(op.key)) {
+          bucket.origStyle.set(op.key, style[op.key] ?? '');
+        }
+      }
+      for (const op of ops) {
+        const seq = editLedger.next();
         if (op.kind === 'set-style') {
-          if (anchor && !bucket.origStyle.has(op.key)) {
-            bucket.origStyle.set(op.key, style[op.key] ?? '');
-          }
           bucket.styleOps.set(op.key, { value: op.value, prevText: op.prevText, seq });
           if (anchor?.isConnected) style[op.key] = op.value ?? '';
         } else if (op.kind === 'set-text-range-style' || op.kind === 'set-text') {
@@ -843,7 +860,7 @@ export function InspectorProvider({
         } else if (snap.kind === 'attr') {
           if (snap.source === 'op') {
             const op = snap.value as Sequenced<AssetAttrOp>;
-            bucket.attrOps.set(snap.attr, { ...op, seq: ++pendingSeqRef.current });
+            bucket.attrOps.set(snap.attr, { ...op, seq: editLedger.next() });
             if (sharedAnchor?.isConnected) sharedAnchor.setAttribute(snap.attr, op.previewUrl);
           } else {
             bucket.attrOps.delete(snap.attr);
@@ -1032,13 +1049,15 @@ export function InspectorProvider({
     removeElements,
   });
 
-  const commitEdits = useCallback(async () => {
+  const writeEdits = useCallback(async () => {
     const buckets = pendingRef.current;
+    commitFailureRef.current = null;
     if (buckets.size === 0) return;
     type PendingItem = {
       bucket: Bucket;
       seq: number;
       instanceId?: string;
+      property?: string;
       edit: Edit;
       onSuccess: (bucket: Bucket) => void;
     };
@@ -1061,6 +1080,7 @@ export function InspectorProvider({
         pending.push({
           bucket,
           seq: op.seq,
+          property: `${slideId}\n${line}:${column}\nstyle:${k}`,
           edit: {
             line,
             column,
@@ -1076,6 +1096,7 @@ export function InspectorProvider({
         pending.push({
           bucket,
           seq: op.seq,
+          property: `${slideId}\n${line}:${column}\nattr:${attr}`,
           edit: {
             line,
             column,
@@ -1121,14 +1142,27 @@ export function InspectorProvider({
         }
       }
     }
-    pending.sort((a, b) => a.seq - b.seq);
+    const settle = (item: PendingItem) => {
+      item.onSuccess(item.bucket);
+      if (item.property) editLedger.record(item.property, item.seq);
+      if (!bucketIsEmpty(item.bucket)) return;
+      for (const [key, pendingBucket] of pendingRef.current) {
+        if (pendingBucket === item.bucket) pendingRef.current.delete(key);
+      }
+    };
+    const writes = pending.filter((item) => {
+      if (!item.property || !editLedger.superseded(item.property, item.seq)) return true;
+      settle(item);
+      return false;
+    });
+    writes.sort((a, b) => a.seq - b.seq);
     const lastTextEdit = new Map<string, number>();
-    for (const [index, item] of pending.entries()) {
+    for (const [index, item] of writes.entries()) {
       if (!item.instanceId) continue;
       item.edit.dependsOn = lastTextEdit.get(item.instanceId);
       lastTextEdit.set(item.instanceId, index);
     }
-    if (pending.length === 0) {
+    if (writes.length === 0) {
       pendingRef.current = new Map();
       setPendingCount(0);
       history.clear();
@@ -1136,34 +1170,35 @@ export function InspectorProvider({
     }
     setCommitting(true);
     try {
-      const results = await applyEdits(pending.map((p) => p.edit));
+      const results = await applyEdits(writes.map((p) => p.edit));
       const failures: string[] = [];
       for (let i = 0; i < results.length; i++) {
-        const item = pending[i];
+        const item = writes[i];
         const r = results[i];
-        const bucket = item.bucket;
         if (r.ok) {
-          item.onSuccess(bucket);
-          if (bucketIsEmpty(bucket)) {
-            for (const [key, pendingBucket] of pendingRef.current) {
-              if (pendingBucket === bucket) pendingRef.current.delete(key);
-            }
-          }
+          settle(item);
         } else {
           failures.push(`line ${item.edit.line}: ${r.error ?? 'edit failed'}`);
         }
       }
       refreshCount();
-      if (failures.length > 0) toast.error(`${t.inspector.saveFailed} ${failures.join('; ')}`);
+      if (failures.length > 0) {
+        commitFailureRef.current = `${t.inspector.saveFailed} ${failures.join('; ')}`;
+        toast.error(commitFailureRef.current);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`${t.inspector.saveFailed} ${msg}`);
+      commitFailureRef.current = `${t.inspector.saveFailed} ${msg}`;
+      toast.error(commitFailureRef.current);
       throw err;
     } finally {
       setCommitting(false);
       history.clear();
     }
-  }, [applyEdits, history, refreshCount, t]);
+  }, [applyEdits, history, refreshCount, slideId, t]);
+
+  // Two commits in flight would send the same buffered ops twice.
+  const commitEdits = useCallback(() => commitQueue.run(writeEdits), [commitQueue, writeEdits]);
 
   const cancelEdits = useCallback(() => {
     if (pendingRef.current.size === 0) {
@@ -1202,20 +1237,36 @@ export function InspectorProvider({
     history.clear();
   }, [history]);
 
+  // Rejects while any edit is still buffered, even when only some of them failed.
+  const saveEdits = async () => {
+    await commitEdits().catch(() => {});
+    if (hasBufferedOps(pendingRef.current)) {
+      throw new Error(commitFailureRef.current ?? t.inspector.saveFailed);
+    }
+  };
+
   // Auto-flush on inspector close and on route unmount so toggling
   // off or navigating away doesn't drop buffered edits. Failures are
   // surfaced via toast inside `commitEdits`; the catch here only
   // swallows the rethrown rejection.
   const commitRef = useRef(commitEdits);
   commitRef.current = commitEdits;
+  const saveRef = useRef(saveEdits);
+  saveRef.current = saveEdits;
   useEffect(() => {
     if (!active) commitRef.current().catch(() => {});
   }, [active]);
+  // Nothing else reports the edits once this unmounts.
   useEffect(() => {
-    return () => {
-      commitRef.current().catch(() => {});
-    };
+    return () => trackWrite(pendingRef, () => saveRef.current());
   }, []);
+
+  useUnsavedSource({
+    kind: 'draft',
+    dirty: () => commitQueue.busy() || hasBufferedOps(pendingRef.current),
+    save: saveEdits,
+    discard: cancelEdits,
+  });
 
   // Re-apply buffered ops onto any `[data-slide-loc]` element that gets
   // (re)mounted in the slide canvas. Without this, navigating to a

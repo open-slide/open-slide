@@ -1,5 +1,6 @@
 import { Crop, ImageIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { haptic } from '@/lib/desktop';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import { useFreezeSlideMotion } from '@/lib/inspector/freeze-motion';
 import {
@@ -49,10 +50,13 @@ type Gesture = {
   candidates: Rect[];
   moved: boolean;
   edits: VisualEdit[];
+  guideKeys: Set<string>;
   previousSelection: SelectedTarget[];
   clickSelection: SelectedTarget[];
   additive: boolean;
 };
+
+const guideKey = (guide: Guide) => `${guide.axis}:${guide.position}`;
 
 type ScreenRect = { left: number; top: number; width: number; height: number };
 const HANDLES: { handle: ResizeHandle; x: number; y: number; cursor: string }[] = [
@@ -262,6 +266,7 @@ export function InspectOverlay() {
         candidates,
         moved: false,
         edits: [],
+        guideKeys: new Set(),
         previousSelection: selection,
         clickSelection,
         additive: event.shiftKey,
@@ -363,6 +368,9 @@ export function InspectOverlay() {
         ];
       }
       for (const edit of gesture.edits) previewOps(edit.anchor, edit.ops);
+      const guideKeys = new Set(nextGuides.map(guideKey));
+      if ([...guideKeys].some((key) => !gesture.guideKeys.has(key))) haptic('alignment');
+      gesture.guideKeys = guideKeys;
       setGuides(nextGuides);
       measureRef.current?.();
     };
@@ -590,7 +598,7 @@ export function InspectOverlay() {
       {canvasFrame &&
         guides.map((guide) => (
           <div
-            key={`${guide.axis}:${guide.position}`}
+            key={guideKey(guide)}
             data-alignment-guide={guide.axis}
             className="absolute bg-cyan-500"
             style={
