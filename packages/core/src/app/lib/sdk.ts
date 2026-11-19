@@ -18,6 +18,10 @@ export type SlideModule = {
   // Index-aligned with `default`.
   notes?: (string | undefined)[];
   transition?: SlideTransition;
+  htmlExport?: {
+    /** Opt in to active-page CSS snapshots. React effects may be captured mid-animation. */
+    activePage?: boolean;
+  };
 };
 
 export type FolderIcon = { type: 'emoji'; value: string } | { type: 'color'; value: string };
