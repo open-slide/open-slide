@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ViteDevServer } from 'vite';
 import { validateMutationRequest } from '../../http/request-guard.ts';
-import { MANAGED_CORE_ENV } from '../../supervision.ts';
+import { isManagedCore } from '../../supervision.ts';
 import { type ApiContext, json } from './context.ts';
 
 // GET /__update-check  → { current, latest, outdated }
@@ -16,10 +16,6 @@ import { type ApiContext, json } from './context.ts';
 const PKG = '@open-slide/core';
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const COMMAND_TIMEOUT_MS = 300_000;
-
-// Set by a host that runs its own bundled core, so installing into the
-// workspace would not change what runs.
-export const isManagedCore = () => process.env[MANAGED_CORE_ENV] === '1';
 
 type CheckResult = { current: string; latest: string | null; outdated: boolean };
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';

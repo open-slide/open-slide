@@ -2,8 +2,8 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { AGENT_MODULES_ENV } from '../supervision.ts';
 import {
-  AGENT_MODULES_ENV,
   entryFromPackageJson,
   findOnPath,
   importAgentPackage,
