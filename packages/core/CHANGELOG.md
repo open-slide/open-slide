@@ -1,5 +1,35 @@
 # @open-slide/core
 
+## 2.4.0
+
+### Minor Changes
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Support the open-slide desktop app: open decks in its tabs, let its native window material show through the chrome, use the agent SDKs it bundles, and save or discard unsaved edits before it closes a tab.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Show the current page's background, transition, and step count in the Format panel when nothing is selected, with the background editable when the page sets it.
+
+### Patch Changes
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Stream agent progress over the HMR socket so many open tabs no longer stall the app, finish saving agent conversations before the dev server exits, and find agent CLIs behind Windows command shims.
+
+- [#627](https://github.com/open-slide/open-slide/pull/627) [`ceba46b`](https://github.com/open-slide/open-slide/commit/ceba46b553200371b23ac68f72ffdca8b6e6120f) Thanks [@1weiho](https://github.com/1weiho)! - Press Delete or Backspace in the visual editor to remove the selected elements; the removal is undoable and written on save.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Keep theme edits and their undo history when a save fails, keep design edits made while a save is in flight, and stop retried style saves from overwriting newer values.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Drop the `shadcn` CLI from runtime dependencies, cutting about 70 MB from installs.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Read oklch and other non-RGB colors in the Format panel.
+
+- [#632](https://github.com/open-slide/open-slide/pull/632) [`769699b`](https://github.com/open-slide/open-slide/commit/769699b5892867531b0c7e2fdbf5dd41fd8f3a98) Thanks [@1weiho](https://github.com/1weiho)! - Keep the settings a host app passes to the dev server in one module.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Restyle menus with a frosted surface, a soft hover instead of an inverted fill, and a checkmark for the current language and theme.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Remove the "Agent connected" badge from the slide header, show the side panel without its open animation on first load, and make the sidebar's app title unselectable.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Keep speaker notes still being typed when you leave a slide or deck, and keep them on the right page when pages are reordered, duplicated, or deleted mid-save.
+
+- [#634](https://github.com/open-slide/open-slide/pull/634) [`69e72aa`](https://github.com/open-slide/open-slide/commit/69e72aaea5bdc12526c74f927eacac697e629d91) Thanks [@1weiho](https://github.com/1weiho)! - Give menus, popovers, dialogs, toasts and floating chrome a translucent, blurred material.
+
 ## 2.3.2
 
 ### Patch Changes
