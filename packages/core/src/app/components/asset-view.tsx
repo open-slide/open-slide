@@ -3,6 +3,7 @@ import {
   ArrowDownToLine,
   ArrowUp,
   ArrowUpDown,
+  ClipboardPaste,
   CloudOff,
   Columns3,
   File as FileIcon,
@@ -72,6 +73,13 @@ import {
   searchSvgl,
   useAssets,
 } from '@/lib/assets';
+import {
+  canReadSystemClipboard,
+  namePastedImages,
+  PASTE_SHORTCUT,
+  readImagesFromSystemClipboard,
+  usePasteImages,
+} from '@/lib/clipboard-images';
 import { dragHasFiles } from '@/lib/dom';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
@@ -178,6 +186,7 @@ export function AssetView({ slideId }: Props) {
   const [confirmDeleteUsages, setConfirmDeleteUsages] = useState<AssetUsage[] | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [logoSearchOpen, setLogoSearchOpen] = useState(false);
+  const [pasting, setPasting] = useState(false);
   const [query, setQuery] = useState('');
   const [usageFilter, setUsageFilter] = useState<AssetUsageFilter>('all');
   const [typeFilter, setTypeFilter] = useState<AssetTypeFilter>('all');
@@ -289,6 +298,30 @@ export function AssetView({ slideId }: Props) {
       .catch(() => setConfirmDeleteUsages([]));
   }
 
+  function handlePastedImages(files: File[]) {
+    // Named up front so a paste never opens the conflict dialog for a name
+    // the user never chose.
+    handleFiles(namePastedImages(files, existingNames)).catch(() => {});
+  }
+
+  usePasteImages(available, handlePastedImages);
+
+  async function pasteFromClipboard() {
+    setPasting(true);
+    try {
+      const files = await readImagesFromSystemClipboard();
+      if (files.length === 0) {
+        toast.error(t.asset.toastPasteNoImage);
+        return;
+      }
+      handlePastedImages(files);
+    } catch {
+      toast.error(t.asset.toastPasteFailed);
+    } finally {
+      setPasting(false);
+    }
+  }
+
   if (!available) {
     return (
       <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
@@ -377,6 +410,28 @@ export function AssetView({ slideId }: Props) {
             <Type className="size-3.5" />
             <span>{t.asset.searchFonts}</span>
           </button>
+          {canReadSystemClipboard() ? (
+            <button
+              type="button"
+              onClick={() => {
+                pasteFromClipboard().catch(() => {});
+              }}
+              disabled={pasting}
+              title={format(t.asset.pasteHint, { shortcut: PASTE_SHORTCUT })}
+              className={cn(
+                'inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[5px] border border-border bg-card px-2.5 text-[12.5px] font-medium transition-colors',
+                'hover:bg-muted/60 hover:border-foreground/20 active:translate-y-px',
+                pasting && 'pointer-events-none opacity-60',
+              )}
+            >
+              {pasting ? (
+                <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <ClipboardPaste className="size-3.5" />
+              )}
+              <span>{t.asset.pasteImage}</span>
+            </button>
+          ) : null}
           <label
             htmlFor={inputId}
             className={cn(
@@ -660,6 +715,7 @@ export function AssetView({ slideId }: Props) {
 
 function EmptyState() {
   const t = useLocale();
+  const [pasteHintPrefix, pasteHintSuffix] = t.asset.pasteHint.split('{shortcut}');
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 px-6 py-16 text-center">
       <div className="flex size-12 items-center justify-center rounded-full border border-hairline bg-card text-muted-foreground">
@@ -673,6 +729,11 @@ function EmptyState() {
           {t.asset.noAssetsHintPrefix}
           <span className="font-mono text-foreground">{t.asset.upload}</span>
           {t.asset.noAssetsHintSuffix}
+        </p>
+        <p className="mt-1.5 max-w-xs text-[12.5px] leading-relaxed text-muted-foreground">
+          {pasteHintPrefix}
+          <span className="font-mono text-foreground">{PASTE_SHORTCUT}</span>
+          {pasteHintSuffix}
         </p>
       </div>
     </div>
