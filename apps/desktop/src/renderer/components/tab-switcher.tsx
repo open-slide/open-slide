@@ -4,8 +4,7 @@ import { cn } from '@/lib/utils';
 import type { SwitcherTab } from '../../shared/types';
 import { desktop, useSwitcher } from '../lib/desktop';
 
-// Keys never reach this page's handlers: the main process reads them, since it
-// is the one that knows when Ctrl is let go.
+// No key handlers here: the main process reads the keys, since only it sees Ctrl let go.
 export function TabSwitcher() {
   const state = useSwitcher();
   const selected = useRef<HTMLButtonElement>(null);

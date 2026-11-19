@@ -38,14 +38,12 @@ function node(script: string, opts: Partial<Parameters<typeof run>[2]> = {}) {
   });
 }
 
-// A child that prints the pid of a grandchild sharing its output pipes.
 const PARENT_OF = (grandchild: string, after = 'setInterval(() => {}, 1000)') =>
   `const { spawn } = require('node:child_process');
    const c = spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], { stdio: ['ignore', 'inherit', 'inherit'] });
    console.log('descendant:' + c.pid);
    ${after}`;
 
-// Reports the grandchild only once it has installed its SIGTERM handler.
 const PARENT_OF_STUBBORN = `
   const { spawn } = require('node:child_process');
   const child = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); process.send('ready'); setInterval(() => {}, 1000)"], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
@@ -70,7 +68,6 @@ async function withDescendant(script: string) {
   throw new Error('the child never reported its descendant');
 }
 
-// Real processes and POSIX signals; Windows goes through taskkill instead.
 describe.skipIf(process.platform === 'win32')('run', () => {
   it('reports the exit code and output of a process that ends on its own', async () => {
     const result = await node("console.log('hello'); process.exit(3)").done;
@@ -140,7 +137,6 @@ describe.skipIf(process.platform === 'win32')('run', () => {
       const result = await handle.done;
       expect(result).toMatchObject({ code: 0, timedOut: false });
       expect(Date.now() - started).toBeLessThan(4000);
-      // Nothing asked for it to stop, so it is left running.
       expect(alive(descendant)).toBe(true);
     } finally {
       process.kill(descendant, 'SIGKILL');

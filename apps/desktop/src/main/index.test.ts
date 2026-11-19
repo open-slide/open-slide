@@ -3,8 +3,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-// The main entry wired to a fake Electron: only what the lifecycle around the
-// main window touches is real here (the workspace controller and quit gate).
 type FakeWindow = {
   dead: boolean;
   shown: boolean;

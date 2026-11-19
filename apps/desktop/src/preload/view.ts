@@ -15,9 +15,7 @@ let spare = window.location.pathname === SPARE_PATH;
 let pending: string | null = null;
 const listeners = new Set<(path: string) => void>();
 
-// The host keeps an adopted spare hidden until its new route has rendered, so
-// the not-found page it booted on never shows.
-function reportCommit() {
+function reportRouteRendered() {
   const root = document.getElementById('root');
   const done = () => ipcRenderer.send('host:adopted');
   if (!root) {
@@ -40,11 +38,10 @@ function deliver(path: string) {
   for (const listener of listeners) listener(path);
   if (spare) {
     spare = false;
-    reportCommit();
+    reportRouteRendered();
   }
 }
 
-// A spare can be adopted before core has mounted and subscribed.
 ipcRenderer.on('host:navigate', (_e, path: string) => {
   if (listeners.size) deliver(path);
   else pending = path;
@@ -60,7 +57,6 @@ ipcRenderer.on('host:translucent', (_e, value: unknown) => {
 
 let guard: UnsavedGuard | null = null;
 
-// A page that registered no guard has nothing to lose, so it answers for itself.
 ipcRenderer.on('host:unsaved', (_e, request: number, action: 'query' | UnsavedAction) => {
   const reply = (payload: unknown) => ipcRenderer.send('host:unsaved-reply', request, payload);
   const answer = async () => {
@@ -96,8 +92,8 @@ const host: DesktopHost = {
   },
   onTranslucentChange: (listener) => {
     materialListeners.add(listener);
-    // The material may have changed since the page read `translucent` at boot.
-    if (translucent !== config.translucent) listener(translucent);
+    const changedSinceBoot = translucent !== config.translucent;
+    if (changedSinceBoot) listener(translucent);
     return () => {
       materialListeners.delete(listener);
     };

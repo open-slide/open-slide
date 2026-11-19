@@ -12,7 +12,6 @@ const fixture = vi.hoisted(() => ({
   tracked: [] as string[],
   trustAnswer: 0,
   picked: null as string | null,
-  // Whether the bundled CLI, faked below, manages to scaffold a workspace.
   scaffolds: true,
 }));
 
@@ -50,7 +49,6 @@ vi.mock('./settings', () => ({
 }));
 vi.mock('./telemetry', () => ({ track: (event: string) => fixture.tracked.push(event) }));
 vi.mock('./shell-env', () => ({ findOnPath: () => null }));
-// Stands in for the bundled CLI: `init <name>` writes a workspace like it would.
 vi.mock('./process', async () => {
   const fs = await import('node:fs');
   const nodePath = await import('node:path');
@@ -226,7 +224,6 @@ describe('default workspace trust', () => {
     expect(created).toEqual({ ok: true });
     expect(prompts()).toEqual([]);
 
-    // The folder now holds a project, so setting it up again is refused.
     const again = await controller.create({ parent, name: 'deck', packageManager: 'npm' });
     expect(again.ok).toBe(false);
   });

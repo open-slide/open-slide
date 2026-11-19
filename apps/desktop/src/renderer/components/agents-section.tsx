@@ -35,7 +35,6 @@ export function useAgents() {
   const states = useLogins();
   const latest = useRef(0);
 
-  // Sign-in fires several refreshes in a row, and an earlier one can answer last.
   const refresh = useCallback(async () => {
     const request = ++latest.current;
     setRefreshing(true);
@@ -45,7 +44,6 @@ export function useAgents() {
     setRefreshing(false);
   }, []);
 
-  // CLI installs and sign-ins in any window change what an agent reports.
   const progress = AGENT_IDS.map((id) => {
     const state = states[id];
     return state ? `${state.operation}:${state.phase}` : '';

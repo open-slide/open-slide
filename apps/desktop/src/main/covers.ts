@@ -1,4 +1,5 @@
 import { BrowserWindow, type WebContents } from 'electron';
+import { deckPath } from './url';
 
 const COVER_WIDTH = 640;
 const COVER_HEIGHT = 360;
@@ -9,7 +10,6 @@ const IDLE_CLOSE_MS = 15_000;
 const READ_STATE = `document.querySelector('[data-osd-preview]')?.getAttribute('data-osd-preview') ?? null`;
 
 type DeckCoversOptions = {
-  // Captures wait while this is false, so they never slow a load the user is watching.
   idle: () => boolean;
   onChange: () => void;
 };
@@ -46,7 +46,6 @@ export class DeckCovers {
     this.pump();
   }
 
-  // Queues the decks that have no cover yet and forgets the ones no longer open.
   sync(slideIds: string[]) {
     const open = new Set(slideIds);
     if (this.current && !open.has(this.current.slideId)) this.current.dropped = true;
@@ -103,7 +102,6 @@ export class DeckCovers {
     return this.current?.slideId === slideId && !this.current.dropped;
   }
 
-  // Navigation or a script can hang, so a stuck window is thrown away rather than waited on.
   private captureWithin(slideId: string, ms: number): Promise<string | null> {
     let timer: NodeJS.Timeout | undefined;
     const expired = new Promise<null>((resolve) => {
@@ -118,7 +116,7 @@ export class DeckCovers {
 
   private async capture(slideId: string): Promise<string | null> {
     const contents = this.contents();
-    await contents.loadURL(`${this.baseUrl}/s/${encodeURIComponent(slideId)}/preview`);
+    await contents.loadURL(`${this.baseUrl}${deckPath(slideId)}/preview`);
     const deadline = Date.now() + SETTLE_TIMEOUT_MS;
     for (;;) {
       const state: unknown = await contents.executeJavaScript(READ_STATE);
@@ -136,7 +134,6 @@ export class DeckCovers {
     if (this.closeTimer) clearTimeout(this.closeTimer);
     this.closeTimer = null;
     if (!this.window || this.window.isDestroyed()) {
-      // Offscreen, so the page keeps painting and settling without ever being shown.
       this.window = new BrowserWindow({
         show: false,
         width: COVER_WIDTH,

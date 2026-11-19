@@ -3,7 +3,6 @@ import type { BrowserWindow, MessageBoxOptions } from 'electron';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SwitcherState, UnsavedAction, UnsavedOutcome, UnsavedStatus } from '../shared/types';
 
-// What a page's guard would answer, keyed by the URL the view shows.
 type PageScript = {
   status: UnsavedStatus;
   outcomes?: Partial<Record<UnsavedAction, UnsavedOutcome>>;
@@ -12,7 +11,6 @@ type PageScript = {
 
 const fixture = vi.hoisted(() => ({
   views: [] as { webContents: FakeContents; visible: boolean }[],
-  // Stands in for the IPC route a page's reply takes back to the manager.
   deliver: (_contents: unknown, _request: unknown, _payload: unknown) => {},
 }));
 
@@ -41,7 +39,6 @@ class FakeContents extends EventEmitter {
     const [request, action] = args as [number, 'query' | UnsavedAction];
     const payload =
       action === 'query' ? this.script.status : (this.script.outcomes?.[action] ?? { ok: true });
-    // Work that was settled is gone, as it is on a real page.
     if (action !== 'query' && 'ok' in payload && payload.ok) {
       this.script = { ...this.script, status: { drafts: false, pending: false } };
     }
@@ -156,7 +153,6 @@ function setup(...answers: string[]) {
 
 type Key = { key: string; type?: 'keyDown' | 'keyUp'; control?: boolean; shift?: boolean };
 
-// True when the manager swallowed the key.
 function press(contents: FakeContents | null, { key, type = 'keyDown', ...mods }: Key): boolean {
   const event = { preventDefault: vi.fn() };
   const input = { type, key, control: true, shift: false, alt: false, meta: false, ...mods };
@@ -191,13 +187,11 @@ describe('TabManager unsaved work', () => {
     const deck = await open('roadmap', DRAFT);
 
     const closing = manager.close(deck.id);
-    // Nothing is destroyed while the page is still being asked.
     expect(deck.contents.closed).toBe(false);
     expect(await closing).toBe(true);
 
     expect(shown[0].message).toBe('Save changes to “roadmap” before closing?');
     const actions = deck.contents.sent.filter(([c]) => c === 'host:unsaved').map(([, , a]) => a);
-    // Asked once more after saving, in case more work appeared meanwhile.
     expect(actions).toEqual(['query', 'save', 'query']);
     expect(deck.contents.closed).toBe(true);
   });
@@ -251,7 +245,6 @@ describe('TabManager unsaved work', () => {
     expect(asked(first.contents)).toEqual(['query', 'discard', 'query']);
     expect(asked(second.contents)).toEqual(['query', 'query']);
     expect(asked(third.contents)).toEqual(['query', 'save', 'query']);
-    // Asking destroys nothing; the caller does that once it has the answer.
     expect(first.contents.closed).toBe(false);
   });
 
@@ -340,7 +333,6 @@ describe('TabManager tab switcher', () => {
     const second = await open('second');
 
     expect(press(second.contents, { key: 'Tab' })).toBe(true);
-    // The swallowed page hears no key-ups, so the switcher has taken the keys.
     expect(switcher.contents?.focuses).toBe(1);
     expect(press(switcher.contents, CTRL_UP)).toBe(false);
 

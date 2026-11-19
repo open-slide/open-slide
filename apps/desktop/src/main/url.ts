@@ -15,3 +15,7 @@ export function originOf(value: string): string | null {
     return null;
   }
 }
+
+export function deckPath(slideId: string): string {
+  return `/s/${encodeURIComponent(slideId)}`;
+}

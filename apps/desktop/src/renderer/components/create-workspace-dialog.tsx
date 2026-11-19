@@ -17,8 +17,7 @@ import { desktop, settle, useAppState, useLog } from '../lib/desktop';
 import { joinPath, sanitizeName, tildify } from '../lib/paths';
 import { LoadingLabel, LogView, Segmented } from './primitives';
 
-// `fixed` scaffolds into `parent` itself instead of a new folder below it.
-export type CreateTarget = { parent: string; name: string; fixed: boolean };
+export type CreateTarget = { parent: string; name: string; inPlace: boolean };
 
 type Phase = { kind: 'form' } | { kind: 'running' } | { kind: 'failed'; error: string };
 
@@ -41,7 +40,6 @@ export function CreateWorkspaceDialog({
   const creating = useRef(false);
 
   useEffect(() => {
-    // A menu request for another workspace mid-creation must not replace the running one.
     if (creating.current) return;
     setShown(target);
     if (!target) return;
@@ -61,9 +59,9 @@ export function CreateWorkspaceDialog({
     );
   }, [target, setLog]);
 
-  const fixed = shown?.fixed ?? false;
+  const inPlace = shown?.inPlace ?? false;
   const folderName = sanitizeName(name);
-  const destination = fixed || !parent ? parent : joinPath(parent, folderName, platform);
+  const destination = inPlace || !parent ? parent : joinPath(parent, folderName, platform);
   const running = phase.kind === 'running';
 
   const create = async () => {
@@ -73,7 +71,7 @@ export function CreateWorkspaceDialog({
     const result = await settle(
       desktop.workspace.create({
         parent,
-        name: fixed ? '.' : folderName,
+        name: inPlace ? '.' : folderName,
         packageManager: manager,
       }),
     );
@@ -99,7 +97,7 @@ export function CreateWorkspaceDialog({
         )}
       >
         <DialogHeader>
-          <DialogTitle>{fixed ? 'Set up this folder' : 'Create workspace'}</DialogTitle>
+          <DialogTitle>{inPlace ? 'Set up this folder' : 'Create workspace'}</DialogTitle>
           <DialogDescription>
             Scaffolds an open-slide workspace with the authoring skills for Claude Code and Codex,
             then installs its dependencies.
@@ -115,7 +113,7 @@ export function CreateWorkspaceDialog({
               void create();
             }}
           >
-            {!fixed && (
+            {!inPlace && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="workspace-name">Name</Label>
                 <Input
@@ -136,7 +134,7 @@ export function CreateWorkspaceDialog({
                 >
                   {tildify(destination) || '—'}
                 </p>
-                {!fixed && (
+                {!inPlace && (
                   <Button
                     type="button"
                     size="sm"

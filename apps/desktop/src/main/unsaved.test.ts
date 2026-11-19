@@ -13,7 +13,6 @@ function page(
   return {
     title,
     status: vi.fn(async () => current),
-    // Work that was settled is gone, as it is on a real page.
     settle: vi.fn(async (action: UnsavedAction) => {
       const outcome = outcomes[action] ?? { ok: true as const };
       if (outcome.ok) current = CLEAN;
@@ -26,7 +25,6 @@ function page(
   } satisfies UnsavedPage & { edit: (next: UnsavedStatus) => void };
 }
 
-// Answers each dialog with the label of the button to press.
 function prompts(...answers: string[]) {
   const shown: MessageBoxOptions[] = [];
   const prompt = vi.fn(async (options: MessageBoxOptions) => {

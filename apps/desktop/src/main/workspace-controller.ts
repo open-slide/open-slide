@@ -7,6 +7,7 @@ import type {
   WorkspaceError,
   WorkspaceInfo,
 } from '../shared/types';
+import { errorMessage } from './errors';
 import { type DeckSession, settings } from './settings';
 import { track } from './telemetry';
 import type { LeaveIntent } from './unsaved';
@@ -19,12 +20,7 @@ import {
   installDependencies,
 } from './workspace';
 
-// `created` was just scaffolded by this app; `restored` is reopened on launch.
 type OpenSource = 'restored' | 'created' | 'shell' | 'menu';
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
 
 type Tabs = {
   readonly session: DeckSession;
@@ -52,7 +48,6 @@ export class WorkspaceController {
 
   constructor(private readonly opts: Options) {}
 
-  // Resolves ok when the user backed out too; only a real failure is kept for the shell to show.
   open(root: string, source: OpenSource): Promise<TaskResult> {
     return this.report(this.transition(() => this.switchTo(root, source)));
   }
@@ -83,10 +78,9 @@ export class WorkspaceController {
     return null;
   }
 
-  // The dialog that asked shows the failure, so it is not also raised on the shell.
   async create(request: CreateWorkspaceRequest): Promise<TaskResult> {
-    const created = await this.scaffold('custom', request.packageManager, async () =>
-      createWorkspace(request, await this.opts.env(), (chunk) => this.opts.log('create', chunk)),
+    const created = await this.scaffold('custom', request.packageManager, (env, log) =>
+      createWorkspace(request, env, log),
     );
     if (!created.ok) return created;
     settings.update({ packageManager: request.packageManager });
@@ -94,17 +88,7 @@ export class WorkspaceController {
   }
 
   createDefault(): Promise<TaskResult> {
-    return this.report(
-      (async () => {
-        const created = await this.scaffold('default', undefined, async () =>
-          createDefaultWorkspace(await this.opts.env(), (chunk) => this.opts.log('create', chunk)),
-        );
-        if (!created.ok) return created;
-        // A project already at the default location is not ours, so trust is asked for.
-        const source = created.created ? 'created' : 'shell';
-        return this.transition(() => this.switchTo(created.root, source));
-      })(),
-    );
+    return this.report(this.openDefault());
   }
 
   async install(): Promise<TaskResult> {
@@ -139,13 +123,21 @@ export class WorkspaceController {
     this.opts.onChange();
   }
 
+  private async openDefault(): Promise<TaskResult> {
+    const created = await this.scaffold('default', undefined, createDefaultWorkspace);
+    if (!created.ok) return created;
+    const source = created.created ? 'created' : 'shell';
+    return this.transition(() => this.switchTo(created.root, source));
+  }
+
   private async scaffold(
     method: 'custom' | 'default',
     packageManager: PackageManager | undefined,
-    create: () => Promise<CreateResult>,
+    create: (env: NodeJS.ProcessEnv, log: (chunk: string) => void) => Promise<CreateResult>,
   ): Promise<CreateResult> {
     const started = Date.now();
-    const result = await create();
+    const log = (chunk: string) => this.opts.log('create', chunk);
+    const result = await create(await this.opts.env(), log);
     if (!result.ok || result.created) {
       track(result.ok ? 'workspace_created' : 'workspace_create_failed', {
         method,
@@ -156,7 +148,6 @@ export class WorkspaceController {
     return result;
   }
 
-  // Two interleaved switches would leave one workspace's tabs on another's server.
   private transition<T>(task: () => Promise<T>): Promise<T> {
     const run = this.queue.then(task);
     this.queue = run.catch(() => {});

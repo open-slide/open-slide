@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { HapticPattern } from '../shared/types';
+import { isMac } from './platform';
 
 // NSHapticFeedbackPattern values.
 const PATTERNS: Record<HapticPattern, number> = { generic: 0, alignment: 1, levelChange: 2 };
@@ -9,7 +10,7 @@ const MIN_INTERVAL_MS = 40;
 type Native = { perform(pattern: number): void };
 
 function load(): Native | null {
-  if (process.platform !== 'darwin') return null;
+  if (!isMac) return null;
   try {
     return createRequire(import.meta.url)(path.join(import.meta.dirname, '../native/haptics.node'));
   } catch (error) {

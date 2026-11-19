@@ -12,7 +12,6 @@ export type WorkspaceChoiceProps = {
   onOpenRecent: (path: string) => void;
 };
 
-// Results are ignored: the main process reports failures in the app state so every window shows them.
 export const openWorkspace = (path: string) => void settle(desktop.workspace.open(path));
 
 export function useWorkspaceActions(openCreate: (target: CreateTarget) => void) {
@@ -20,14 +19,14 @@ export function useWorkspaceActions(openCreate: (target: CreateTarget) => void) 
 
   const choose = useCallback(async () => {
     const picked = await desktop.workspace.choose().catch(() => null);
-    if (picked) openCreate({ parent: picked.create, name: '', fixed: true });
+    if (picked) openCreate({ parent: picked.create, name: '', inPlace: true });
   }, [openCreate]);
 
   const createNew = useCallback(async () => {
     openCreate({
       parent: await desktop.workspace.defaultParent(),
       name: 'my-slides',
-      fixed: false,
+      inPlace: false,
     });
   }, [openCreate]);
 

@@ -8,6 +8,7 @@ import {
   shell,
   type WebContents,
 } from 'electron';
+import { isMac } from './platform';
 
 export type MenuActions = {
   openSettings: () => void;
@@ -27,7 +28,6 @@ export type MenuActions = {
 };
 
 export function installMenu(actions: MenuActions, recent: string[]) {
-  const isMac = process.platform === 'darwin';
   const tabItems: MenuItemConstructorOptions[] = Array.from({ length: 9 }, (_, i) => ({
     label: i === 8 ? 'Last Tab' : `Tab ${i + 1}`,
     accelerator: `CmdOrCtrl+${i + 1}`,
@@ -115,8 +115,7 @@ export function installMenu(actions: MenuActions, recent: string[]) {
         { role: 'zoom' },
         { type: 'separator' },
         { label: 'Home', accelerator: 'CmdOrCtrl+Shift+H', click: actions.goHome },
-        // Ctrl+Tab belongs to the tab switcher, which reads the keys itself; off
-        // macOS the menu only displays it.
+        // Off macOS the tab switcher reads Ctrl+Tab itself; the menu only displays it.
         {
           label: 'Show Next Tab',
           accelerator: isMac ? 'Cmd+Shift+]' : 'Ctrl+Tab',

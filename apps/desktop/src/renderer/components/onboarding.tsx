@@ -142,7 +142,6 @@ function subscribeVisibility(listener: () => void) {
   return () => document.removeEventListener('visibilitychange', listener);
 }
 
-// The window may mount hidden or under the intro; hold the entrance until it is visible.
 function useArmed(ready: boolean): boolean {
   const visible = useSyncExternalStore(
     subscribeVisibility,

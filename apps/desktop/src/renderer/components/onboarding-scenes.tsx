@@ -35,7 +35,6 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-// Ms since mount in ~30ms steps, frozen at `until`; reduced motion starts on the final frame.
 function useElapsed(until: number): number {
   const [elapsed, setElapsed] = useState(() => (prefersReducedMotion() ? until : 0));
   useEffect(() => {
@@ -115,7 +114,6 @@ type SlideProps = {
   className?: string;
 };
 
-// Sized in container units, so one slide reads right as a rail thumbnail and on the canvas.
 function Slide({
   look = EMBER,
   page = 'cover',

@@ -8,7 +8,7 @@ export function joinPath(parent: string, name: string, platform: string): string
   return parent.endsWith(sep) ? `${parent}${name}` : `${parent}${sep}${name}`;
 }
 
-// Mirrors the CLI's sanitizeDirName; an all-dots name would resolve to a parent, not a child.
+// Mirrors the CLI's sanitizeDirName.
 export function sanitizeName(value: string): string {
   const safe = value
     .trim()

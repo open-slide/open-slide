@@ -11,7 +11,6 @@ type FakeSession = {
   cancelled: boolean;
 };
 
-// `slowExit` stands in for a CLI that takes a moment to exit after it is cancelled.
 function setup({ slowExit = false } = {}) {
   const sessions: FakeSession[] = [];
   const changes: LoginState[] = [];
@@ -144,7 +143,6 @@ describe('AgentLogins', () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(sessions).toHaveLength(1);
 
-    // The stale completion of the first attempt must not end the retry.
     cancelled.finish({ ok: false, error: 'Sign-in exited with code null' });
     await first;
     await vi.waitFor(() => expect(sessions).toHaveLength(2));

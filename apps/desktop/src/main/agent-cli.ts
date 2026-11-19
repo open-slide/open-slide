@@ -7,13 +7,14 @@ import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { app, net } from 'electron';
 import { AGENT_IDS, type AgentId, type LoginState } from '../shared/types';
+import { isWindows } from './platform';
 import { run, windowsTool } from './process';
 import { findPackage, modulesDir, readPackageJson } from './workspace';
 
 const REGISTRY = 'https://registry.npmjs.org';
 const EXTRACT_TIMEOUT_MS = 5 * 60 * 1000;
 const PROGRESS_INTERVAL_MS = 100;
-const EXE = process.platform === 'win32' ? '.exe' : '';
+const EXE = isWindows ? '.exe' : '';
 const PLATFORM = `${process.platform}-${process.arch}`;
 
 const CODEX_TRIPLES: Record<string, string> = {
@@ -25,15 +26,18 @@ const CODEX_TRIPLES: Record<string, string> = {
   'win32-x64': 'x86_64-pc-windows-msvc',
 };
 
+function codexVendorDir(root: string): string {
+  return path.join(root, 'vendor', CODEX_TRIPLES[PLATFORM] ?? PLATFORM);
+}
+
 type CliSpec = {
   command: string;
   sdkPackage: string;
   name: string;
-  // The SDK dependency that pins the platform build, when the SDK does not pin it itself.
   pinnedBy?: string;
   platformPackage: string;
-  // The first holds the executable.
-  binDirs: (root: string) => string[];
+  binDir: (root: string) => string;
+  companionDirs?: (root: string) => string[];
 };
 
 const SPECS: Record<AgentId, CliSpec> = {
@@ -42,7 +46,7 @@ const SPECS: Record<AgentId, CliSpec> = {
     sdkPackage: '@anthropic-ai/claude-agent-sdk',
     name: 'Claude Code',
     platformPackage: `@anthropic-ai/claude-agent-sdk-${PLATFORM}`,
-    binDirs: (root) => [root],
+    binDir: (root) => root,
   },
   codex: {
     command: 'codex',
@@ -50,11 +54,8 @@ const SPECS: Record<AgentId, CliSpec> = {
     name: 'Codex',
     pinnedBy: '@openai/codex',
     platformPackage: `@openai/codex-${PLATFORM}`,
-    binDirs: (root) => {
-      const vendor = path.join(root, 'vendor', CODEX_TRIPLES[PLATFORM] ?? PLATFORM);
-      // Codex shells out to the ripgrep it ships next to itself.
-      return [path.join(vendor, 'bin'), path.join(vendor, 'codex-path')];
-    },
+    binDir: (root) => path.join(codexVendorDir(root), 'bin'),
+    companionDirs: (root) => [path.join(codexVendorDir(root), 'codex-path')],
   },
 };
 
@@ -76,7 +77,6 @@ function pin(id: AgentId): Pin | null {
   return pins.get(id) ?? null;
 }
 
-// The SDK ships without its native CLI; the build it expects is the one its package pins.
 function readPin(spec: CliSpec): Pin | null {
   const sdkDir = path.join(modulesDir(), spec.sdkPackage);
   if (!existsSync(sdkDir)) return null;
@@ -95,12 +95,19 @@ function versionDir(id: AgentId, version: string): string {
   return path.join(agentsRoot(), id, version);
 }
 
-function binDirs(id: AgentId, version: string): string[] {
-  return SPECS[id].binDirs(path.join(versionDir(id, version), 'package'));
+function packageDir(id: AgentId, version: string): string {
+  return path.join(versionDir(id, version), 'package');
+}
+
+function pathDirs(id: AgentId, version: string): string[] {
+  const { binDir, companionDirs } = SPECS[id];
+  const root = packageDir(id, version);
+  return [binDir(root), ...(companionDirs?.(root) ?? [])];
 }
 
 function executable(id: AgentId, version: string): string {
-  return path.join(binDirs(id, version)[0], SPECS[id].command + EXE);
+  const { binDir, command } = SPECS[id];
+  return path.join(binDir(packageDir(id, version)), command + EXE);
 }
 
 function installedVersions(id: AgentId): string[] {
@@ -121,15 +128,15 @@ export function isManagedCli(file: string): boolean {
 
 let cliDirs: string[] | null = null;
 
-// The pinned version is listed before it exists, so servers already running find a CLI
-// downloaded mid-session; until then an older download stands in.
+// The pinned version is listed before it is downloaded, so servers already running find it
+// once it lands; until then an older download stands in.
 export function managedCliDirs(): string[] {
   cliDirs ??= AGENT_IDS.flatMap((id) => {
     const current = pin(id)?.version;
     const versions = current ? [current] : [];
     const fallback = installedVersions(id).find((v) => v !== current);
     if (fallback && !(current && existsSync(executable(id, current)))) versions.push(fallback);
-    return versions.flatMap((v) => binDirs(id, v));
+    return versions.flatMap((v) => pathDirs(id, v));
   });
   return cliDirs;
 }
@@ -156,6 +163,73 @@ export function cancelAllInstalls() {
   for (const { abort } of installs.values()) abort.abort();
 }
 
+async function registryDist(
+  target: Pin,
+  signal: AbortSignal,
+): Promise<{ tarball: string; sha512: string }> {
+  const url = `${REGISTRY}/${target.name.replace('/', '%2f')}/${encodeURIComponent(target.version)}`;
+  const res = await net.fetch(url, { signal });
+  if (!res.ok) throw new Error(`Registry responded ${res.status} for ${target.name}.`);
+  const { dist } = (await res.json()) as { dist?: { tarball?: string; integrity?: string } };
+  const sha512 = dist?.integrity?.startsWith('sha512-') ? dist.integrity.slice(7) : null;
+  if (!dist?.tarball || !sha512) throw new Error(`Registry has no checksum for ${target.name}.`);
+  if (!dist.tarball.startsWith(`${REGISTRY}/`)) {
+    throw new Error(`Registry pointed ${target.name} at an unexpected host.`);
+  }
+  return { tarball: dist.tarball, sha512 };
+}
+
+async function fetchTarball(
+  url: string,
+  file: string,
+  signal: AbortSignal,
+  onProgress: (progress: DownloadProgress) => void,
+): Promise<string> {
+  const res = await net.fetch(url, { signal });
+  if (!res.ok || !res.body) throw new Error(`Download failed with status ${res.status}.`);
+  const length = Number(res.headers.get('content-length'));
+  const total = Number.isFinite(length) && length > 0 ? length : null;
+  const hash = createHash('sha512');
+  let received = 0;
+  let reported = 0;
+  onProgress({ received, total });
+  const meter = new Transform({
+    transform(chunk: Buffer, _enc, callback) {
+      hash.update(chunk);
+      received += chunk.length;
+      const now = Date.now();
+      if (now - reported >= PROGRESS_INTERVAL_MS) {
+        reported = now;
+        onProgress({ received, total });
+      }
+      callback(null, chunk);
+    },
+  });
+  await pipeline(
+    Readable.fromWeb(res.body as ReadableStream<Uint8Array>),
+    meter,
+    createWriteStream(file),
+    { signal },
+  );
+  onProgress({ received, total });
+  return hash.digest('base64');
+}
+
+async function extractTarball(tarball: string, into: string, signal: AbortSignal) {
+  await mkdir(into, { recursive: true });
+  const tar = isWindows ? windowsTool('tar.exe') : 'tar';
+  signal.throwIfAborted();
+  const extract = run(tar, ['-xzf', tarball, '-C', into], {
+    cwd: path.dirname(tarball),
+    env: process.env,
+    timeoutMs: EXTRACT_TIMEOUT_MS,
+  });
+  signal.addEventListener('abort', () => void extract.terminate(), { once: true });
+  const { code, output } = await extract.done;
+  if (signal.aborted) throw signal.reason;
+  if (code !== 0) throw new Error(output.trim() || `tar exited with code ${code}`);
+}
+
 async function download(
   id: AgentId,
   signal: AbortSignal,
@@ -165,16 +239,7 @@ async function download(
   if (!target) throw new Error(`No ${SPECS[id].command} build is available for ${PLATFORM}.`);
   if (existsSync(executable(id, target.version))) return;
 
-  const metaUrl = `${REGISTRY}/${target.name.replace('/', '%2f')}/${encodeURIComponent(target.version)}`;
-  const metaRes = await net.fetch(metaUrl, { signal });
-  if (!metaRes.ok) throw new Error(`Registry responded ${metaRes.status} for ${target.name}.`);
-  const dist = ((await metaRes.json()) as { dist?: { tarball?: string; integrity?: string } }).dist;
-  const expected = dist?.integrity?.startsWith('sha512-') ? dist.integrity.slice(7) : null;
-  if (!dist?.tarball || !expected) throw new Error(`Registry has no checksum for ${target.name}.`);
-  if (!dist.tarball.startsWith(`${REGISTRY}/`)) {
-    throw new Error(`Registry pointed ${target.name} at an unexpected host.`);
-  }
-
+  const dist = await registryDist(target, signal);
   const agentDir = path.join(agentsRoot(), id);
   const tarball = path.join(agentDir, `.${target.version}.tgz`);
   const staging = path.join(agentDir, `.${target.version}.partial`);
@@ -182,50 +247,11 @@ async function download(
   await rm(staging, { recursive: true, force: true });
 
   try {
-    const res = await net.fetch(dist.tarball, { signal });
-    if (!res.ok || !res.body) throw new Error(`Download failed with status ${res.status}.`);
-    const length = Number(res.headers.get('content-length'));
-    const total = Number.isFinite(length) && length > 0 ? length : null;
-    const hash = createHash('sha512');
-    let received = 0;
-    let reported = 0;
-    onProgress({ received, total });
-    const meter = new Transform({
-      transform(chunk: Buffer, _enc, callback) {
-        hash.update(chunk);
-        received += chunk.length;
-        const now = Date.now();
-        if (now - reported >= PROGRESS_INTERVAL_MS) {
-          reported = now;
-          onProgress({ received, total });
-        }
-        callback(null, chunk);
-      },
-    });
-    await pipeline(
-      Readable.fromWeb(res.body as ReadableStream<Uint8Array>),
-      meter,
-      createWriteStream(tarball),
-      { signal },
-    );
-    onProgress({ received, total });
-    if (hash.digest('base64') !== expected) {
+    const sha512 = await fetchTarball(dist.tarball, tarball, signal, onProgress);
+    if (sha512 !== dist.sha512) {
       throw new Error(`The downloaded ${target.name} failed its checksum.`);
     }
-
-    await mkdir(staging, { recursive: true });
-    const tar = process.platform === 'win32' ? windowsTool('tar.exe') : 'tar';
-    signal.throwIfAborted();
-    const extract = run(tar, ['-xzf', tarball, '-C', staging], {
-      cwd: agentDir,
-      env: process.env,
-      timeoutMs: EXTRACT_TIMEOUT_MS,
-    });
-    signal.addEventListener('abort', () => void extract.terminate(), { once: true });
-    const { code, output } = await extract.done;
-    if (signal.aborted) throw signal.reason;
-    if (code !== 0) throw new Error(output.trim() || `tar exited with code ${code}`);
-
+    await extractTarball(tarball, staging, signal);
     await rm(versionDir(id, target.version), { recursive: true, force: true });
     await rename(staging, versionDir(id, target.version));
     cliDirs = null;
@@ -238,8 +264,6 @@ async function download(
   }
 }
 
-// Drops downloads the bundled SDK has moved past, and refreshes a stale one so the CLI keeps
-// matching its SDK across app updates.
 export async function syncManagedClis() {
   for (const id of AGENT_IDS) {
     const current = pin(id)?.version;

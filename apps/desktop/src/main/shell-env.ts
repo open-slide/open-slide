@@ -1,21 +1,20 @@
 import { execFile } from 'node:child_process';
 import { statSync } from 'node:fs';
 import path from 'node:path';
+import { isWindows } from './platform';
 import { settings } from './settings';
 
 const MARKER = '__OPEN_SLIDE_ENV__';
 const TIMEOUT_MS = 5000;
 const MAX_ATTEMPTS = 3;
-// These describe the probe's own shell, not the environment a terminal would have.
-const SHELL_STATE = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'DISABLE_AUTO_UPDATE']);
-const isWindows = process.platform === 'win32';
+const PROBE_SHELL_STATE = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'DISABLE_AUTO_UPDATE']);
 
 let probe: Promise<NodeJS.ProcessEnv> | null = null;
 let probed = false;
 let attempts = 0;
 
 // Apps launched from Finder inherit launchd's bare environment, so the login shell is asked
-// for a terminal's. That takes about a second; until then, launches reuse the last PATH found.
+// for a terminal's; until it answers, the PATH from the last launch stands in.
 export function shellEnv(): Promise<NodeJS.ProcessEnv> {
   const login = loginEnv();
   const cached = settings.loginPath();
@@ -23,7 +22,6 @@ export function shellEnv(): Promise<NodeJS.ProcessEnv> {
   return Promise.resolve(withPath({ PATH: cached }));
 }
 
-// Always waits for the shell, so long-lived children get the profile's other exports too.
 export function loginEnv(): Promise<NodeJS.ProcessEnv> {
   probe ??= readLoginEnv().then((login) => {
     if (!login?.PATH) {
@@ -56,7 +54,7 @@ function parseEnv(block: string): NodeJS.ProcessEnv | null {
     const eq = entry.indexOf('=');
     if (eq < 1) continue;
     const key = entry.slice(0, eq);
-    if (!SHELL_STATE.has(key)) env[key] = entry.slice(eq + 1);
+    if (!PROBE_SHELL_STATE.has(key)) env[key] = entry.slice(eq + 1);
   }
   return env.PATH ? env : null;
 }
@@ -104,7 +102,7 @@ export function findOnPath(command: string, env: NodeJS.ProcessEnv): string | nu
   return search(command, env, isWindows ? (env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';') : ['']);
 }
 
-// An absolute path is spawned without a shell, which cannot run a Windows .cmd shim.
+// The result is spawned without a shell, which cannot run a Windows .cmd shim.
 export function findExecutable(command: string, env: NodeJS.ProcessEnv): string | null {
   return search(command, env, [isWindows ? '.exe' : '']);
 }

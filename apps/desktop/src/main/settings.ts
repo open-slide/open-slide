@@ -120,7 +120,6 @@ function current(): Stored {
 function flush() {
   if (writeTimer) clearTimeout(writeTimer);
   writeTimer = null;
-  // Runs from a timer and on quit, where a full disk must not crash the app; the next save retries.
   try {
     const target = file();
     mkdirSync(path.dirname(target), { recursive: true });
@@ -165,7 +164,6 @@ export const settings = {
   },
   workspace: (): string | null => current().workspace,
   recent: (): string[] => current().recent,
-  // Returns the workspaces pushed off the recent list, whose records are forgotten.
   setWorkspace(root: string | null): string[] {
     const s = current();
     s.workspace = root;

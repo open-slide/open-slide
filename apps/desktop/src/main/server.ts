@@ -8,8 +8,10 @@ import {
   listeningPort,
   MANAGED_CORE_ENV,
   RESTART_EXIT_CODE,
+  SHUTDOWN_GRACE_MS,
 } from '../../../../packages/core/src/supervision';
 import type { PackageManager, ServerStatus } from '../shared/types';
+import { errorMessage } from './errors';
 import { stripAnsi } from './process';
 import { bundledCore, needsInstall } from './workspace';
 
@@ -48,8 +50,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
   private child: ChildProcess | null = null;
   private exited: Promise<void> | null = null;
   private root: string | null = null;
-  // Last requested workspace, which the queue may not have reached yet.
-  private wanted: string | null = null;
+  private requestedRoot: string | null = null;
   private port: number | null = null;
   private logText = '';
   private generation = 0;
@@ -73,17 +74,16 @@ export class DevServer extends EventEmitter<ServerEvents> {
   }
 
   start(root: string): Promise<void> {
-    this.wanted = root;
+    this.requestedRoot = root;
     return this.enqueue(async (latest) => {
       if (latest()) await this.launch(root, true);
     });
   }
 
-  // Targets the last request, so a start still queued is not dropped for the previous workspace.
   restart(): Promise<void> {
-    if (!this.wanted) return Promise.resolve();
+    if (!this.requestedRoot) return Promise.resolve();
     return this.enqueue(async (latest) => {
-      const root = this.wanted;
+      const root = this.requestedRoot;
       if (root && latest()) await this.launch(root, root !== this.root);
     });
   }
@@ -103,13 +103,12 @@ export class DevServer extends EventEmitter<ServerEvents> {
   }
 
   stop(): Promise<void> {
-    this.wanted = null;
+    this.requestedRoot = null;
     return this.enqueue(async (latest) => {
       if (latest()) await this.halt();
     });
   }
 
-  // Serialized, and a request overtaken while waiting is skipped, so the last request wins.
   private enqueue(task: (latest: () => boolean) => Promise<void>): Promise<void> {
     const request = ++this.request;
     const run = this.queue.then(() => task(() => request === this.request));
@@ -126,7 +125,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
     this.root = null;
     this.setStatus({ state: 'idle' });
     if (!child || !exited || child.exitCode !== null || child.signalCode !== null) return;
-    const timer = setTimeout(() => child.kill('SIGKILL'), 3000);
+    const timer = setTimeout(() => child.kill('SIGKILL'), SHUTDOWN_GRACE_MS);
     child.kill('SIGTERM');
     await exited;
     clearTimeout(timer);
@@ -164,7 +163,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
       this.port ??= await reservePort(this.ports.get(root) ?? 0).catch(() => reservePort(0));
       env = await this.env();
     } catch (err) {
-      if (generation === this.generation) this.fail('exited', (err as Error).message);
+      if (generation === this.generation) this.fail('exited', errorMessage(err));
       return;
     }
     if (generation !== this.generation) return;
@@ -212,8 +211,8 @@ export class DevServer extends EventEmitter<ServerEvents> {
       });
       child.on('error', (err) => {
         this.append(`${err.message}\n`);
-        // A failed spawn never emits exit.
-        if (child.pid !== undefined) return;
+        const neverSpawned = child.pid === undefined;
+        if (!neverSpawned) return;
         end(null, null, err);
         resolve();
       });

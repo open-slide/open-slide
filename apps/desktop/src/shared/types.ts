@@ -11,8 +11,7 @@ export type {
 
 export const TAB_STRIP_HEIGHT = 40;
 
-// Matches no core route, so a spare view boots the app on a cheap not-found
-// page until a tab adopts it.
+// Matches no core route, so a spare view boots core on a cheap not-found page.
 export const SPARE_PATH = '/__open-slide-spare__';
 
 export const PACKAGE_MANAGERS = ['pnpm', 'npm', 'yarn', 'bun'] as const;
@@ -35,25 +34,20 @@ export type TabInfo = {
   loading: boolean;
 };
 
-// A deck's cover is its first page as a data URL, or null until it has been captured.
 export type SwitcherTab = Pick<TabInfo, 'id' | 'kind' | 'title'> & { cover: string | null };
 
-// Tabs in most-recently-used order.
 export type SwitcherState = { tabs: SwitcherTab[]; selectedId: string };
 
 export type WorkspaceInfo = { root: string; name: string };
 
-// The id lets a surface dismiss the failure it showed, not one that replaced it.
 export type WorkspaceError = { id: number; message: string };
 
 export type AppState = {
   platform: string;
   translucent: boolean;
-  // #rrggbbaa, or null where the platform has none.
   accent: string | null;
   fullscreen: boolean;
   onboarding: boolean;
-  // The full-screen intro is still covering the main window.
   intro: boolean;
   workspace: WorkspaceInfo | null;
   workspaceError: WorkspaceError | null;
@@ -100,7 +94,6 @@ export type AgentInfo = {
   sdkVersion: string | null;
   cliPath: string | null;
   cliSource: 'path' | 'downloaded' | null;
-  // No CLI was found, but signing in can download the build the SDK pins.
   cliInstallable: boolean;
   cliVersion: string | null;
   signedIn: boolean | null;
@@ -109,7 +102,6 @@ export type AgentInfo = {
 
 export type LoginState = {
   id: AgentId;
-  // Counts this agent's sign-in attempts.
   operation: number;
   phase: 'idle' | 'downloading' | 'signing-in' | 'succeeded' | 'failed';
   output: string;
@@ -124,7 +116,6 @@ export type LogEvent = { task: LogTask; chunk: string };
 
 export type ShellCommand = 'open-workspace' | 'new-workspace';
 
-// The main window's frame in the intro window's coordinates.
 export type IntroTarget = {
   x: number;
   y: number;
@@ -171,11 +162,9 @@ export type ShellApi = {
   };
   switcher: {
     onState(listener: (state: SwitcherState | null) => void): () => void;
-    // Null dismisses the switcher without switching.
     pick(id: string | null): void;
   };
   workspace: {
-    // An empty folder that still needs setting up, or null once nothing is left to do.
     choose(): Promise<{ create: string } | null>;
     chooseParent(): Promise<string | null>;
     defaultParent(): Promise<string>;

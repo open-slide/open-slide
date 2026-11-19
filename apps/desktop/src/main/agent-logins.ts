@@ -1,5 +1,6 @@
 import { AGENT_IDS, type AgentId, type LoginState, type TaskResult } from '../shared/types';
 import type { LoginHooks, LoginSession } from './agents';
+import { errorMessage } from './errors';
 
 const OUTPUT_LIMIT = 16 * 1024;
 
@@ -21,12 +22,10 @@ function idle(id: AgentId, operation: number): LoginState {
   return { id, operation, phase: 'idle', output: '', url: null, download: null, error: null };
 }
 
-// Sign-ins outlive the window that started them, so every surface renders this one snapshot.
-// What a cancelled or replaced attempt still reports is dropped by its operation number.
 export class AgentLogins {
   private readonly states = new Map<AgentId, LoginState>(AGENT_IDS.map((id) => [id, idle(id, 0)]));
   private readonly running = new Map<AgentId, Running>();
-  // A cancelled CLI may still hold its callback port while it exits, so a retry waits for it.
+  // A cancelled CLI may still hold its callback port while it exits.
   private readonly ending = new Map<AgentId, Promise<unknown>>();
 
   constructor(private readonly opts: Options) {}
@@ -70,10 +69,7 @@ export class AgentLogins {
       const session = this.opts.start(id, hooks);
       entry.session = session;
       const result = await session.done.catch(
-        (err: unknown): TaskResult => ({
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-        }),
+        (err: unknown): TaskResult => ({ ok: false, error: errorMessage(err) }),
       );
       if (!live()) return result;
       this.running.delete(id);
