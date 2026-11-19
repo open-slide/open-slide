@@ -32,6 +32,7 @@ export const zhTW: Locale = {
   slideError: {
     compileTitle: '投影片編譯失敗',
     moduleTitle: '投影片載入時發生錯誤',
+    notFoundTitle: '找不到投影片',
     renderTitle: '第 {n} 頁渲染失敗',
     pageCrashed: '此頁渲染失敗',
     staleNotice: '錯誤修正前，先顯示上一個可用的版本。',

@@ -32,6 +32,7 @@ export const zhCN: Locale = {
   slideError: {
     compileTitle: '幻灯片编译失败',
     moduleTitle: '幻灯片加载时出错',
+    notFoundTitle: '找不到幻灯片',
     renderTitle: '第 {n} 页渲染失败',
     pageCrashed: '此页渲染失败',
     staleNotice: '错误修复前，先显示上一个可用的版本。',

@@ -122,6 +122,8 @@ test.describe('slide errors', () => {
       expect(prompt).toContain('`slides/err-render/` throws while rendering page 2');
       expect(prompt).toContain('Component stack:');
 
+      // Arrow keys are ignored while a button has focus.
+      await p.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
       await p.keyboard.press('ArrowLeft');
       await expect(canvas.getByText('Fine page')).toBeVisible();
       await expect(banner).toBeHidden();

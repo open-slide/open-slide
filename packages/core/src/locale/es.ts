@@ -32,6 +32,7 @@ export const es: Locale = {
   slideError: {
     compileTitle: 'La diapositiva no compila',
     moduleTitle: 'La diapositiva falló al cargar',
+    notFoundTitle: 'Diapositiva no encontrada',
     renderTitle: 'La página {n} no se pudo renderizar',
     pageCrashed: 'La página no se pudo renderizar',
     staleNotice: 'Mostrando la última versión que funcionaba hasta que se corrija el error.',

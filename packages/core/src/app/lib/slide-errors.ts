@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { Page } from './sdk';
 
-export type SlideErrorKind = 'compile' | 'module' | 'render';
+export type SlideErrorKind = 'compile' | 'module' | 'render' | 'missing';
 
 export type SlideErrorInfo = {
   kind: SlideErrorKind;
@@ -130,7 +130,10 @@ function errorMessage(error: unknown): string {
 // The slide route shows that error itself, so Vite's overlay is dismissed.
 export async function describeLoadError(error: unknown, since: number): Promise<SlideErrorInfo> {
   if (!isImportFailure(error)) {
-    return { kind: 'module', message: errorMessage(error), stack: errorStack(error) };
+    const message = errorMessage(error);
+    // Thrown by the generated `loadSlide` in virtual:open-slide/slides.
+    if (message.startsWith('Slide not found: ')) return { kind: 'missing', message };
+    return { kind: 'module', message, stack: errorStack(error) };
   }
   if (import.meta.env.DEV) {
     suppressOverlayUntil = Date.now() + 2000;

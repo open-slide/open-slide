@@ -34,6 +34,7 @@ export type Locale = {
   slideError: {
     compileTitle: string;
     moduleTitle: string;
+    notFoundTitle: string;
     /** {n} = page number */
     renderTitle: string;
     pageCrashed: string;

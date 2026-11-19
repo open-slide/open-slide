@@ -117,6 +117,11 @@ describe('describeLoadError', () => {
     expect(info.message).toBe('boom');
     expect(info.stack).toContain('boom');
   });
+
+  it('reports an unknown slide id as missing rather than a module crash', async () => {
+    const info = await describeLoadError(new Error('Slide not found: nope'), Date.now());
+    expect(info).toEqual({ kind: 'missing', message: 'Slide not found: nope' });
+  });
 });
 
 describe('buildFixPrompt', () => {

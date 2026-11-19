@@ -32,6 +32,7 @@ export const ja: Locale = {
   slideError: {
     compileTitle: 'スライドのコンパイルに失敗しました',
     moduleTitle: 'スライドの読み込み中にエラーが発生しました',
+    notFoundTitle: 'スライドが見つかりません',
     renderTitle: '{n} ページ目の描画に失敗しました',
     pageCrashed: 'このページの描画に失敗しました',
     staleNotice: 'エラーが修正されるまで、最後に動作したバージョンを表示しています。',

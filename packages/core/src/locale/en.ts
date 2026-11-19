@@ -32,6 +32,7 @@ export const en: Locale = {
   slideError: {
     compileTitle: "This slide doesn't compile",
     moduleTitle: 'This slide threw while loading',
+    notFoundTitle: 'Slide not found',
     renderTitle: 'Page {n} failed to render',
     pageCrashed: 'Page failed to render',
     staleNotice: 'Showing the last working version until the error is fixed.',

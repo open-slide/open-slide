@@ -151,6 +151,7 @@ function useErrorTitle(info: SlideErrorInfo, pageNumber?: number) {
   const t = useLocale();
   if (info.kind === 'compile') return t.slideError.compileTitle;
   if (info.kind === 'module') return t.slideError.moduleTitle;
+  if (info.kind === 'missing') return t.slideError.notFoundTitle;
   return format(t.slideError.renderTitle, { n: pageNumber ?? '?' });
 }
 
@@ -165,19 +166,20 @@ export function SlideErrorScreen({
 }) {
   const t = useLocale();
   const title = useErrorTitle(info);
+  const fixable = import.meta.env.DEV && info.kind !== 'missing';
   return (
     <div className={cn('flex flex-col', className)} data-osd-slide-error={info.kind}>
       <span className="eyebrow text-destructive/80">{t.common.loadFailed}</span>
       <h2 className="mt-2 font-heading text-xl font-semibold tracking-tight text-foreground">
         {title}
       </h2>
-      {import.meta.env.DEV && (
+      {fixable && (
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
           {t.slideError.fixHint}
         </p>
       )}
       <ErrorDetails info={info} className="mt-5" />
-      {import.meta.env.DEV && (
+      {fixable && (
         <div className="mt-5 flex">
           <CopyFixPromptButton info={info} slideId={slideId} />
         </div>
