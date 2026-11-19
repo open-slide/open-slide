@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import type { AppState, DesktopSettings, PackageManager } from '../../shared/types';
 import { desktop, TELEMETRY_DOCS_URL, useAppState, useLog } from '../lib/desktop';
 import { baseName, tildify } from '../lib/paths';
+import { rovingIndex } from '../lib/roving';
 import { openWorkspace } from '../lib/workspace-actions';
 import { AgentsSection } from './agents-section';
 import { LogView, SectionCard, Segmented, StatusDot } from './primitives';
@@ -19,13 +20,6 @@ const SECTIONS: { id: SectionId; label: string; icon: React.ReactNode }[] = [
 ];
 
 const SECTION_KEY = 'settings-section';
-
-const TAB_KEYS: Record<string, (index: number) => number> = {
-  ArrowRight: (i) => (i + 1) % SECTIONS.length,
-  ArrowLeft: (i) => (i - 1 + SECTIONS.length) % SECTIONS.length,
-  Home: () => 0,
-  End: () => SECTIONS.length - 1,
-};
 
 function storedSection(): SectionId {
   try {
@@ -45,7 +39,6 @@ export function SettingsWindow() {
   const label = SECTIONS.find((s) => s.id === section)?.label ?? 'Settings';
   const ready = state !== null;
 
-  // The main window's create dialog can change the saved package manager.
   useEffect(() => {
     const load = () => void desktop.settings.get().then(setPrefs);
     load();
@@ -69,7 +62,6 @@ export function SettingsWindow() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // The window follows the pane's natural height instead of scrolling a fixed frame.
   useLayoutEffect(() => {
     const header = headerRef.current;
     const body = bodyRef.current;
@@ -90,10 +82,11 @@ export function SettingsWindow() {
   const sectionProps = { state, prefs, onUpdate: update };
 
   const onTabKey = (e: React.KeyboardEvent) => {
-    const move = TAB_KEYS[e.key];
-    if (!move) return;
+    const at = SECTIONS.findIndex((s) => s.id === section);
+    const to = rovingIndex(e.key, at, SECTIONS.length);
+    if (to === null) return;
     e.preventDefault();
-    const next = SECTIONS[move(SECTIONS.findIndex((s) => s.id === section))];
+    const next = SECTIONS[to];
     setSection(next.id);
     tabsRef.current?.querySelector<HTMLElement>(`#settings-tab-${next.id}`)?.focus();
   };
@@ -157,7 +150,6 @@ export function SettingsWindow() {
       >
         <div ref={bodyRef} className="flex flex-col gap-3 px-5 pt-4 pb-5">
           {section === 'workspace' && (
-            // Remounted per workspace so the log never shows the previous one's output.
             <WorkspaceSection key={state.workspace?.root ?? ''} {...sectionProps} />
           )}
           {section === 'agents' && <AgentsSection />}

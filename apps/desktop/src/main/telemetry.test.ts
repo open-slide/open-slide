@@ -29,8 +29,6 @@ vi.mock('./settings', () => ({
   },
 }));
 vi.mock('./workspace', () => ({ bundledCore: () => ({ version: 'test' }) }));
-// The real SDK, with the global transport replaced: nothing here reaches the
-// network, and the app's own consent gate in front of it stays in place.
 const statuses: number[] = [];
 async function transport(_url: string, init: RequestInit): Promise<Response> {
   const body = init.body;
@@ -124,7 +122,6 @@ describe('telemetry opt-out', () => {
   it('never sends an event the SDK was still preparing when telemetry was turned off', async () => {
     const telemetry = await load();
     telemetry.track('handed_to_sdk');
-    // The batch hands the event to the SDK, which prepares it asynchronously.
     vi.advanceTimersByTime(BATCH_INTERVAL_MS);
 
     fixture.telemetry = false;

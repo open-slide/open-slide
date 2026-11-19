@@ -17,7 +17,6 @@ body {
   cursor: default;
 }
 
-/* Neutral wash so saturated wallpaper doesn't tint the translucent chrome; deck views sit clear above it. */
 html[data-translucent] body {
   background-color: oklch(0.975 0 0 / 0.6);
 }
@@ -40,7 +39,6 @@ textarea,
   -webkit-app-region: no-drag;
 }
 
-/* Like native chrome: dim the ink, not the backgrounds, while the window isn't key. */
 [data-inactive] .window-chrome :is(svg, img, span):not(:has(svg, img, span)) {
   opacity: 0.55;
 }

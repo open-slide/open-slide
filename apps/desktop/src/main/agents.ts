@@ -2,15 +2,15 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AgentId, AgentInfo, LoginState, TaskResult } from '../shared/types';
 import { cancelInstall, canInstallCli, cliSpec, installCli, isManagedCli } from './agent-cli';
+import { errorMessage } from './errors';
 import { type RunHandle, run } from './process';
 import { findExecutable } from './shell-env';
 import { modulesDir, readPackageJson, taskResult } from './workspace';
 
 const STATUS_TIMEOUT_MS = 10_000;
 const LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
-// Skips loopback: Codex prints its own callback server's address ahead of the sign-in page.
+// Skips loopback: Codex prints its own callback server's address before the sign-in page.
 const URL_RE = /https?:\/\/(?!localhost\b|127\.0\.0\.1|\[::1\])[^\s"'<>]+/;
-// Output arrives in arbitrary chunks, so a URL is only whole once something follows it.
 const COMPLETE_URL_RE = new RegExp(`${URL_RE.source}(?=[\\s"'<>])`);
 const URL_SETTLE_MS = 200;
 const URL_SCAN_LIMIT = 8 * 1024;
@@ -60,7 +60,6 @@ const AGENTS: Record<AgentId, AgentSpec> = {
   },
 };
 
-// A CLI on the user's PATH wins over the downloaded one, which core's providers find on PATH too.
 function resolveCli(agent: AgentSpec, env: NodeJS.ProcessEnv) {
   const found = findExecutable(agent.command, env);
   if (!found) return null;
@@ -129,7 +128,7 @@ export function startLogin(
         await installCli(id, hooks.download);
       } catch (err) {
         const aborted = err instanceof Error && err.name === 'AbortError';
-        return { ok: false, error: aborted ? 'Download cancelled.' : (err as Error).message };
+        return { ok: false, error: aborted ? 'Download cancelled.' : errorMessage(err) };
       }
       hooks.installed();
     }
@@ -155,7 +154,6 @@ export function startLogin(
         scanned = (scanned + chunk).slice(-URL_SCAN_LIMIT);
         clearTimeout(settle);
         openFrom(COMPLETE_URL_RE);
-        // A prompt can end on the URL and wait there for input.
         if (!opened) settle = setTimeout(() => openFrom(URL_RE), URL_SETTLE_MS);
       },
     });

@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { AppState, TabInfo } from '../../shared/types';
 import { desktop } from '../lib/desktop';
+import { rovingIndex } from '../lib/roving';
 
 const EDGE_FADE = 20;
 
@@ -16,7 +17,6 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ start: false, end: false });
-  // Roving tabindex: the tab the arrow keys last reached, else the active one.
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const rovingId = state.tabs.some((tab) => tab.id === focusedId) ? focusedId : state.activeTabId;
   const { activeTabId } = state;
@@ -70,20 +70,13 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
     return () => list.removeEventListener('wheel', onWheel);
   }, [showTabs]);
 
-  // Arrow keys only move focus: activating hands focus to the page, ending keyboard navigation.
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const from = e.target as HTMLElement;
     if (from.getAttribute('role') !== 'tab') return;
     const at = state.tabs.findIndex((tab) => tab.id === from.dataset.tabId);
     if (at < 0) return;
-    const last = state.tabs.length - 1;
-    const to: number | undefined = {
-      ArrowRight: at === last ? 0 : at + 1,
-      ArrowLeft: at === 0 ? last : at - 1,
-      Home: 0,
-      End: last,
-    }[e.key];
-    if (to === undefined) return;
+    const to = rovingIndex(e.key, at, state.tabs.length);
+    if (to === null) return;
     e.preventDefault();
     tabElement(listRef.current, state.tabs[to].id)?.focus();
   };

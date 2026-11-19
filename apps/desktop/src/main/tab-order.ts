@@ -9,7 +9,6 @@ export function moveTab<T>(tabs: readonly T[], from: number, to: number): T[] {
   return next;
 }
 
-// Most recently used first; tabs never visited follow in strip order.
 export function recencyOrder(ids: readonly string[], recent: readonly string[]): string[] {
   const open = new Set(ids);
   const visited = [...new Set(recent)].filter((id) => open.has(id));

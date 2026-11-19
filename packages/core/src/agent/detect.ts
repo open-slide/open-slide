@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { AGENT_MODULES_ENV } from '../supervision.ts';
 
 const IS_WINDOWS = process.platform === 'win32';
 const VERSION_TIMEOUT_MS = 5000;
@@ -156,10 +157,6 @@ function readPackageAt(pkgDir: string): ResolvedPackage | null {
   if (!entry) return null;
   return { dir: pkgDir, version: pkg.version ?? '0.0.0', entry: path.resolve(pkgDir, entry) };
 }
-
-// node_modules directories a host ships the agent SDKs in. The workspace's own
-// copy still wins, keeping a version the user pinned.
-export const AGENT_MODULES_ENV = 'OPEN_SLIDE_AGENT_MODULES';
 
 export function resolveAgentPackage(
   userCwd: string,

@@ -51,7 +51,6 @@ describe('QuitGate', () => {
     await vi.waitFor(() => expect(order).toEqual(['confirm', 'cleanup']));
     expect(gate.leaving).toBe(true);
 
-    // Quitting again while cleanup runs is held too, and starts nothing new.
     const again = event();
     gate.beforeQuit(again);
     expect(again.preventDefault).toHaveBeenCalled();

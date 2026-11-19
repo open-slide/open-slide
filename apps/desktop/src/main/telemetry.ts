@@ -33,8 +33,8 @@ function enabled(): boolean {
   return client !== null && settings.get().telemetry;
 }
 
-// Events wait here rather than in the SDK, which cannot drop what it queued, as an opt-out
-// must. Nothing leaves before the tour that announces telemetry ends.
+// Events wait here rather than in the SDK, which cannot drop what it queued on opt-out.
+// Nothing leaves before the tour that announces telemetry ends.
 const waiting: ((client: PostHog) => void)[] = [];
 let batchTimer: NodeJS.Timeout | null = null;
 
@@ -84,8 +84,8 @@ const OS_NAMES: Partial<Record<NodeJS.Platform, string>> = {
   linux: 'Linux',
 };
 
-// The home directory names the user. The SDK makes frame paths relative to the cwd, `/` when
-// packaged, so it also appears without its root. Matched as JSON text, longest first.
+// The SDK makes frame paths relative to the cwd, `/` when packaged, so the home directory
+// also appears without its root.
 function homeNeedles(): string[] {
   const home = os.homedir();
   if (!home) return [];
@@ -109,13 +109,11 @@ function redact(event: EventMessage): EventMessage {
 const FILE_URL_RE = /file:\/\/[^'"`\n]*/g;
 const LOCAL_URL_RE = /(https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?)[^\s"'`)]*/g;
 const QUOTED_PATH_RE = /(['"`])(?:\/|[A-Za-z]:[\\/]|\\\\)[^'"`\n]*\1/g;
-// An unquoted path may contain spaces, so it runs to the next quote, colon or line end.
 const POSIX_PATH_RE = /(?<![\w.:/<])\/(?:[^\s/'":]+\/)+[^'":\n]*/g;
 const WINDOWS_PATH_RE = /(?:\b[A-Za-z]:[\\/]|(?<![\w\\])\\\\)[^'":\n]+/g;
 const FRAME_RE = /^\s+at /;
 const RUNTIME_FRAME_RE = /(?:\(|at )(?:node:|native\b|<anonymous>)/;
 
-// Messages quote paths named after decks and dev-server URLs ending in deck ids.
 function scrubMessage(text: string): string {
   return text
     .replace(FILE_URL_RE, 'file://<path>')
@@ -135,8 +133,6 @@ function isOwnFrame(line: string): boolean {
   return RUNTIME_FRAME_RE.test(line) || ownCode.some((root) => line.includes(root));
 }
 
-// Frames in the app's own bundle keep their location so they map to source; any other frame
-// could name a workspace file, so its location is dropped.
 function scrubStack(stack: string): string {
   return stack
     .split('\n')
@@ -162,7 +158,6 @@ export function scrubError(error: unknown): Error {
 let errorWindowStart = 0;
 const reported = new Set<string>();
 
-// Each distinct error is sent once a minute, up to a cap, so one thrown per frame is not a flood.
 function shouldReport(error: Error): boolean {
   const now = Date.now();
   if (now - errorWindowStart > ERROR_WINDOW_MS) {
@@ -175,7 +170,6 @@ function shouldReport(error: Error): boolean {
   return true;
 }
 
-// Kept on disk: PostHog cannot symbolicate minidumps, so the next launch reports a count.
 export function startCrashReporter() {
   crashReporter.start({ uploadToServer: false, compress: true });
 }
@@ -202,7 +196,7 @@ export function initTelemetry() {
   });
   if (!settings.get().telemetry) void client.optOut();
 
-  // A monitor keeps Electron's own dialog for uncaught main-process exceptions.
+  // A monitor, unlike a handler, keeps Electron's own dialog for uncaught exceptions.
   process.on('uncaughtExceptionMonitor', (error, origin) => {
     captureError(error, { source: 'main', origin });
   });

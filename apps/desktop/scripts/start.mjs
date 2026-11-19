@@ -12,7 +12,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const require = createRequire(import.meta.url);
 
 // macOS takes the Dock and menu bar name from the bundle, not app.setName(), so dev runs a
-// renamed copy of Electron.app and leaves the stock one untouched.
+// renamed copy of Electron.app.
 function prepareMacBundle(electronBinary) {
   const electronDir = path.dirname(require.resolve('electron/package.json'));
   const icon = path.join(root, 'build/icon-dev.icns');

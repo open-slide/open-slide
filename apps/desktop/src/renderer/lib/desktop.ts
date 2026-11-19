@@ -19,7 +19,6 @@ export const desktop = window.desktop;
 
 export const TELEMETRY_DOCS_URL = 'https://open-slide.dev/docs/reference/desktop-telemetry';
 
-// A handler that throws in the main process rejects instead of resolving a failed result.
 export async function settle(task: Promise<TaskResult>): Promise<TaskResult> {
   try {
     return await task;
@@ -54,7 +53,6 @@ export function useAppState(): AppState | null {
   return useSyncExternalStore(appState.subscribe, appState.get);
 }
 
-// Subscribed at load: the first state can arrive before any component mounts.
 const switcher = createStore<SwitcherState | null>(null);
 desktop.switcher.onState(switcher.set);
 
@@ -65,7 +63,7 @@ export function useSwitcher(): SwitcherState | null {
 const logins = createStore<Partial<Record<AgentId, LoginState>>>({});
 const publishLogin = (next: LoginState) => logins.set({ ...logins.get(), [next.id]: next });
 
-// Subscribed before the snapshot is requested; IPC is ordered, so the snapshot never clobbers newer state.
+// Subscribed before the snapshot is requested: IPC is ordered, so it never clobbers newer state.
 desktop.agents.onLoginState(publishLogin);
 void desktop.agents
   .logins()

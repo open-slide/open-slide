@@ -4,6 +4,7 @@ import path from 'node:path';
 import { type BindCLIShortcutsOptions, createServer, mergeConfig, type ViteDevServer } from 'vite';
 import {
   DEV_SUPERVISED_ENV,
+  isSupervised,
   listeningMessage,
   listeningPort,
   RESTART_EXIT_CODE,
@@ -26,7 +27,7 @@ export interface DevOptions {
 }
 
 export async function dev(opts: DevOptions = {}): Promise<void> {
-  if (process.env[DEV_SUPERVISED_ENV] === '1') {
+  if (isSupervised()) {
     await startServer(opts);
     return;
   }

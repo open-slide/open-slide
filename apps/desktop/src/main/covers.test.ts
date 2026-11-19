@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const fixture = vi.hoisted(() => ({
   loads: [] as string[],
   windows: 0,
-  // What the preview page reports, by deck.
   states: {} as Record<string, string>,
   hold: null as Promise<void> | null,
 }));

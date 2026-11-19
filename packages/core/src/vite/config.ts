@@ -5,14 +5,13 @@ import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import type { InlineConfig } from 'vite';
-import { CACHE_DIR_ENV } from '../supervision.ts';
+import { CACHE_DIR_ENV, isManagedCore } from '../supervision.ts';
 import { apiPlugin } from './api-plugin.ts';
 import { currentPlugin } from './current-plugin.ts';
 import { designPlugin } from './design-plugin.ts';
 import { locTagsPlugin } from './loc-tags-plugin.ts';
 import { notesPlugin } from './notes-plugin.ts';
 import { loadUserConfig, type OpenSlideConfig, openSlidePlugin } from './open-slide-plugin.ts';
-import { isManagedCore } from './routes/update.ts';
 import { serverInfoPlugin } from './server-info-plugin.ts';
 import { themesPlugin } from './themes-plugin.ts';
 

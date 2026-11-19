@@ -41,7 +41,6 @@ function parseOutcome(payload: unknown): UnsavedOutcome {
   return { ok: false, error: message.slice(0, ERROR_LIMIT) };
 }
 
-// A page that is closed, crashes, or stays silent answers null.
 export class UnsavedChannel {
   private readonly waiting = new Map<
     number,
@@ -99,8 +98,18 @@ function titles(pages: UnsavedPage[]): string {
   return pages.length === 1 ? '' : `${pages.map((page) => page.title).join('\n')}\n\n`;
 }
 
-// Destroying a page runs none of its cleanup, so its unsaved work is settled
-// here first. Resolves false when the pages must stay.
+type FailedSave = { page: UnsavedPage; error: string };
+
+async function settleAll(
+  settling: { page: UnsavedPage; action: UnsavedAction }[],
+): Promise<FailedSave[]> {
+  const outcomes = await Promise.all(settling.map(({ page, action }) => page.settle(action)));
+  return settling.flatMap(({ page }, i) => {
+    const outcome = outcomes[i];
+    return outcome.ok ? [] : [{ page, error: outcome.error }];
+  });
+}
+
 export class UnsavedGuard {
   private busy = false;
 
@@ -108,7 +117,6 @@ export class UnsavedGuard {
 
   async confirm(pages: UnsavedPage[], intent: LeaveIntent): Promise<boolean> {
     if (pages.length === 0) return true;
-    // A second decision would race the one on screen for the same pages.
     if (this.busy) return false;
     this.busy = true;
     try {
@@ -120,8 +128,7 @@ export class UnsavedGuard {
 
   private async decide(pages: UnsavedPage[], intent: LeaveIntent): Promise<boolean> {
     const { doing, anyway } = INTENTS[intent];
-    // A clean page can pick up work while another is being settled, so all are
-    // asked again until none has any left.
+    // A clean page can pick up work while another is settled, so all are asked again.
     let asking = pages;
     for (;;) {
       const statuses = await Promise.all(asking.map((page) => page.status()));
@@ -131,59 +138,65 @@ export class UnsavedGuard {
       if (silent.length + drafted.length + landing.length === 0) return true;
 
       if (silent.length > 0) {
-        silent[0].reveal();
-        const choice = await this.prompt({
-          type: 'warning',
-          message: `${quoted(silent)} ${silent.length === 1 ? 'isn’t' : 'aren’t'} responding`,
-          detail: `${titles(silent)}Any changes that haven’t been saved there will be lost.`,
-          buttons: [anyway, 'Cancel'],
-          defaultId: 1,
-          cancelId: 1,
-        });
-        if (choice !== 0) return false;
+        if (!(await this.confirmLosing(silent, anyway))) return false;
         asking = asking.filter((page) => !silent.includes(page));
       }
+      const drafts = drafted.length > 0 ? await this.askAboutDrafts(drafted, doing) : 'save';
+      if (drafts === 'cancel') return false;
 
-      let save = true;
-      if (drafted.length > 0) {
-        drafted[0].reveal();
-        const choice = await this.prompt({
-          type: 'question',
-          message: `Save changes to ${quoted(drafted)} before ${doing}?`,
-          detail: `${titles(drafted)}Changes that aren’t saved will be lost.`,
-          buttons: ['Save', 'Don’t Save', 'Cancel'],
-          defaultId: 0,
-          cancelId: 2,
-        });
-        if (choice === 2) return false;
-        save = choice === 0;
-      }
-
-      const settling = [
-        ...drafted.map((page) => ({ page, action: save ? 'save' : 'discard' }) as const),
-        ...landing.map((page) => ({ page, action: 'save' }) as const),
-      ];
-      const outcomes = await Promise.all(settling.map(({ page, action }) => page.settle(action)));
-      const failed = settling.flatMap(({ page }, i) => {
-        const outcome = outcomes[i];
-        return outcome.ok ? [] : [{ page, error: outcome.error }];
-      });
+      const failed = await settleAll([
+        ...drafted.map((page) => ({ page, action: drafts })),
+        ...landing.map((page) => ({ page, action: 'save' as const })),
+      ]);
       if (failed.length === 0) continue;
-
-      failed[0].page.reveal();
-      const reasons = failed
-        .map(({ page, error }) => (failed.length === 1 ? error : `${page.title}: ${error}`))
-        .join('\n');
-      const choice = await this.prompt({
-        type: 'error',
-        message: `Couldn’t save changes to ${quoted(failed.map(({ page }) => page))}`,
-        detail: `${reasons}\n\nGo back to try again, or discard the changes.`,
-        buttons: ['Go Back', 'Discard Changes'],
-        defaultId: 0,
-        cancelId: 0,
-      });
-      if (choice !== 1) return false;
+      if (!(await this.confirmDiscarding(failed))) return false;
       await Promise.all(failed.map(({ page }) => page.settle('abandon')));
     }
+  }
+
+  private async confirmLosing(silent: UnsavedPage[], anyway: string): Promise<boolean> {
+    silent[0].reveal();
+    const choice = await this.prompt({
+      type: 'warning',
+      message: `${quoted(silent)} ${silent.length === 1 ? 'isn’t' : 'aren’t'} responding`,
+      detail: `${titles(silent)}Any changes that haven’t been saved there will be lost.`,
+      buttons: [anyway, 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+    });
+    return choice === 0;
+  }
+
+  private async askAboutDrafts(
+    drafted: UnsavedPage[],
+    doing: string,
+  ): Promise<'save' | 'discard' | 'cancel'> {
+    drafted[0].reveal();
+    const choice = await this.prompt({
+      type: 'question',
+      message: `Save changes to ${quoted(drafted)} before ${doing}?`,
+      detail: `${titles(drafted)}Changes that aren’t saved will be lost.`,
+      buttons: ['Save', 'Don’t Save', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+    });
+    if (choice === 2) return 'cancel';
+    return choice === 0 ? 'save' : 'discard';
+  }
+
+  private async confirmDiscarding(failed: FailedSave[]): Promise<boolean> {
+    failed[0].page.reveal();
+    const reasons = failed
+      .map(({ page, error }) => (failed.length === 1 ? error : `${page.title}: ${error}`))
+      .join('\n');
+    const choice = await this.prompt({
+      type: 'error',
+      message: `Couldn’t save changes to ${quoted(failed.map(({ page }) => page))}`,
+      detail: `${reasons}\n\nGo back to try again, or discard the changes.`,
+      buttons: ['Go Back', 'Discard Changes'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    return choice === 1;
   }
 }

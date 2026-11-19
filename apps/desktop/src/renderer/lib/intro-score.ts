@@ -34,7 +34,6 @@ const hz = (name: string) => {
   return 440 * 2 ** ((pitchClass + (Number(octave) + 1) * 12 - 69) / 12);
 };
 
-// Holds near full before thinning out; a plain exponential drops most of its level at once.
 function makeFadeCurve(from: number) {
   const curve = new Float32Array(512);
   for (let i = 0; i < curve.length; i++) {
@@ -100,7 +99,6 @@ function makeHall(ctx: BaseAudioContext, seconds: number) {
     let smoothed = 0;
     for (let i = 0; i < length; i++) {
       const progress = i / length;
-      // Air absorbs highs first, so the tail darkens as it decays.
       smoothed += (0.75 - 0.62 * progress) * (Math.random() * 2 - 1 - smoothed);
       data[i] = smoothed * Math.exp(-6.5 * progress);
     }
@@ -360,7 +358,6 @@ function performScore(ctx: BaseAudioContext, output: AudioNode, cues: ScoreCues,
     cutoff.exponentialRampToValueAtTime(1500, flatten);
     cutoff.exponentialRampToValueAtTime(3200, sheen);
     cutoff.exponentialRampToValueAtTime(3800, morph);
-    // Closes as the window winds back, so the opening hits harder when it commits.
     cutoff.exponentialRampToValueAtTime(1900, morph + 0.2);
     cutoff.exponentialRampToValueAtTime(8500, lands - 0.03);
     cutoff.setValueAtTime(14000, lands);
@@ -369,7 +366,6 @@ function performScore(ctx: BaseAudioContext, output: AudioNode, cues: ScoreCues,
     cutoff.exponentialRampToValueAtTime(1100, exit + 8.5);
   }
 
-  // A held breath just before the hit: the contrast is what makes it feel huge.
   rack.pad.gain.setValueAtTime(1, lands - 0.2);
   rack.pad.gain.linearRampToValueAtTime(0.12, lands - 0.02);
   rack.pad.gain.setValueAtTime(1, lands);
@@ -414,7 +410,6 @@ const SILENT: IntroSound = {
 export function createIntroSound(cues: ScoreCues): IntroSound {
   let ctx: AudioContext;
   try {
-    // Nothing reacts to input, so a larger buffer is free insurance against dropouts.
     ctx = new AudioContext({ latencyHint: 'playback' });
   } catch {
     return SILENT;

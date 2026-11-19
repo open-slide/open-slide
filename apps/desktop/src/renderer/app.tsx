@@ -19,7 +19,6 @@ import { Welcome } from './components/welcome';
 import { desktop, useAppState, useWindowAppearance } from './lib/desktop';
 import { openWorkspace, useWorkspaceActions } from './lib/workspace-actions';
 
-// First-run only, so everyday windows never parse them.
 const Intro = lazy(() => import('./components/intro').then((m) => ({ default: m.Intro })));
 const Onboarding = lazy(() =>
   import('./components/onboarding').then((m) => ({ default: m.Onboarding })),
@@ -67,18 +66,16 @@ function MainWindow() {
           ? 'server'
           : 'tabs';
 
-  // Welcome and the tour show failures inline; elsewhere they are raised as a sheet.
   const error = state?.workspaceError ?? null;
   const inlineError = screen === 'welcome' || screen === 'onboarding';
   const raisedError = inlineError || createTarget !== null ? null : error;
 
-  // Tab contents are native views stacked above this page; hide them while the shell draws over them.
+  // Tab contents are native views stacked above this page, hidden while the shell draws over them.
   const overlay = screen !== 'tabs' || createTarget !== null || raisedError !== null;
   useEffect(() => desktop.setOverlay(overlay), [overlay]);
 
   if (!state) return null;
 
-  // Restored tabs stay usable while the server boots.
   const booting =
     screen === 'server' && (state.server.state === 'idle' || state.server.state === 'starting');
   const choices = {
@@ -117,9 +114,8 @@ function MainWindow() {
 }
 
 function WorkspaceErrorDialog({ error }: { error: WorkspaceError | null }) {
-  // The message stays up while the sheet animates out.
-  const [shown, setShown] = useState(error);
-  if (error && error !== shown) setShown(error);
+  const [lastError, setLastError] = useState(error);
+  if (error && error !== lastError) setLastError(error);
   const dismiss = () => {
     if (error) desktop.workspace.dismissError(error.id);
   };
@@ -136,7 +132,9 @@ function WorkspaceErrorDialog({ error }: { error: WorkspaceError | null }) {
       >
         <DialogHeader>
           <DialogTitle>Couldn’t open the workspace</DialogTitle>
-          <DialogDescription className="selectable break-words">{shown?.message}</DialogDescription>
+          <DialogDescription className="selectable break-words">
+            {lastError?.message}
+          </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button autoFocus onClick={dismiss}>

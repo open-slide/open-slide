@@ -29,6 +29,7 @@ import {
 } from '../../editing/slide-ops.ts';
 import { readManifest, writeManifest } from '../../files/folders.ts';
 import { isLoopbackRequest, validateMutationRequest } from '../../http/request-guard.ts';
+import { SHUTDOWN_GRACE_MS } from '../../supervision.ts';
 import { invalidateSlidesModule } from '../open-slide-plugin.ts';
 import { recordWrite } from '../recent-writes.ts';
 import { createAgentBroadcast } from './agent-events.ts';
@@ -172,8 +173,7 @@ function parseTurnSettings(raw: Record<string, unknown>): TurnSettings {
 }
 
 const AGENT_BODY_LIMIT = 1024 * 1024;
-// Short of the three seconds the desktop app gives the server to exit.
-const STOP_TIMEOUT_MS = 2000;
+const STOP_TIMEOUT_MS = SHUTDOWN_GRACE_MS - 1000;
 
 class ClosingError extends Error {}
 

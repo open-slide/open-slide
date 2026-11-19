@@ -10,9 +10,7 @@ const IN_OUT = 'cubic-bezier(0.65, 0, 0.35, 1)';
 const DRIFT_IN = 'cubic-bezier(0.2, 0.55, 0.25, 1)';
 const FLOAT = 'cubic-bezier(0.37, 0, 0.63, 1)';
 const SETTLE = 'cubic-bezier(0.42, 0, 0.18, 1)';
-// The negative control point pulls the window back a little before it commits.
 const COLLAPSE = 'cubic-bezier(0.7, -0.1, 0.1, 1)';
-// The dark deepens by fading a sheet over the translucent veil; repainting the veil is costly.
 const VEIL = 'rgb(11 9 8 / 0.58)';
 const DIM = { mid: 0.24, deep: 0.57 };
 const WORDMARK = 'open-slide';
@@ -32,7 +30,6 @@ type Seat = [
   entry: number,
 ];
 
-// In landing order; x and width are fractions of the stage's span, y of its height.
 const SEATS: Seat[] = [
   ['chart', -0.285, -0.24, 0.185, 0.24, -7, 0, 2],
   ['quote', -0.03, -0.335, 0.122, 0.1, 5, 1.4, 0],
@@ -49,7 +46,6 @@ const RIG_START_Z = -0.45;
 const FLAT_ZOOM = 0.8;
 
 const TILE_BEVEL = 'inset 0 1px 0 rgb(255 255 255 / 0.9), inset 0 -2px 0 rgb(0 0 0 / 0.06)';
-// Soft shadows are costly to repaint, so each sits on its own layer that only moves and fades.
 const WINDOW_SHADOW = '0 40px 80px -24px rgb(0 0 0 / 0.65)';
 const TILE_SHADOW = '0 40px 90px -24px rgb(254 82 38 / 0.55), 0 18px 40px -12px rgb(0 0 0 / 0.6)';
 const SHEEN_FROM = 'translateX(-130%) skewX(-18deg)';
@@ -77,7 +73,6 @@ const FIRST_DOCK = at.gather + FLIGHT_MS;
 const ROLL_MS = at.flatten - FIRST_DOCK;
 const FLATTEN_END = at.flatten + FLATTEN_MS;
 const MORPH_END = at.morph + MORPH_MS;
-// COLLAPSE covers most of its travel early, so the mark reads as landed before the morph ends.
 const MARK_LANDS = MORPH_END - 350;
 
 const during = (fraction: number) => at.morph + MORPH_MS * fraction;
@@ -90,7 +85,6 @@ const rollEase = (progress: number) => (1 - Math.cos(Math.PI * progress)) / 2;
 const rollProgress = (eased: number) => Math.acos(1 - 2 * eased) / Math.PI;
 const ROLL_EASING = `linear(${Array.from({ length: 49 }, (_, i) => rollEase(i / 48).toFixed(4)).join(', ')})`;
 
-// Inverts the roll, so each card meets the top slot just as the rail makes room for it.
 const landAt = (order: number) => FIRST_DOCK + ROLL_MS * rollProgress(order / (CARD_COUNT - 1));
 
 const rollRemaining = (ms: number) => {
@@ -148,7 +142,6 @@ const mix = (from: Pose, to: Pose, amount: number) =>
     Object.entries(from).map(([key, value]) => [key, lerp(value, to[key as keyof Pose], amount)]),
   ) as Pose;
 
-// Card and thumbnail swap on landing, so both size their frame from their own width.
 const sketchFrame = (width: number): React.CSSProperties => {
   const unit = width / 220;
   return {
@@ -199,7 +192,6 @@ function layoutStage(w: number, h: number) {
   const margin = width * 0.036;
   const thumbWidth = width * 0.16;
   const thumbHeight = (thumbWidth * 9) / 16;
-  // The fifth thumbnail is cut in half by the window's edge, so the rail reads as scrollable.
   const pitch = (height - top - thumbHeight / 2) / VISIBLE_SLOTS;
   const rail: Rect = { x: win.x, y: win.y, width: inset * 2 + thumbWidth, height };
   const canvas: Rect = {
@@ -226,9 +218,7 @@ function layoutStage(w: number, h: number) {
 
   const cards = SEATS.map(
     ([variant, seatX, seatY, seatWidth, depth, twist, blur, entry], order) => {
-      // Seats sit deeper than a turn dips a card's corners, so none slices the window's plane.
       const z = depth * perspective;
-      // Undo the projection at rest, so depth reads as parallax without moving the composition.
       const fit = (perspective - z - RIG_REST_Z * perspective) / perspective;
       const cardWidth = seatWidth * span * fit;
       const x = seatX * span * fit;
@@ -523,7 +513,6 @@ export function Intro() {
       ]);
       track(railRef.current, lift(1, ' scale(1)', `${toTile(rail, 1)} scale(${shrink})`));
       track(railRef.current, [...rise, ...fade(during(0.2), during(0.6), 0)]);
-      // The rail scales evenly while the window doesn't, so its tint would pull off the edges.
       track(sidebarRef.current, fade(at.morph, during(0.25), 0));
       track(ringRef.current, [
         ...fade(at.flatten, at.flatten + 450, 1),
@@ -539,7 +528,6 @@ export function Intro() {
           const progress = (sample + 1) / FLIGHT_SAMPLES;
           const ms = depart + FLIGHT_MS * progress;
           const eased = settle(progress);
-          // eased² stops an early overshoot above the rail yet matches its speed at contact.
           const chase = (rollRemaining(ms) - rollRemaining(card.land)) * pitch * eased * eased;
           const pose = mix(card.drift, card.docked, eased);
           return [ms, { transform: place({ ...pose, y: pose.y - chase }) }];
@@ -554,7 +542,6 @@ export function Intro() {
         const land = fade(card.land - 1, card.land, 0, 'linear');
         const sharp = el?.lastElementChild;
         if (card.blur > 0) {
-          // A pre-blurred copy fades out only once the sharp one is in, so the card never thins.
           track(el?.firstElementChild, [
             ...appear,
             ...fade(depart + FOCUS_MS * 0.5, depart + FOCUS_MS, 0),
@@ -605,7 +592,6 @@ export function Intro() {
       });
       track(hintRef.current, [...fade(1600, 2500, 1), ...fade(at.gather, at.gather + 500, 0)]);
 
-      // Keeps the held frame from reading as stalled.
       animate(content, [{ transform: 'scale(1)' }, { transform: 'scale(1.03)' }], {
         delay: MORPH_END,
         duration: at.exit - MORPH_END,

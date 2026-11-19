@@ -52,7 +52,6 @@ export default defineConfig({
     },
   },
   renderer: {
-    // Core's own `@` alias, so the shell can import core's UI primitives from source.
     resolve: {
       alias: { '@': coreApp },
       dedupe: ['react', 'react-dom'],

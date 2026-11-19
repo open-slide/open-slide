@@ -24,7 +24,6 @@ const LOCKFILES: [string, PackageManager][] = [
   ['package-lock.json', 'npm'],
 ];
 
-// Unpacked next to app.asar, since the processes that load these cannot read inside it.
 export function modulesDir(): string {
   return path.join(app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked'), 'node_modules');
 }
@@ -58,7 +57,7 @@ export function findUp<T>(start: string, probe: (dir: string) => T | undefined):
   }
 }
 
-// Node's lookup, without require.resolve's refusal of packages whose exports omit package.json.
+// Not require.resolve, which refuses packages whose exports omit package.json.
 export function findPackage(name: string, from: string): string | undefined {
   return findUp(from, (dir) => {
     const candidate = path.join(dir, 'node_modules', name);
@@ -73,7 +72,6 @@ function dependencyNames(pkg: Record<string, unknown>): string[] {
   });
 }
 
-// Only packages a workspace added itself need an install; @types/* only matter to the editor.
 export function needsInstall(root: string): boolean {
   const pkg = readPackageJson(root);
   return dependencyNames(pkg ?? {}).some(
@@ -145,7 +143,6 @@ export async function syncSkills(
   return taskResult(await done, 'sync:skills');
 }
 
-// `created` marks a workspace this call scaffolded, which is trusted without asking.
 export type CreateResult =
   | { ok: true; root: string; created: boolean }
   | { ok: false; error: string };
@@ -189,7 +186,6 @@ export function createWorkspace(
   return initWorkspace(request.parent, request.name, flags, env, onChunk);
 }
 
-// --no-git: on a Mac without developer tools, merely probing for git opens an install prompt.
 export async function createDefaultWorkspace(
   env: NodeJS.ProcessEnv,
   onChunk: (chunk: string) => void,
@@ -198,5 +194,7 @@ export async function createDefaultWorkspace(
   if (inspectWorkspace(root).kind === 'project') return { ok: true, root, created: false };
   const parent = path.dirname(root);
   await mkdir(parent, { recursive: true });
-  return initWorkspace(parent, path.basename(root), ['--no-install', '--no-git'], env, onChunk);
+  // On a Mac without developer tools, merely probing for git opens an install prompt.
+  const flags = ['--no-install', '--no-git'];
+  return initWorkspace(parent, path.basename(root), flags, env, onChunk);
 }

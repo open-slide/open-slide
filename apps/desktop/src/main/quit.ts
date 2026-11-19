@@ -4,8 +4,6 @@ type Options = {
   quit: () => void;
 };
 
-// Holds Electron's before-quit until unsaved work is settled and cleanup has
-// finished, then lets the second one through.
 export class QuitGate {
   private state: 'idle' | 'asking' | 'cleaning' | 'done' = 'idle';
 
