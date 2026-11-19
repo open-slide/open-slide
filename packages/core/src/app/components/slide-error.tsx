@@ -17,7 +17,7 @@ import {
 import { format, useLocale } from '../lib/use-locale';
 
 type PageErrorBoundaryProps = {
-  resetKey: unknown;
+  resetKeys: readonly unknown[];
   onError?: (error: unknown, componentStack?: string) => void;
   fallback?: (error: unknown) => ReactNode;
   children: ReactNode;
@@ -38,7 +38,11 @@ export class PageErrorBoundary extends Component<
   }
 
   componentDidUpdate(prev: PageErrorBoundaryProps) {
-    if (this.state.failed && prev.resetKey !== this.props.resetKey) {
+    const { resetKeys } = this.props;
+    const changed =
+      prev.resetKeys.length !== resetKeys.length ||
+      resetKeys.some((key, i) => !Object.is(key, prev.resetKeys[i]));
+    if (this.state.failed && changed) {
       this.setState({ failed: false, error: null });
     }
   }
@@ -53,7 +57,7 @@ export function SafePage({ page: PageComponent }: { page: Page }) {
   const slot = useSlidePageIndex() ?? -1;
   return (
     <PageErrorBoundary
-      resetKey={PageComponent}
+      resetKeys={[PageComponent, slot]}
       onError={(error, componentStack) =>
         reportPageError(PageComponent, slot, describeRenderError(error, componentStack))
       }

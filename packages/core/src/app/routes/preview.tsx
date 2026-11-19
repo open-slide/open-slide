@@ -118,7 +118,7 @@ export function Preview() {
           <SlideCanvas flat freezeMotion design={slide.design}>
             <SlidePageProvider index={pageNumber - 1} total={pages.length}>
               <PageErrorBoundary
-                resetKey={Page}
+                resetKeys={[Page]}
                 onError={(e) =>
                   setRenderError({
                     page: Page,
