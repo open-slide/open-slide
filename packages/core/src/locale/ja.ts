@@ -15,7 +15,6 @@ export const ja: Locale = {
     close: '閉じる',
     loading: '読み込み中',
     loadFailed: '読み込みに失敗',
-    failedToLoadSlide: 'スライドの読み込みに失敗しました',
     home: 'ホーム',
     add: '追加',
     done: '完了',
@@ -28,6 +27,20 @@ export const ja: Locale = {
   notFound: {
     eyebrow: '404 · ページが見つかりません',
     title: 'ページが見つかりません',
+  },
+
+  slideError: {
+    compileTitle: 'スライドのコンパイルに失敗しました',
+    moduleTitle: 'スライドの読み込み中にエラーが発生しました',
+    notFoundTitle: 'スライドが見つかりません',
+    renderTitle: '{n} ページ目の描画に失敗しました',
+    pageCrashed: 'このページの描画に失敗しました',
+    staleNotice: 'エラーが修正されるまで、最後に動作したバージョンを表示しています。',
+    fixHint: 'エラーを修正して保存すると、スライドが自動で再読み込みされます。',
+    details: '詳細',
+    copyPrompt: '修正プロンプトをコピー',
+    copied: 'コピーしました',
+    copyFailed: 'クリップボードにコピーできませんでした',
   },
 
   home: {

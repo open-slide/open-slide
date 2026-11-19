@@ -30,6 +30,7 @@ import {
 } from '../components/present/use-presenter-channel';
 import { PreviewStepHost } from '../components/preview-step-host';
 import { SlideCanvas } from '../components/slide-canvas';
+import { SafePage, SlideErrorScreen } from '../components/slide-error';
 import { isDeckWarmed, markDeckWarmed, SlidePreloadLayer } from '../components/slide-preload-layer';
 import { SlidePageProvider } from '../lib/page-context';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, type SlideModule } from '../lib/sdk';
@@ -125,16 +126,10 @@ export function Presenter() {
     return () => window.removeEventListener('keydown', onKey);
   }, [goNext, goPrev, toggleBlack, toggleWhite]);
 
-  if (error) {
+  if (error && !slide) {
     return (
-      <div className="dark grid h-dvh place-items-center bg-background p-8 text-foreground">
-        <div className="max-w-md text-center">
-          <span className="eyebrow text-destructive/80">{t.common.loadFailed}</span>
-          <h2 className="mt-2 font-heading text-xl font-semibold">{t.common.failedToLoadSlide}</h2>
-          <pre className="mt-4 overflow-auto rounded-[6px] border border-border bg-card p-4 text-left text-[11.5px] whitespace-pre-wrap shadow-edge">
-            {error}
-          </pre>
-        </div>
+      <div className="dark grid h-dvh place-items-center overflow-auto bg-background p-8 text-foreground">
+        <SlideErrorScreen info={error} slideId={slideId} className="w-full max-w-2xl" />
       </div>
     );
   }
@@ -218,7 +213,7 @@ export function Presenter() {
             <SlideCanvas flat design={slide.design}>
               <SlidePageProvider index={index} total={total}>
                 <PreviewStepHost revealed={stepIndex}>
-                  <CurrentPage />
+                  <SafePage page={CurrentPage} />
                 </PreviewStepHost>
               </SlidePageProvider>
             </SlideCanvas>
@@ -249,7 +244,7 @@ export function Presenter() {
                 <SlideCanvas flat freezeMotion design={slide.design}>
                   <SlidePageProvider index={nextPageIndex} total={total}>
                     <PreviewStepHost revealed={nextRevealed}>
-                      <NextPage />
+                      <SafePage page={NextPage} />
                     </PreviewStepHost>
                   </SlidePageProvider>
                 </SlideCanvas>
@@ -464,7 +459,7 @@ function DeckSwitcher({
                       <SlideCanvas flat freezeMotion design={mod.design}>
                         <SlidePageProvider index={0} total={mod.default.length}>
                           <PreviewStepHost revealed={0}>
-                            <FirstPage />
+                            <SafePage page={FirstPage} />
                           </PreviewStepHost>
                         </SlidePageProvider>
                       </SlideCanvas>

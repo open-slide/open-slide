@@ -9,6 +9,7 @@ import type { SlideModule } from '../../lib/sdk';
 import { loadSlide, slidesByTheme } from '../../lib/slides';
 import { loadThemeDemo, type ThemeDemoModule, themes } from '../../lib/themes';
 import { SlideCanvas } from '../slide-canvas';
+import { SafePage } from '../slide-error';
 
 export function ThemeDetail({ themeId, onBack }: { themeId: string; onBack: () => void }) {
   const t = useLocale();
@@ -108,7 +109,7 @@ export function ThemeDetail({ themeId, onBack }: { themeId: string; onBack: () =
               ) : Current ? (
                 <SlideCanvas flat freezeMotion design={demo.design}>
                   <SlidePageProvider index={pageIndex} total={totalPages}>
-                    <Current />
+                    <SafePage page={Current} />
                   </SlidePageProvider>
                 </SlideCanvas>
               ) : null}
@@ -234,7 +235,7 @@ function ThemeSlideCard({ id }: { id: string }) {
           <div className="h-full w-full">
             <SlideCanvas flat freezeMotion design={slide?.design}>
               <SlidePageProvider index={0} total={slide?.default.length ?? 1}>
-                <FirstPage />
+                <SafePage page={FirstPage} />
               </SlidePageProvider>
             </SlideCanvas>
           </div>

@@ -15,7 +15,6 @@ export const es: Locale = {
     close: 'Cerrar',
     loading: 'Cargando',
     loadFailed: 'Error al cargar',
-    failedToLoadSlide: 'No se pudo cargar la presentación',
     home: 'Inicio',
     add: 'Añadir',
     done: 'Hecho',
@@ -28,6 +27,20 @@ export const es: Locale = {
   notFound: {
     eyebrow: '404 · no encontrada',
     title: 'Página no encontrada',
+  },
+
+  slideError: {
+    compileTitle: 'La diapositiva no compila',
+    moduleTitle: 'La diapositiva falló al cargar',
+    notFoundTitle: 'Diapositiva no encontrada',
+    renderTitle: 'La página {n} no se pudo renderizar',
+    pageCrashed: 'La página no se pudo renderizar',
+    staleNotice: 'Mostrando la última versión que funcionaba hasta que se corrija el error.',
+    fixHint: 'Corrige el error y guarda: la diapositiva se recarga sola.',
+    details: 'Detalles',
+    copyPrompt: 'Copiar prompt de corrección',
+    copied: 'Copiado',
+    copyFailed: 'No se pudo copiar al portapapeles',
   },
 
   home: {

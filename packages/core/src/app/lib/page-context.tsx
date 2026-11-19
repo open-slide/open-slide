@@ -27,6 +27,10 @@ export function SlidePageProvider({
   return <SlidePageContext.Provider value={value}>{children}</SlidePageContext.Provider>;
 }
 
+export function useSlidePageIndex(): number | undefined {
+  return useContext(SlidePageContext)?.index;
+}
+
 export function useSlidePageNumber(): { current: number; total: number } {
   const ctx = useContext(SlidePageContext);
   if (!ctx) {

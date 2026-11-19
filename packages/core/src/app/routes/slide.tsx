@@ -98,6 +98,7 @@ import {
   whenFullscreenSettled,
 } from '../components/present/curtain';
 import { SlideCanvas } from '../components/slide-canvas';
+import { SlideErrorBanner, SlideErrorScreen } from '../components/slide-error';
 import { isDeckWarmed, markDeckWarmed, SlidePreloadLayer } from '../components/slide-preload-layer';
 import { SlideTransitionLayer } from '../components/slide-transition-layer';
 import { type ThumbnailActions, ThumbnailRail } from '../components/thumbnail-rail';
@@ -110,6 +111,7 @@ import {
 } from '../lib/export-pptx';
 import { changeNotesPages } from '../lib/inspector/use-notes';
 import type { SlideModule } from '../lib/sdk';
+import { getPageError, usePageErrorsVersion } from '../lib/slide-errors';
 import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion';
 import { useSlideModule } from '../lib/use-slide-module';
 
@@ -246,6 +248,8 @@ export function Slide() {
   const pageCount = pages.length;
   const rawIndex = Number(searchParams.get('p') ?? '1') - 1;
   const index = Number.isFinite(rawIndex) ? Math.max(0, Math.min(pageCount - 1, rawIndex)) : 0;
+  usePageErrorsVersion();
+  const stageError = error ?? getPageError(pages[index], index) ?? null;
   const view = searchParams.get('view') === 'assets' ? 'assets' : 'slides';
 
   useEffect(() => {
@@ -470,7 +474,7 @@ export function Slide() {
     return () => window.removeEventListener('keydown', onKey);
   }, [index, goTo, playMode, curtain, slideId, overviewOpen, toggleAgent, present]);
 
-  if (error) {
+  if (error && !slide) {
     return (
       <div className="mx-auto max-w-3xl px-8 py-16 text-muted-foreground">
         {showSlideBrowser && (
@@ -478,13 +482,7 @@ export function Slide() {
             ← {t.common.home}
           </Link>
         )}
-        <span className="mt-6 block eyebrow text-destructive/80">{t.common.loadFailed}</span>
-        <h2 className="mt-2 font-heading text-xl font-semibold tracking-tight text-foreground">
-          {t.common.failedToLoadSlide}
-        </h2>
-        <pre className="mt-4 overflow-auto rounded-[6px] border border-border bg-card p-4 text-[11.5px] leading-relaxed whitespace-pre-wrap shadow-edge">
-          {error}
-        </pre>
+        <SlideErrorScreen info={error} slideId={slideId} className="mt-6" />
       </div>
     );
   }
@@ -942,6 +940,14 @@ export function Slide() {
           ) : (
             <DesignProvider slideId={slideId}>
               <div className="relative flex min-h-0 flex-1 flex-col">
+                {stageError && (
+                  <SlideErrorBanner
+                    info={stageError}
+                    slideId={slideId}
+                    pageNumber={index + 1}
+                    stale={stageError === error}
+                  />
+                )}
                 <div className="flex min-h-0 flex-1 flex-col md:flex-row">
                   <ResizableRail
                     pages={pages}

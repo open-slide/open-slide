@@ -15,7 +15,6 @@ export const zhCN: Locale = {
     close: '关闭',
     loading: '加载中',
     loadFailed: '加载失败',
-    failedToLoadSlide: '无法加载幻灯片',
     home: '首页',
     add: '添加',
     done: '完成',
@@ -28,6 +27,20 @@ export const zhCN: Locale = {
   notFound: {
     eyebrow: '404 · 未找到页面',
     title: '未找到页面',
+  },
+
+  slideError: {
+    compileTitle: '幻灯片编译失败',
+    moduleTitle: '幻灯片加载时出错',
+    notFoundTitle: '找不到幻灯片',
+    renderTitle: '第 {n} 页渲染失败',
+    pageCrashed: '此页渲染失败',
+    staleNotice: '错误修复前，先显示上一个可用的版本。',
+    fixHint: '修复错误并保存，幻灯片会自动重新加载。',
+    details: '详细信息',
+    copyPrompt: '复制修复 Prompt',
+    copied: '已复制',
+    copyFailed: '无法复制到剪贴板',
   },
 
   home: {
