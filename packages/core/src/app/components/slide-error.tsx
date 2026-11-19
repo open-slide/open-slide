@@ -4,9 +4,11 @@ import { Component, type ErrorInfo, type ReactNode, useEffect, useRef, useState 
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useSlidePageIndex } from '../lib/page-context';
 import type { Page } from '../lib/sdk';
 import {
   buildFixPrompt,
+  clearPageError,
   describeRenderError,
   formatLocation,
   reportPageError,
@@ -48,17 +50,26 @@ export class PageErrorBoundary extends Component<
 }
 
 export function SafePage({ page: PageComponent }: { page: Page }) {
+  const slot = useSlidePageIndex() ?? -1;
   return (
     <PageErrorBoundary
       resetKey={PageComponent}
       onError={(error, componentStack) =>
-        reportPageError(PageComponent, describeRenderError(error, componentStack))
+        reportPageError(PageComponent, slot, describeRenderError(error, componentStack))
       }
       fallback={(error) => <PageCrashCard error={error} />}
     >
       <PageComponent />
+      <ClearPageErrorOnCommit page={PageComponent} slot={slot} />
     </PageErrorBoundary>
   );
+}
+
+function ClearPageErrorOnCommit({ page, slot }: { page: Page; slot: number }) {
+  useEffect(() => {
+    clearPageError(page, slot);
+  }, [page, slot]);
+  return null;
 }
 
 function PageCrashCard({ error }: { error: unknown }) {

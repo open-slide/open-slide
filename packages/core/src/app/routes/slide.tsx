@@ -232,7 +232,7 @@ export function Slide() {
   const rawIndex = Number(searchParams.get('p') ?? '1') - 1;
   const index = Number.isFinite(rawIndex) ? Math.max(0, Math.min(pageCount - 1, rawIndex)) : 0;
   usePageErrorsVersion();
-  const stageError = error ?? getPageError(pages[index]) ?? null;
+  const stageError = error ?? getPageError(pages[index], index) ?? null;
   const view = searchParams.get('view') === 'assets' ? 'assets' : 'slides';
 
   useEffect(() => {

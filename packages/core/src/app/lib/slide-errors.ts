@@ -85,21 +85,43 @@ if (import.meta.hot) {
   });
 }
 
-function recentViteError(since: number): ViteErrorPayload | null {
-  return lastViteError && lastViteError.at >= since ? lastViteError.err : null;
+function viteErrorFile(err: ViteErrorPayload): string | undefined {
+  const file = err.loc?.file ?? err.id ?? err.message?.match(FRAME_LOCATION_RE)?.[1];
+  return file ? cleanDevUrls(file) : undefined;
 }
 
-function waitForViteError(since: number, ms: number): Promise<ViteErrorPayload | null> {
-  const ready = recentViteError(since);
+// Vite broadcasts transform errors to every client, so an error that arrives
+// during this load may belong to another deck.
+export function isDeckError(err: ViteErrorPayload, deckDir: string): boolean {
+  const file = viteErrorFile(err);
+  if (!file) return false;
+  const dir = deckDir.replace(/^\/+|\/+$/g, '');
+  return file === dir || file.startsWith(`${dir}/`) || file.includes(`/${dir}/`);
+}
+
+function recentViteError(since: number, deckDir: string): ViteErrorPayload | null {
+  if (!lastViteError || lastViteError.at < since) return null;
+  return isDeckError(lastViteError.err, deckDir) ? lastViteError.err : null;
+}
+
+function waitForViteError(
+  since: number,
+  deckDir: string,
+  ms: number,
+): Promise<ViteErrorPayload | null> {
+  const ready = recentViteError(since, deckDir);
   if (ready) return Promise.resolve(ready);
   return new Promise((resolve) => {
-    const done = () => {
+    const finish = () => {
       clearTimeout(timer);
-      viteErrorWaiters.delete(done);
-      resolve(recentViteError(since));
+      viteErrorWaiters.delete(check);
+      resolve(recentViteError(since, deckDir));
     };
-    const timer = setTimeout(done, ms);
-    viteErrorWaiters.add(done);
+    const check = () => {
+      if (recentViteError(since, deckDir)) finish();
+    };
+    const timer = setTimeout(finish, ms);
+    viteErrorWaiters.add(check);
   });
 }
 
@@ -107,7 +129,7 @@ async function fetchCompileError(error: Error): Promise<ViteErrorPayload | null>
   const url = error.message.match(/\bhttps?:\/\/\S+/)?.[0];
   if (!url) return null;
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
     if (res.ok) return null;
     return parseViteErrorPage(await res.text());
   } catch {
@@ -128,7 +150,11 @@ function errorMessage(error: unknown): string {
 // The browser only reports "failed to fetch module"; the real transform error
 // arrives via Vite's HMR channel or the 500 body of the failing module URL.
 // The slide route shows that error itself, so Vite's overlay is dismissed.
-export async function describeLoadError(error: unknown, since: number): Promise<SlideErrorInfo> {
+export async function describeLoadError(
+  error: unknown,
+  since: number,
+  deckDir: string,
+): Promise<SlideErrorInfo> {
   if (!isImportFailure(error)) {
     const message = errorMessage(error);
     // Thrown by the generated `loadSlide` in virtual:open-slide/slides.
@@ -139,7 +165,7 @@ export async function describeLoadError(error: unknown, since: number): Promise<
     suppressOverlayUntil = Date.now() + 2000;
     clearViteOverlay();
     const detail =
-      (await waitForViteError(since, 300)) ?? (await fetchCompileError(error as Error));
+      (await waitForViteError(since, deckDir, 300)) ?? (await fetchCompileError(error as Error));
     if (detail) return fromViteError(detail);
   }
   return { kind: 'compile', message: cleanDevUrls(errorMessage(error)) };
@@ -198,7 +224,8 @@ export function buildFixPrompt(
   return lines.join('\n');
 }
 
-const pageErrors = new WeakMap<Page, SlideErrorInfo>();
+// Keyed by slot as well as component: a deck can list one component on several pages.
+const pageErrors = new WeakMap<Page, Map<number, SlideErrorInfo>>();
 const listeners = new Set<() => void>();
 let version = 0;
 
@@ -209,15 +236,28 @@ function subscribe(listener: () => void) {
   };
 }
 
-export function reportPageError(page: Page, info: SlideErrorInfo): void {
-  if (pageErrors.has(page)) return;
-  pageErrors.set(page, info);
+function notify() {
   version++;
   for (const l of listeners) l();
 }
 
-export function getPageError(page: Page | undefined): SlideErrorInfo | undefined {
-  return page ? pageErrors.get(page) : undefined;
+export function reportPageError(page: Page, slot: number, info: SlideErrorInfo): void {
+  let slots = pageErrors.get(page);
+  if (slots?.has(slot)) return;
+  if (!slots) {
+    slots = new Map();
+    pageErrors.set(page, slots);
+  }
+  slots.set(slot, info);
+  notify();
+}
+
+export function clearPageError(page: Page, slot: number): void {
+  if (pageErrors.get(page)?.delete(slot)) notify();
+}
+
+export function getPageError(page: Page | undefined, slot: number): SlideErrorInfo | undefined {
+  return page ? pageErrors.get(page)?.get(slot) : undefined;
 }
 
 export function usePageErrorsVersion(): number {

@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   buildFixPrompt,
   cleanDevUrls,
+  clearPageError,
   describeLoadError,
   describeRenderError,
   formatLocation,
   fromViteError,
+  getPageError,
+  isDeckError,
   isImportFailure,
   parseViteErrorPage,
+  reportPageError,
 } from './slide-errors';
 
 describe('cleanDevUrls', () => {
@@ -109,17 +113,61 @@ describe('formatLocation', () => {
   });
 });
 
+describe('isDeckError', () => {
+  it('matches errors from files inside the deck folder', () => {
+    expect(isDeckError({ id: '/Users/me/deck/slides/intro/index.tsx' }, 'slides/intro')).toBe(true);
+    expect(
+      isDeckError(
+        { loc: { file: '/Users/me/deck/slides/intro/parts/a.tsx', line: 1, column: 1 } },
+        'slides/intro',
+      ),
+    ).toBe(true);
+    expect(
+      isDeckError(
+        { message: '[PARSE_ERROR] x\n   ╭─[ slides/intro/index.tsx:9:3 ]' },
+        'slides/intro',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects errors from another deck or with no file', () => {
+    expect(isDeckError({ id: '/Users/me/deck/slides/outro/index.tsx' }, 'slides/intro')).toBe(
+      false,
+    );
+    expect(isDeckError({ id: '/Users/me/deck/slides/intro-2/index.tsx' }, 'slides/intro')).toBe(
+      false,
+    );
+    expect(isDeckError({ message: 'boom' }, 'slides/intro')).toBe(false);
+  });
+});
+
+describe('page errors', () => {
+  it('keeps errors per slot and clears them on recovery', () => {
+    const Page = () => null;
+    const info = describeRenderError(new Error('boom'));
+    reportPageError(Page, 1, info);
+    expect(getPageError(Page, 1)).toBe(info);
+    expect(getPageError(Page, 0)).toBeUndefined();
+    clearPageError(Page, 1);
+    expect(getPageError(Page, 1)).toBeUndefined();
+  });
+});
+
 describe('describeLoadError', () => {
   it('keeps the message and stack of an error thrown while the module evaluates', async () => {
     const err = new Error('boom');
-    const info = await describeLoadError(err, Date.now());
+    const info = await describeLoadError(err, Date.now(), 'slides/intro');
     expect(info.kind).toBe('module');
     expect(info.message).toBe('boom');
     expect(info.stack).toContain('boom');
   });
 
   it('reports an unknown slide id as missing rather than a module crash', async () => {
-    const info = await describeLoadError(new Error('Slide not found: nope'), Date.now());
+    const info = await describeLoadError(
+      new Error('Slide not found: nope'),
+      Date.now(),
+      'slides/nope',
+    );
     expect(info).toEqual({ kind: 'missing', message: 'Slide not found: nope' });
   });
 });

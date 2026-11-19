@@ -1,3 +1,4 @@
+import config from 'virtual:open-slide/config';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SlideModule } from './sdk';
 import { describeLoadError, type SlideErrorInfo } from './slide-errors';
@@ -25,7 +26,11 @@ export function useSlideModule(slideId: string) {
           setError(null);
         })
         .catch(async (e) => {
-          const info = await describeLoadError(e, startedAt);
+          const info = await describeLoadError(
+            e,
+            startedAt,
+            `${config.slidesDir ?? 'slides'}/${slideId}`,
+          );
           if (seq === loadSeqRef.current) setError(info);
         });
     },
