@@ -24,7 +24,7 @@ export type SwitcherHost = {
   loadShell: (contents: WebContents, route: string) => void;
   keepKeys: (view: WebContentsView) => void;
   dispose: (view: WebContentsView) => void;
-  order: () => string[] | null;
+  order: () => { ids: string[]; startsAtActive: boolean } | null;
   describe: (id: string) => SwitcherTab | null;
   onReveal: () => void;
   onEnd: (pickedId: string | null) => void;
@@ -117,9 +117,10 @@ export class TabSwitcher {
   private begin(delta: number): boolean {
     const order = this.host.order();
     if (!order) return false;
+    const { ids, startsAtActive } = order;
     this.session = {
-      order,
-      index: delta > 0 ? 1 : order.length - 1,
+      order: ids,
+      index: delta > 0 ? (startsAtActive ? 1 : 0) : ids.length - 1,
       shown: false,
       revealTimer: setTimeout(() => this.reveal(), REVEAL_DELAY_MS),
     };

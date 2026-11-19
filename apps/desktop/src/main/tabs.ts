@@ -445,12 +445,12 @@ export class TabManager {
     );
   }
 
-  private switchOrder(): string[] | null {
-    if (!this.baseUrl || this.overlay || this.fullscreenTab || this.tabs.length < 2) return null;
-    return recencyOrder(
-      this.tabs.map((t) => t.id),
-      [this.activeId, ...this.recent],
-    );
+  private switchOrder(): { ids: string[]; startsAtActive: boolean } | null {
+    if (!this.baseUrl || this.overlay || this.fullscreenTab) return null;
+    const decks = this.tabs.filter((t) => t.kind === 'deck').map((t) => t.id);
+    const startsAtActive = decks.includes(this.activeId);
+    if (decks.length < (startsAtActive ? 2 : 1)) return null;
+    return { ids: recencyOrder(decks, [this.activeId, ...this.recent]), startsAtActive };
   }
 
   private describe(id: string): SwitcherTab | null {
