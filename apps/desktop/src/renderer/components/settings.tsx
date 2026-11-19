@@ -20,6 +20,13 @@ const SECTIONS: { id: SectionId; label: string; icon: React.ReactNode }[] = [
 
 const SECTION_KEY = 'settings-section';
 
+const TAB_KEYS: Record<string, (index: number) => number> = {
+  ArrowRight: (i) => (i + 1) % SECTIONS.length,
+  ArrowLeft: (i) => (i - 1 + SECTIONS.length) % SECTIONS.length,
+  Home: () => 0,
+  End: () => SECTIONS.length - 1,
+};
+
 function storedSection(): SectionId {
   try {
     const value = localStorage.getItem(SECTION_KEY);
@@ -33,6 +40,7 @@ export function SettingsWindow() {
   const [section, setSection] = useState<SectionId>(storedSection);
   const [prefs, setPrefs] = useState<DesktopSettings | null>(null);
   const headerRef = useRef<HTMLElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const label = SECTIONS.find((s) => s.id === section)?.label ?? 'Settings';
   const ready = state !== null;
@@ -81,6 +89,15 @@ export function SettingsWindow() {
     setPrefs(await desktop.settings.update(patch));
   const sectionProps = { state, prefs, onUpdate: update };
 
+  const onTabKey = (e: React.KeyboardEvent) => {
+    const move = TAB_KEYS[e.key];
+    if (!move) return;
+    e.preventDefault();
+    const next = SECTIONS[move(SECTIONS.findIndex((s) => s.id === section))];
+    setSection(next.id);
+    tabsRef.current?.querySelector<HTMLElement>(`#settings-tab-${next.id}`)?.focus();
+  };
+
   return (
     <div className="flex h-full flex-col text-foreground">
       <header
@@ -92,8 +109,11 @@ export function SettingsWindow() {
             <span>{label}</span>
           </h1>
         )}
-        <nav
+        <div
+          ref={tabsRef}
+          role="tablist"
           aria-label="Settings"
+          onKeyDown={onTabKey}
           className={cn('flex justify-center gap-1 px-3 pb-1.5', !isMac && 'pt-1.5')}
         >
           {SECTIONS.map((s) => {
@@ -102,7 +122,11 @@ export function SettingsWindow() {
               <button
                 key={s.id}
                 type="button"
-                aria-current={selected ? 'page' : undefined}
+                role="tab"
+                id={`settings-tab-${s.id}`}
+                aria-selected={selected}
+                aria-controls="settings-panel"
+                tabIndex={selected ? 0 : -1}
                 onClick={() => setSection(s.id)}
                 className={cn(
                   'no-drag flex h-[50px] min-w-[76px] flex-col items-center justify-center gap-1 rounded-[8px] px-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
@@ -122,10 +146,15 @@ export function SettingsWindow() {
               </button>
             );
           })}
-        </nav>
+        </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        id="settings-panel"
+        role="tabpanel"
+        aria-labelledby={`settings-tab-${section}`}
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
         <div ref={bodyRef} className="flex flex-col gap-3 px-5 pt-4 pb-5">
           {section === 'workspace' && (
             // Remounted per workspace so the log never shows the previous one's output.
@@ -174,7 +203,14 @@ function WorkspaceSection({ state, prefs, onUpdate }: SectionProps) {
   }, []);
 
   useEffect(() => {
-    if (showLog) void desktop.server.log().then(setLog);
+    if (!showLog) return;
+    let current = true;
+    void desktop.server.log().then((text) => {
+      if (current) setLog(text);
+    });
+    return () => {
+      current = false;
+    };
   }, [showLog, setLog]);
 
   const others = state.recent.filter((r) => r !== workspace?.root);

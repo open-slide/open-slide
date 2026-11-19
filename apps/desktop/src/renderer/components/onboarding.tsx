@@ -319,14 +319,39 @@ function Kbd({ children, className }: { children: React.ReactNode; className?: s
 }
 
 function Progress({ step, onSelect }: { step: number; onSelect: (step: number) => void }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const target =
+      e.key === 'ArrowRight'
+        ? step + 1
+        : e.key === 'ArrowLeft'
+          ? step - 1
+          : e.key === 'Home'
+            ? 0
+            : e.key === 'End'
+              ? LAST
+              : null;
+    if (target === null) return;
+    e.preventDefault();
+    const next = Math.max(0, Math.min(LAST, target));
+    onSelect(next);
+    listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
+  };
   return (
-    <div className="flex items-center gap-0.5" role="tablist" aria-label="Welcome tour">
+    <div
+      ref={listRef}
+      className="flex items-center gap-0.5"
+      role="tablist"
+      aria-label="Welcome tour"
+      onKeyDown={onKeyDown}
+    >
       {STEPS.map((s, i) => (
         <button
           key={s.eyebrow}
           type="button"
           role="tab"
           aria-selected={i === step}
+          tabIndex={i === step ? 0 : -1}
           aria-label={s.eyebrow}
           title={s.eyebrow}
           onClick={() => onSelect(i)}

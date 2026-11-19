@@ -4,13 +4,14 @@ import { cachedNotes, changeNotesPages, detachNotes } from './use-notes';
 
 type Call = {
   url: string;
-  body: { index?: number; text?: string } | undefined;
-  reply: (ok: boolean) => void;
+  body: { index?: number; text?: string; layout?: string } | undefined;
+  reply: (ok: boolean | Response) => void;
 };
 
 let calls: Call[] = [];
 let slide = 0;
 let slideId = '';
+let layout = 'L0';
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const noteCalls = () => calls.filter((call) => call.url === '/__notes');
@@ -18,7 +19,11 @@ const noteCalls = () => calls.filter((call) => call.url === '/__notes');
 beforeEach(() => {
   calls = [];
   slideId = `deck-${++slide}`;
+  layout = 'L0';
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (url.startsWith('/__notes?')) {
+      return Promise.resolve(new Response(JSON.stringify({ layout }), { status: 200 }));
+    }
     return new Promise<Response>((resolve, reject) => {
       init?.signal?.addEventListener('abort', () =>
         reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
@@ -28,9 +33,11 @@ beforeEach(() => {
         body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
         reply: (ok) =>
           resolve(
-            new Response(JSON.stringify(ok ? { ok: true } : { error: 'boom' }), {
-              status: ok ? 200 : 500,
-            }),
+            ok instanceof Response
+              ? ok
+              : new Response(JSON.stringify(ok ? { ok: true } : { error: 'boom' }), {
+                  status: ok ? 200 : 500,
+                }),
           ),
       });
     });
@@ -49,12 +56,15 @@ async function failDetached(index: number, text: string) {
   await tick();
 }
 
-function change(order: number[], ok = true) {
+function change(order: number[], outcome: 'ok' | 'failed' | 'lost' = 'ok') {
   return changeNotesPages(slideId, () => ({
     order,
     apply: async () => {
-      if (!ok) throw new Error('page op failed');
+      if (outcome !== 'failed') layout = 'L1';
+      if (outcome !== 'ok') throw new Error('page op failed');
+      return layout;
     },
+    revert: () => {},
   }));
 }
 
@@ -74,7 +84,7 @@ describe('notes across page changes', () => {
     await change([1, 0]);
     expect(cachedNotes(slideId, 0)).toBe('second');
     expect(cachedNotes(slideId, 1)).toBeUndefined();
-    expect(await retry()).toEqual([{ slideId, index: 0, text: 'second' }]);
+    expect(await retry()).toEqual([{ slideId, index: 0, text: 'second', layout: 'L1' }]);
   });
 
   it('drops a failed write whose page was deleted', async () => {
@@ -88,7 +98,7 @@ describe('notes across page changes', () => {
   it('shifts later pages down after a delete', async () => {
     await failDetached(2, 'third');
     await change([0, 2]);
-    expect(await retry()).toEqual([{ slideId, index: 1, text: 'third' }]);
+    expect(await retry()).toEqual([{ slideId, index: 1, text: 'third', layout: 'L1' }]);
   });
 
   it('copies saved notes to a duplicated page and shifts later retries', async () => {
@@ -102,7 +112,7 @@ describe('notes across page changes', () => {
     expect(cachedNotes(slideId, 0)).toBe('first');
     expect(cachedNotes(slideId, 1)).toBe('first');
     expect(cachedNotes(slideId, 2)).toBe('second');
-    expect(await retry()).toEqual([{ slideId, index: 2, text: 'second' }]);
+    expect(await retry()).toEqual([{ slideId, index: 2, text: 'second', layout: 'L1' }]);
   });
 
   it('restores retries and cached notes when the page change fails', async () => {
@@ -112,16 +122,48 @@ describe('notes across page changes', () => {
     await tick();
     await failDetached(1, 'second');
 
-    await expect(change([0], false)).rejects.toThrow('page op failed');
+    await expect(change([0], 'failed')).rejects.toThrow('page op failed');
     expect(cachedNotes(slideId, 0)).toBe('kept');
     expect(cachedNotes(slideId, 1)).toBe('second');
-    expect(await retry()).toEqual([{ slideId, index: 1, text: 'second' }]);
+    expect(await retry()).toEqual([{ slideId, index: 1, text: 'second', layout: 'L0' }]);
+  });
+
+  it('keeps retries on the moved pages when a failed page change landed anyway', async () => {
+    await failDetached(1, 'second');
+    expect(await change([1, 0], 'lost')).toBe(true);
+    expect(cachedNotes(slideId, 0)).toBe('second');
+    expect(await retry()).toEqual([{ slideId, index: 0, text: 'second', layout: 'L1' }]);
+  });
+
+  it('sends a write held by a page change against the changed page list', async () => {
+    detachNotes({ slideId, index: 0 }, 'first');
+    await tick();
+    const stale = noteCalls()[0];
+    expect(stale.body?.layout).toBe('L0');
+    stale.reply(true);
+    await change([1, 0]);
+    detachNotes({ slideId, index: 1 }, 'again');
+    await tick();
+    expect(noteCalls()[1].body).toEqual({ slideId, index: 1, text: 'again', layout: 'L1' });
+  });
+
+  it('keeps text unsaved when the server refuses it for a changed page list', async () => {
+    detachNotes({ slideId, index: 0 }, 'typed');
+    await tick();
+    noteCalls()
+      .at(-1)
+      ?.reply(
+        new Response(JSON.stringify({ error: 'pages changed', layout: 'L9' }), { status: 409 }),
+      );
+    await tick();
+    expect(unsavedStatus().pending).toBe(true);
+    expect(await retry()).toEqual([{ slideId, index: 0, text: 'typed', layout: 'L9' }]);
   });
 
   it('waits for a write in flight before planning the change', async () => {
     detachNotes({ slideId, index: 1 }, 'landing');
     await tick();
-    const plan = vi.fn(() => ({ order: [1, 0], apply: async () => {} }));
+    const plan = vi.fn(() => ({ order: [1, 0], apply: async () => layout, revert: () => {} }));
     const changed = changeNotesPages(slideId, plan);
     await tick();
     expect(plan).not.toHaveBeenCalled();
@@ -136,11 +178,18 @@ describe('notes across page changes', () => {
     let finish = () => {};
     const first = changeNotesPages(slideId, () => ({
       order: [1, 0],
-      apply: () => new Promise<void>((resolve) => (finish = resolve)),
+      apply: () =>
+        new Promise<string>((resolve) => {
+          finish = () => {
+            layout = 'L1';
+            resolve(layout);
+          };
+        }),
+      revert: () => {},
     }));
     await tick();
     detachNotes({ slideId, index: 1 }, 'typed');
-    const plan = vi.fn(() => ({ order: [1, 0], apply: async () => {} }));
+    const plan = vi.fn(() => ({ order: [1, 0], apply: async () => layout, revert: () => {} }));
     const second = changeNotesPages(slideId, plan);
     await tick();
     expect(noteCalls()).toEqual([]);
@@ -148,7 +197,9 @@ describe('notes across page changes', () => {
     finish();
     await first;
     await tick();
-    expect(noteCalls().map((call) => call.body)).toEqual([{ slideId, index: 1, text: 'typed' }]);
+    expect(noteCalls().map((call) => call.body)).toEqual([
+      { slideId, index: 1, text: 'typed', layout: 'L1' },
+    ]);
     expect(plan).not.toHaveBeenCalled();
 
     noteCalls()[0].reply(true);

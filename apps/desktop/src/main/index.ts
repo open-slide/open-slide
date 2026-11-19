@@ -262,6 +262,7 @@ const quitGate = new QuitGate({
     workspaces.persistSession();
     settings.flush();
     logins.cancelAll();
+    workspaces.shutdown();
     cancelAllInstalls();
     await Promise.all([terminateRunning(), server.stop(), shutdownTelemetry()]);
   },
@@ -624,18 +625,19 @@ async function printToPdf(sender: WebContents, filename: unknown): Promise<boole
   const win = tabs?.owns(sender) ? window : BrowserWindow.fromWebContents(sender);
   if (!win) throw new Error('Rejected host:print-to-pdf from an unknown sender');
   const name = typeof filename === 'string' ? filename.replace(/[/\\:*?"<>|]/g, '-').trim() : '';
+  // The same pipeline as window.print(), so the deck's @page size and print styles apply.
+  // Printed before the dialog, while the print document the caller prepared is still in place.
+  const pdf = await sender.printToPDF({
+    printBackground: true,
+    preferCSSPageSize: true,
+    margins: { top: 0, right: 0, bottom: 0, left: 0 },
+  });
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
     defaultPath: path.join(pdfDir ?? app.getPath('downloads'), name || 'slides.pdf'),
     filters: [{ name: 'PDF', extensions: ['pdf'] }],
   });
   if (canceled || !filePath) return false;
   pdfDir = path.dirname(filePath);
-  // The same pipeline as window.print(), so the deck's @page size and print styles apply.
-  const pdf = await sender.printToPDF({
-    printBackground: true,
-    preferCSSPageSize: true,
-    margins: { top: 0, right: 0, bottom: 0, left: 0 },
-  });
   await writeFile(filePath, pdf);
   track('pdf_exported');
   return true;
@@ -646,7 +648,7 @@ function isAgentId(value: unknown): value is AgentId {
 }
 
 const logins = new AgentLogins({
-  start: (id, hooks) => startLogin(id, () => childEnv(), hooks),
+  start: (id, hooks) => startLogin(id, () => childEnv(loginEnv), hooks),
   openUrl: (url) => void shell.openExternal(url),
   onChange: (state) => sendAll('agents:login-state', state),
   onReport: (report) => {
@@ -844,6 +846,8 @@ const menuActions: MenuActions = {
   cycleTab: (delta) => tabs?.cycle(delta),
   reloadTab: () => tabs?.reloadActive(),
   toggleTabDevTools: () => tabs?.activeContents()?.toggleDevTools(),
+  toggleShellDevTools: () =>
+    (BrowserWindow.getFocusedWindow() ?? window)?.webContents.toggleDevTools(),
   openRecent: (root) => void workspaces.open(root, 'menu'),
   replayIntro: () => replayIntro(),
   clearRecent: () => {

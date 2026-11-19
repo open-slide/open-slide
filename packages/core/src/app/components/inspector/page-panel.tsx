@@ -18,7 +18,7 @@ export type PageInfo = {
   themed: boolean;
 };
 
-type BackgroundSource = 'page' | 'theme' | 'shared' | 'complex';
+type BackgroundSource = 'page' | 'theme' | 'shared' | 'complex' | 'unknown';
 
 type PageState = {
   color: string | null;
@@ -150,6 +150,7 @@ function usePageState(index: number, component: Page | undefined, slideId: strin
       attributes: true,
       attributeFilter: ['style', 'class', 'data-osd-step', 'data-osd-current-page'],
     });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
@@ -178,11 +179,18 @@ function readPageState(
     );
   };
   const chain: HTMLElement[] = [];
+  let ambiguous = false;
   let level: HTMLElement | null = layer;
   while (level) {
-    const next: HTMLElement | undefined = Array.from(level.children).find(
+    const candidates: HTMLElement[] = Array.from(level.children).filter(
       (child): child is HTMLElement => child instanceof HTMLElement && covers(child),
     );
+    let next: HTMLElement | undefined =
+      candidates.length > 1 ? topmost(candidates, canvas.rect) : candidates[0];
+    if (!next && candidates.length > 0) {
+      ambiguous = true;
+      next = candidates.at(-1);
+    }
     if (next) chain.push(next);
     level = next ?? null;
   }
@@ -205,6 +213,18 @@ function readPageState(
     ? getComputedStyle(layer.parentElement).backgroundColor
     : '';
   const themeColor = opaqueHex(themeBackground);
+  if (ambiguous) {
+    const style = painted ? getComputedStyle(painted) : null;
+    const image = style?.backgroundImage ?? 'none';
+    return {
+      color: style ? opaqueHex(style.backgroundColor) : themeColor,
+      preview: image === 'none' ? null : image,
+      source: 'unknown',
+      target: null,
+      inline: false,
+      steps,
+    };
+  }
   if (!painted) {
     const target = chain.map(ownTarget).find(Boolean) ?? null;
     return { color: themeColor, preview: null, source: 'theme', target, inline: false, steps };
@@ -235,4 +255,16 @@ function readPageState(
     inline: ownBackground,
     steps,
   };
+}
+
+// Hit testing lists elements in paint order, so the browser settles which
+// overlapping sibling is actually visible. A sibling it skips, such as one
+// with `pointer-events: none`, leaves the order unknown.
+function topmost(candidates: HTMLElement[], rect: DOMRect): HTMLElement | undefined {
+  const x = (Math.max(rect.left, 0) + Math.min(rect.right, window.innerWidth)) / 2;
+  const y = (Math.max(rect.top, 0) + Math.min(rect.bottom, window.innerHeight)) / 2;
+  const stack = document.elementsFromPoint(x, y);
+  const order = candidates.map((el) => stack.indexOf(el));
+  if (order.some((index) => index < 0)) return undefined;
+  return candidates[order.indexOf(Math.min(...order))];
 }

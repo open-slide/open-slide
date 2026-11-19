@@ -1,16 +1,27 @@
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import { run, terminateRunning } from './process';
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function alive(pid: number): boolean {
+// An exited descendant whose parent was killed can linger as a zombie until init reaps it.
+function zombie(pid: number): boolean {
+  if (process.platform !== 'linux') return false;
   try {
-    process.kill(pid, 0);
-    return true;
+    return readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ').at(-1)?.startsWith('Z') ?? false;
   } catch {
     return false;
   }
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+  return !zombie(pid);
 }
 
 async function gone(pid: number): Promise<boolean> {
@@ -34,6 +45,14 @@ const PARENT_OF = (grandchild: string, after = 'setInterval(() => {}, 1000)') =>
    console.log('descendant:' + c.pid);
    ${after}`;
 
+// Reports the grandchild only once it has installed its SIGTERM handler.
+const PARENT_OF_STUBBORN = `
+  const { spawn } = require('node:child_process');
+  const child = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); process.send('ready'); setInterval(() => {}, 1000)"], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+  child.once('message', () => console.log('descendant:' + child.pid));
+  setInterval(() => {}, 1000);
+`;
+
 async function withDescendant(script: string) {
   let output = '';
   const handle = node(script, {
@@ -47,6 +66,7 @@ async function withDescendant(script: string) {
     if (handle.child.exitCode !== null && i > 50) break;
     await pause(10);
   }
+  await handle.terminate();
   throw new Error('the child never reported its descendant');
 }
 
@@ -73,6 +93,26 @@ describe.skipIf(process.platform === 'win32')('run', () => {
     expect(await gone(pid)).toBe(true);
   });
 
+  it('does not report a cancellation that outlasts the deadline as a timeout', async () => {
+    let output = '';
+    const handle = node(
+      "process.on('SIGTERM', () => {}); console.log('ready'); setInterval(() => {}, 1000)",
+      {
+        timeoutMs: 300,
+        killGraceMs: 600,
+        onChunk: (chunk) => {
+          output += chunk;
+        },
+      },
+    );
+    while (!output.includes('ready')) await pause(10);
+    void handle.terminate();
+
+    const result = await handle.done;
+
+    expect(result.timedOut).toBe(false);
+  });
+
   it('terminates the processes a child started, not only the child', async () => {
     const { handle, descendant } = await withDescendant(PARENT_OF('setInterval(() => {}, 1000)'));
     expect(alive(descendant)).toBe(true);
@@ -84,11 +124,7 @@ describe.skipIf(process.platform === 'win32')('run', () => {
   });
 
   it('kills a descendant that ignores SIGTERM once the grace period ends', async () => {
-    const { descendant } = await withDescendant(
-      PARENT_OF("process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"),
-    );
-    // Give the grandchild time to install its handler.
-    await pause(300);
+    const { descendant } = await withDescendant(PARENT_OF_STUBBORN);
 
     await terminateRunning();
 
@@ -112,12 +148,7 @@ describe.skipIf(process.platform === 'win32')('run', () => {
   });
 
   it('finishes termination of descendants even after the parent closes its pipes', async () => {
-    const { handle, descendant } = await withDescendant(`
-      const { spawn } = require('node:child_process');
-      const child = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); process.send('ready'); setInterval(() => {}, 1000)"], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
-      child.once('message', () => console.log('descendant:' + child.pid));
-      setInterval(() => {}, 1000);
-    `);
+    const { handle, descendant } = await withDescendant(PARENT_OF_STUBBORN);
     try {
       await handle.terminate();
       expect(await gone(descendant)).toBe(true);

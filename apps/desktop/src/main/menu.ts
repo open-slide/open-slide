@@ -20,6 +20,7 @@ export type MenuActions = {
   cycleTab: (delta: number) => void;
   reloadTab: () => void;
   toggleTabDevTools: () => void;
+  toggleShellDevTools: () => void;
   openRecent: (root: string) => void;
   clearRecent: () => void;
   replayIntro: () => void;
@@ -101,7 +102,7 @@ export function installMenu(actions: MenuActions, recent: string[]) {
                 accelerator: isMac ? 'Alt+Cmd+I' : 'Ctrl+Shift+I',
                 click: actions.toggleTabDevTools,
               },
-              { role: 'toggleDevTools' as const, label: 'Toggle Shell Developer Tools' },
+              { label: 'Toggle Shell Developer Tools', click: actions.toggleShellDevTools },
             ]),
         { type: 'separator' },
         { role: 'togglefullscreen' },

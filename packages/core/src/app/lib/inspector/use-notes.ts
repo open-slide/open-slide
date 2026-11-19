@@ -25,11 +25,19 @@ const detached = new Set<Detached>();
 onAbandon(() => detached.clear());
 // Shared by every editor, so a newer write cancels an older one to the same
 // notes even when the editor that started it has unmounted.
-const inflight = new Map<string, { ctl: AbortController; settled: Promise<void> }>();
+const inflight = new Map<string, { ctl: AbortController }>();
+// Every write from its start, including ones still waiting to send, so a page
+// change can wait for those not held back by another page change.
+const pending = new Set<{ slideId: string; settled: Promise<unknown> }>();
 // Targets of writes held back by a page change; moved with the pages before they send.
 const waiting = new Set<Target>();
 const editors = new Set<Editor>();
 const pageChanges = new Map<string, Promise<void>>();
+// The server's fingerprint of each deck's page list that note indices currently
+// refer to. Saves carry it, so one that reaches the server after the pages
+// moved, such as an aborted request, is refused instead of hitting another page.
+const layouts = new Map<string, string>();
+let pageChangeCount = 0;
 let seq = 0;
 
 const cacheKey = (slideId: string, index: number) => `${slideId}:${index}`;
@@ -50,19 +58,49 @@ export function cachedNotes(slideId: string, index: number): string | undefined 
   return findDetached({ slideId, index })?.text ?? sessionCache.get(cacheKey(slideId, index));
 }
 
+const errorMessage = (err: unknown) => String((err as Error).message ?? err);
+
+async function fetchLayout(slideId: string): Promise<string> {
+  const res = await fetch(`/__notes?slideId=${encodeURIComponent(slideId)}`);
+  const body = (await res.json().catch(() => ({}))) as { layout?: unknown; error?: string };
+  if (!res.ok || typeof body.layout !== 'string') {
+    throw new Error(body.error ?? `GET /__notes → ${res.status}`);
+  }
+  return body.layout;
+}
+
+async function settledLayout(slideId: string): Promise<string> {
+  for (;;) {
+    const change = pageChanges.get(slideId);
+    if (change) {
+      await change;
+      continue;
+    }
+    const known = layouts.get(slideId);
+    if (known !== undefined) return known;
+    const count = pageChangeCount;
+    const layout = await fetchLayout(slideId);
+    if (pageChangeCount === count) layouts.set(slideId, layout);
+  }
+}
+
 // Resolves to the failure, or a skip once a newer write to the same notes took
 // over or the page was deleted; writes to other notes are never cut off.
-async function writeNotes(target: Target, text: string): Promise<WriteResult> {
+function writeNotes(target: Target, text: string): Promise<WriteResult> {
+  const write = { slideId: target.slideId, settled: sendNotes(target, text) };
+  pending.add(write);
+  void write.settled.then(() => pending.delete(write));
+  return write.settled;
+}
+
+async function sendNotes(target: Target, text: string): Promise<WriteResult> {
   const slot = { ...target };
   waiting.add(slot);
+  let layout: string;
   try {
-    for (
-      let change = pageChanges.get(slot.slideId);
-      change;
-      change = pageChanges.get(slot.slideId)
-    ) {
-      await change;
-    }
+    layout = await settledLayout(slot.slideId);
+  } catch (err) {
+    return { kind: 'error', message: errorMessage(err) };
   } finally {
     waiting.delete(slot);
   }
@@ -72,18 +110,22 @@ async function writeNotes(target: Target, text: string): Promise<WriteResult> {
   const startSeq = seq;
   inflight.get(key)?.ctl.abort();
   const ctl = new AbortController();
-  let settle = () => {};
-  const entry = { ctl, settled: new Promise<void>((resolve) => (settle = resolve)) };
+  const entry = { ctl };
   inflight.set(key, entry);
   try {
     const res = await fetch('/__notes', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ slideId: slot.slideId, index: slot.index, text }),
+      body: JSON.stringify({ slideId: slot.slideId, index: slot.index, text, layout }),
       signal: ctl.signal,
     });
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    const body = (await res.json().catch(() => ({}))) as { error?: string; layout?: unknown };
     if (inflight.get(key) !== entry) return { kind: 'skipped' };
+    // Refused because the page list changed on disk outside a page change made
+    // here; the text stays unsaved and its next save targets the list now on disk.
+    if (res.status === 409 && typeof body.layout === 'string') {
+      if (layouts.get(slot.slideId) === layout) layouts.set(slot.slideId, body.layout);
+    }
     if (!res.ok) throw new Error(body.error ?? `PUT /__notes → ${res.status}`);
     sessionCache.set(key, text);
     for (const left of detached) {
@@ -94,10 +136,9 @@ async function writeNotes(target: Target, text: string): Promise<WriteResult> {
     return { kind: 'saved' };
   } catch (err) {
     if ((err as { name?: string }).name === 'AbortError') return { kind: 'skipped' };
-    return { kind: 'error', message: String((err as Error).message ?? err) };
+    return { kind: 'error', message: errorMessage(err) };
   } finally {
     if (inflight.get(key) === entry) inflight.delete(key);
-    settle();
   }
 }
 
@@ -176,40 +217,57 @@ function movePages(slideId: string, order: number[]) {
   };
 }
 
+export type NotesPageChange = {
+  order: number[];
+  // Resolves to the server's page-list fingerprint after the change.
+  apply: () => Promise<string | undefined>;
+  revert: () => void;
+};
+
 // Note writes are bound to a page index, so a page change waits for the ones in
 // flight, holds back new ones until it settles, and moves cached text, unsaved
 // editors and failed retries along with their pages. `plan` runs once nothing is
-// in flight; its `apply` makes the change and throws to roll the notes back.
+// in flight; its `apply` makes the change, and if it throws, the notes and
+// `revert` roll back unless the server's page list shows the change landed.
 export async function changeNotesPages(
   slideId: string,
-  plan: () => { order: number[]; apply: () => Promise<void> } | null,
+  plan: () => NotesPageChange | null,
 ): Promise<boolean> {
-  const prefix = `${slideId}:`;
   for (;;) {
     const change = pageChanges.get(slideId);
     if (change) {
       await change;
       continue;
     }
-    const writes = [...inflight].filter(([key]) => key.startsWith(prefix));
+    const writes = [...pending].filter((write) => write.slideId === slideId);
     if (writes.length === 0) break;
-    await Promise.all(writes.map(([, write]) => write.settled));
+    await Promise.all(writes.map((write) => write.settled));
   }
 
-  const next = plan();
-  if (!next) return false;
   let done = () => {};
   pageChanges.set(slideId, new Promise<void>((resolve) => (done = resolve)));
+  pageChangeCount++;
   try {
+    const before = await fetchLayout(slideId);
+    layouts.set(slideId, before);
+    const next = plan();
+    if (!next) return false;
     const moved = movePages(slideId, next.order);
+    let after: string | undefined;
     try {
-      await next.apply();
-      moved.commit();
-      return true;
+      after = await next.apply();
     } catch (err) {
-      moved.rollback();
-      throw err;
+      after = await fetchLayout(slideId).catch(() => before);
+      if (after === before) {
+        moved.rollback();
+        next.revert();
+        throw err;
+      }
     }
+    moved.commit();
+    if (after === undefined) layouts.delete(slideId);
+    else layouts.set(slideId, after);
+    return true;
   } finally {
     pageChanges.delete(slideId);
     done();

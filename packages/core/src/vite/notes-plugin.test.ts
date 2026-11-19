@@ -3,11 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  pageLayoutOfSource,
   reorderDefaultExportPagesInSource,
   reorderNotesArrayInSource,
 } from '../editing/slide-ops.ts';
 import { withFileLock } from './file-lock.ts';
-import { applyNotesEdit, renderNoteLiteral, saveNotes } from './notes-plugin.ts';
+import { applyNotesEdit, readPageLayout, renderNoteLiteral, saveNotes } from './notes-plugin.ts';
 import { hasRecentWrite, RECENT_WRITE_WINDOW_MS, recordWrite } from './recent-writes.ts';
 
 describe('renderNoteLiteral', () => {
@@ -213,5 +214,36 @@ describe('saveNotes', () => {
     const source = await fs.readFile(file, 'utf8');
     expect(source).toContain('export default [B, A]');
     expect(source).toContain('"b2",\n  "a",');
+  });
+
+  it('refuses a save made against a page list that has since changed', async () => {
+    const file = await slideFile('export default [A, B];\n\nexport const notes = ["a", "b"];\n');
+    const before = await readPageLayout(file);
+    const source = await fs.readFile(file, 'utf8');
+    const pages = reorderDefaultExportPagesInSource(source, [1, 0]);
+    const reordered = pages && reorderNotesArrayInSource(pages, [1, 0]);
+    if (!reordered || !before) throw new Error('setup failed');
+    await fs.writeFile(file, reordered, 'utf8');
+
+    const stale = await saveNotes(file, 0, 'a2', before);
+    expect(stale).toEqual({
+      ok: false,
+      status: 409,
+      error: expect.any(String),
+      layout: pageLayoutOfSource(reordered),
+    });
+    expect(await fs.readFile(file, 'utf8')).toBe(reordered);
+
+    const fresh = await saveNotes(file, 0, 'b2', pageLayoutOfSource(reordered));
+    expect(fresh).toEqual({ ok: true, changed: true });
+    expect(await fs.readFile(file, 'utf8')).toContain('"b2",\n  "a",');
+  });
+
+  it('keeps the page-list fingerprint across notes edits', () => {
+    const source = 'export default [A, B];\n';
+    const edited = applyNotesEdit(source, 1, 'note');
+    if (!edited.ok) throw new Error('edit failed');
+    expect(pageLayoutOfSource(edited.source)).toBe(pageLayoutOfSource(source));
+    expect(pageLayoutOfSource('export default [B, A];\n')).not.toBe(pageLayoutOfSource(source));
   });
 });

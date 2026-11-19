@@ -121,6 +121,22 @@ export function useUnsavedSource(source: UnsavedSource) {
   );
 }
 
+// For writes that carry no base revision: a retried one would otherwise replace
+// a value that a newer write has saved since.
+export function createWriteLedger() {
+  let seq = 0;
+  const saved = new Map<string, number>();
+  const superseded = (key: string, writeSeq: number) =>
+    (saved.get(key) ?? Number.NEGATIVE_INFINITY) > writeSeq;
+  return {
+    next: () => ++seq,
+    superseded,
+    record(key: string, writeSeq: number) {
+      if (!superseded(key, writeSeq)) saved.set(key, writeSeq);
+    },
+  };
+}
+
 // Runs saves one after another, each starting once the previous one settles.
 export function createSaveQueue() {
   let tail: Promise<unknown> = Promise.resolve();

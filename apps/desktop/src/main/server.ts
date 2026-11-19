@@ -228,7 +228,7 @@ export class DevServer extends EventEmitter<ServerEvents> {
 
     child.on('message', (message) => {
       const port = listeningPort(message);
-      if (generation !== this.generation || port === null) return;
+      if (generation !== this.generation || timedOut || port === null) return;
       clearTimeout(timeout);
       this.port = port;
       this.ports.set(root, port);

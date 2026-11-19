@@ -5,6 +5,7 @@ import {
   duplicateNotesElementInSource,
   duplicatePageInDefaultExportInSource,
   duplicateSlideDir,
+  pageLayoutOfSource,
   removeNotesElementInSource,
   removePageFromDefaultExportInSource,
   reorderDefaultExportPagesInSource,
@@ -23,9 +24,9 @@ import { recordWrite } from '../recent-writes.ts';
 import { type ApiContext, json, readBody } from './context.ts';
 
 // POST   /__slides                        create a blank slide → { slideId }
-// PUT    /__slides/:id/reorder            reorder pages { order: number[] }
-// DELETE /__slides/:id/pages/:i           remove page
-// POST   /__slides/:id/pages/:i/duplicate duplicate page
+// PUT    /__slides/:id/reorder            reorder pages { order: number[] } → { layout }
+// DELETE /__slides/:id/pages/:i           remove page → { layout }
+// POST   /__slides/:id/pages/:i/duplicate duplicate page → { layout }
 // POST   /__slides/:id/duplicate          duplicate slide directory { newId? }
 // PATCH  /__slides/:id                    rename slide (writes meta.title)
 // DELETE /__slides/:id                    delete slide directory + folder assignment
@@ -107,7 +108,12 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
           return { ok: true, source: withNotes };
         });
         if (!result.ok) return json(res, result.status, { error: result.error });
-        return json(res, 200, { ok: true, slideId, order });
+        return json(res, 200, {
+          ok: true,
+          slideId,
+          order,
+          layout: pageLayoutOfSource(result.source),
+        });
       }
 
       const pageOpMatch = url.pathname.match(/^\/([^/]+)\/pages\/(\d+)(?:\/([a-z]+))?$/);
@@ -158,7 +164,12 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
           return { ok: true, source: withNotes };
         });
         if (!result.ok) return json(res, result.status, { error: result.error });
-        return json(res, 200, { ok: true, slideId, index: pageIndex });
+        return json(res, 200, {
+          ok: true,
+          slideId,
+          index: pageIndex,
+          layout: pageLayoutOfSource(result.source),
+        });
       }
 
       const duplicateMatch = url.pathname.match(/^\/([^/]+)\/duplicate$/);

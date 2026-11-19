@@ -3,6 +3,7 @@ import { BrowserWindow, type WebContents } from 'electron';
 const COVER_WIDTH = 640;
 const COVER_HEIGHT = 360;
 const SETTLE_TIMEOUT_MS = 12_000;
+const CAPTURE_TIMEOUT_MS = 20_000;
 const POLL_MS = 100;
 const IDLE_CLOSE_MS = 15_000;
 const READ_STATE = `document.querySelector('[data-osd-preview]')?.getAttribute('data-osd-preview') ?? null`;
@@ -15,6 +16,7 @@ type DeckCoversOptions = {
 
 export class DeckCovers {
   private baseUrl: string | null = null;
+  private coveredUrl: string | null = null;
   private readonly covers = new Map<string, string>();
   private readonly queue = new Set<string>();
   private readonly failed = new Set<string>();
@@ -29,6 +31,16 @@ export class DeckCovers {
   }
 
   setBaseUrl(url: string | null) {
+    if (url !== this.baseUrl && this.current && !this.current.dropped) {
+      this.current.dropped = true;
+      this.queue.add(this.current.slideId);
+    }
+    if (url && this.coveredUrl && url !== this.coveredUrl) {
+      for (const id of this.covers.keys()) this.queue.add(id);
+      this.covers.clear();
+      this.opts.onChange();
+    }
+    if (url) this.coveredUrl = url;
     this.baseUrl = url;
     this.failed.clear();
     this.pump();
@@ -73,24 +85,35 @@ export class DeckCovers {
     this.queue.delete(slideId);
     const capture = { slideId, dropped: false };
     this.current = capture;
-    void this.capture(slideId)
-      .catch(() => null)
-      .then((cover) => {
-        this.current = null;
-        if (!capture.dropped) {
-          if (cover) {
-            this.covers.set(slideId, cover);
-            this.opts.onChange();
-          } else {
-            this.failed.add(slideId);
-          }
+    void this.captureWithin(slideId, CAPTURE_TIMEOUT_MS).then((cover) => {
+      this.current = null;
+      if (!capture.dropped) {
+        if (cover) {
+          this.covers.set(slideId, cover);
+          this.opts.onChange();
+        } else {
+          this.failed.add(slideId);
         }
-        this.pump();
-      });
+      }
+      this.pump();
+    });
   }
 
   private capturing(slideId: string): boolean {
     return this.current?.slideId === slideId && !this.current.dropped;
+  }
+
+  // Navigation or a script can hang, so a stuck window is thrown away rather than waited on.
+  private captureWithin(slideId: string, ms: number): Promise<string | null> {
+    let timer: NodeJS.Timeout | undefined;
+    const expired = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        this.closeWindow();
+        resolve(null);
+      }, ms);
+    });
+    const captured = this.capture(slideId).catch(() => null);
+    return Promise.race([captured, expired]).finally(() => clearTimeout(timer));
   }
 
   private async capture(slideId: string): Promise<string | null> {

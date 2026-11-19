@@ -49,10 +49,11 @@ export function describeTransition(transition: SlideTransition): {
   duration: number;
 } {
   const duration = Math.max(
-    transition.duration,
     phaseLength(transition.enter, transition.duration),
     phaseLength(transition.exit, transition.duration),
-    typeof transition.morph === 'object' ? phaseLength(transition.morph, transition.duration) : 0,
+    transition.morph === true
+      ? transition.duration
+      : phaseLength(transition.morph || undefined, transition.duration),
   );
   if (transition.morph) return { kind: 'morph', duration };
   const frames = keyframeList(transition.enter?.keyframes ?? transition.exit?.keyframes);

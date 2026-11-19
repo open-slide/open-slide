@@ -830,6 +830,11 @@ export class TabManager {
     });
     contents.on('did-navigate', (_e, url) => this.followNavigation(tab, contents, url));
 
+    contents.on('will-redirect', (e) => {
+      if (this.isServerUrl(e.url)) return;
+      e.preventDefault();
+      openOutside(e.url);
+    });
     contents.on('will-navigate', (e) => {
       if (!this.isServerUrl(e.url)) {
         e.preventDefault();

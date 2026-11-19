@@ -48,6 +48,7 @@ export class WorkspaceController {
   error: WorkspaceError | null = null;
   private errors = 0;
   private queue: Promise<unknown> = Promise.resolve();
+  private closing = false;
 
   constructor(private readonly opts: Options) {}
 
@@ -119,8 +120,12 @@ export class WorkspaceController {
       package_manager: pm,
       duration_ms: Date.now() - started,
     });
-    if (this.current?.root === root) await this.opts.server.start(root);
+    if (!this.closing && this.current?.root === root) await this.opts.server.start(root);
     return result;
+  }
+
+  shutdown() {
+    this.closing = true;
   }
 
   persistSession() {

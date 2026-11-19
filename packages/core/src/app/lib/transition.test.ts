@@ -84,6 +84,25 @@ describe('describeTransition', () => {
     ).toEqual({ kind: 'morph', duration: 640 });
   });
 
+  it('ignores the base duration when explicit phase durations set the length', () => {
+    expect(
+      describeTransition({
+        duration: 600,
+        enter: { duration: 200, keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+      }).duration,
+    ).toBe(200);
+  });
+
+  it('uses the base duration for a bare morph', () => {
+    expect(
+      describeTransition({
+        duration: 500,
+        enter: { duration: 200, keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+        morph: true,
+      }),
+    ).toEqual({ kind: 'morph', duration: 500 });
+  });
+
   it('falls back to custom for anything else', () => {
     expect(
       describeTransition({

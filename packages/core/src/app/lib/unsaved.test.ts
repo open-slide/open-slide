@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createSaveQueue,
+  createWriteLedger,
   forgetWrite,
   onAbandon,
   registerUnsaved,
@@ -224,5 +225,29 @@ describe('createSaveQueue', () => {
     expect(queue.busy()).toBe(false);
     expect(onIdle).toHaveBeenCalledOnce();
     await expect(queue.run(async () => 'next')).resolves.toBe('next');
+  });
+});
+
+describe('createWriteLedger', () => {
+  it('marks an older write superseded once a newer one for the same key lands', () => {
+    const ledger = createWriteLedger();
+    const stale = ledger.next();
+    const fresh = ledger.next();
+
+    expect(ledger.superseded('fontSize', stale)).toBe(false);
+    ledger.record('fontSize', fresh);
+    expect(ledger.superseded('fontSize', stale)).toBe(true);
+    expect(ledger.superseded('fontSize', fresh)).toBe(false);
+    expect(ledger.superseded('color', stale)).toBe(false);
+  });
+
+  it('keeps the newest record when an older write lands late', () => {
+    const ledger = createWriteLedger();
+    const stale = ledger.next();
+    const fresh = ledger.next();
+    ledger.record('fontSize', fresh);
+    ledger.record('fontSize', stale);
+
+    expect(ledger.superseded('fontSize', stale)).toBe(true);
   });
 });

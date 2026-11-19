@@ -135,6 +135,7 @@ export function run(cmd: string, args: string[], opts: RunOptions): RunHandle {
   child.on('close', settleUnlessStopping);
   if (opts.timeoutMs) {
     later(() => {
+      if (stopping) return;
       timedOut = true;
       void terminate();
     }, opts.timeoutMs);

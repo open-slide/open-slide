@@ -9,11 +9,13 @@ import { desktop, useSwitcher } from '../lib/desktop';
 export function TabSwitcher() {
   const state = useSwitcher();
   const selected = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const selectedId = state?.selectedId;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: follows the selection as it moves
   useLayoutEffect(() => {
     selected.current?.scrollIntoView({ block: 'nearest' });
+    if (document.activeElement !== list.current) list.current?.focus({ preventScroll: true });
   }, [selectedId]);
 
   if (!state) return null;
@@ -27,9 +29,12 @@ export function TabSwitcher() {
       }}
     >
       <div
+        ref={list}
         role="listbox"
         aria-label="Open tabs"
-        className="switcher-in flex max-h-full max-w-[980px] flex-wrap justify-center gap-1 overflow-y-auto rounded-[18px] border border-border bg-popover p-2.5 text-popover-foreground shadow-overlay [scrollbar-width:none]"
+        tabIndex={-1}
+        aria-activedescendant={selectedId ? optionId(selectedId) : undefined}
+        className="switcher-in flex max-h-full outline-none max-w-[980px] flex-wrap justify-center gap-1 overflow-y-auto rounded-[18px] border border-border bg-popover p-2.5 text-popover-foreground shadow-overlay [scrollbar-width:none]"
       >
         {state.tabs.map((tab) => (
           <Card
@@ -42,6 +47,10 @@ export function TabSwitcher() {
       </div>
     </div>
   );
+}
+
+function optionId(tabId: string): string {
+  return `switcher-tab-${tabId}`;
 }
 
 function Card({
@@ -58,6 +67,7 @@ function Card({
     <button
       ref={ref}
       type="button"
+      id={optionId(tab.id)}
       role="option"
       aria-selected={selected}
       tabIndex={-1}

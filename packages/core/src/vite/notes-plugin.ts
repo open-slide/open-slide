@@ -3,7 +3,7 @@ import path from 'node:path';
 import * as t from '@babel/types';
 import type { Plugin, ViteDevServer } from 'vite';
 import { parseSource } from '../editing/babel-walk.ts';
-import { resolveSlideEntry } from '../editing/slide-ops.ts';
+import { pageLayoutOfSource, resolveSlideEntry } from '../editing/slide-ops.ts';
 import { validateMutationRequest } from '../http/request-guard.ts';
 import { withFileLock } from './file-lock.ts';
 import { hasRecentWrite, recordWrite } from './recent-writes.ts';
@@ -13,6 +13,7 @@ type NotesBody = {
   slideId?: string;
   index?: number;
   text?: string;
+  layout?: string;
 };
 
 export type ApplyNotesEditResult =
@@ -146,12 +147,35 @@ export function applyNotesEdit(source: string, index: number, text: string): App
 
 export type SaveNotesResult =
   | { ok: true; changed: boolean }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; layout?: string };
 
-export function saveNotes(file: string, index: number, text: string): Promise<SaveNotesResult> {
+export function readPageLayout(file: string): Promise<string | null> {
+  return withFileLock(file, async () => {
+    const source = await readSlideSource(file);
+    return source === null ? null : pageLayoutOfSource(source);
+  });
+}
+
+export function saveNotes(
+  file: string,
+  index: number,
+  text: string,
+  layout?: string,
+): Promise<SaveNotesResult> {
   return withFileLock(file, async () => {
     const source = await readSlideSource(file);
     if (source === null) return { ok: false, status: 404, error: 'slide not found' };
+    if (layout !== undefined) {
+      const current = pageLayoutOfSource(source);
+      if (current !== layout) {
+        return {
+          ok: false,
+          status: 409,
+          error: 'pages changed since these notes were edited',
+          layout: current,
+        };
+      }
+    }
     const result = applyNotesEdit(source, index, text);
     if (!result.ok) return result;
     const changed = result.source !== source;
@@ -184,7 +208,19 @@ export function notesPlugin(opts: NotesPluginOptions): Plugin {
       server.middlewares.use('/__notes', async (req, res, next) => {
         const url = new URL(req.url ?? '/', 'http://local');
         const method = req.method ?? 'GET';
-        if (method !== 'PUT' || url.pathname !== '/') return next();
+        if (url.pathname !== '/') return next();
+        if (method === 'GET') {
+          try {
+            const file = resolveSlideEntry(slidesRoot, url.searchParams.get('slideId') ?? '');
+            if (!file) return json(res, 400, { error: 'invalid slideId' });
+            const layout = await readPageLayout(file);
+            if (layout === null) return json(res, 404, { error: 'slide not found' });
+            return json(res, 200, { layout });
+          } catch (err) {
+            return json(res, 500, { error: String((err as Error).message ?? err) });
+          }
+        }
+        if (method !== 'PUT') return next();
         const requestCheck = validateMutationRequest(req, { requireJsonBody: true });
         if (!requestCheck.ok) return json(res, requestCheck.status, { error: requestCheck.error });
 
@@ -195,9 +231,14 @@ export function notesPlugin(opts: NotesPluginOptions): Plugin {
           if (!file) return json(res, 400, { error: 'invalid slideId' });
           if (typeof body.index !== 'number') return json(res, 400, { error: 'missing index' });
           if (typeof body.text !== 'string') return json(res, 400, { error: 'missing text' });
+          if (body.layout !== undefined && typeof body.layout !== 'string') {
+            return json(res, 400, { error: 'invalid layout' });
+          }
 
-          const result = await saveNotes(file, body.index, body.text);
-          if (!result.ok) return json(res, result.status, { error: result.error });
+          const result = await saveNotes(file, body.index, body.text, body.layout);
+          if (!result.ok) {
+            return json(res, result.status, { error: result.error, layout: result.layout });
+          }
           return json(res, 200, { ok: true, changed: result.changed });
         } catch (err) {
           json(res, 500, { error: String((err as Error).message ?? err) });

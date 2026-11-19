@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parse as babelParse } from '@babel/parser';
@@ -387,6 +388,14 @@ function findDefaultExportArray(
     return { elements, arrayStart, arrayEnd };
   }
   return null;
+}
+
+// Notes are stored by page index, so a save names the page list it was made
+// against and is refused once that list has changed.
+export function pageLayoutOfSource(source: string): string {
+  const found = findDefaultExportArray(source);
+  const pages = found ? found.elements.map((el) => source.slice(el.start, el.end)) : null;
+  return createHash('sha1').update(JSON.stringify(pages)).digest('hex').slice(0, 16);
 }
 
 /**

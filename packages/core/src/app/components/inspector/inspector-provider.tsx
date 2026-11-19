@@ -28,7 +28,7 @@ import { useVisualEditor, type VisualEdit } from '@/lib/inspector/use-visual-edi
 import { independentTargets } from '@/lib/inspector/visual-dom';
 import { isShortcutControlTarget, isTypingTarget } from '@/lib/keys';
 import { textDiff } from '@/lib/text-diff';
-import { createSaveQueue, trackWrite, useUnsavedSource } from '@/lib/unsaved';
+import { createSaveQueue, createWriteLedger, trackWrite, useUnsavedSource } from '@/lib/unsaved';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { round2 } from '@/lib/utils';
 import { AssetPickerDialog } from './asset-picker-dialog';
@@ -128,6 +128,10 @@ export type InlineEditTarget = SelectedTarget & {
 
 export type InlineTextSelection = { start: number; end: number };
 type InlineStyleHandler = (ops: EditOp[]) => boolean;
+
+// Shared across providers so a save retried after its provider unmounted skips
+// properties that a newer provider has saved since.
+const editLedger = createWriteLedger();
 
 type AssetAttrOp = { assetPath: string; previewUrl: string };
 type Sequenced<T> = T & { seq: number };
@@ -538,7 +542,6 @@ export function InspectorProvider({
     new WeakMap<HTMLElement, { text: string; html: TextDomSnapshot }>(),
   );
   const instanceCounterRef = useRef(0);
-  const pendingSeqRef = useRef(0);
   const [commitQueue] = useState(createSaveQueue);
   const commitFailureRef = useRef<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -666,7 +669,7 @@ export function InspectorProvider({
         }
       }
       for (const op of ops) {
-        const seq = ++pendingSeqRef.current;
+        const seq = editLedger.next();
         if (op.kind === 'set-style') {
           bucket.styleOps.set(op.key, { value: op.value, prevText: op.prevText, seq });
           if (anchor?.isConnected) style[op.key] = op.value ?? '';
@@ -857,7 +860,7 @@ export function InspectorProvider({
         } else if (snap.kind === 'attr') {
           if (snap.source === 'op') {
             const op = snap.value as Sequenced<AssetAttrOp>;
-            bucket.attrOps.set(snap.attr, { ...op, seq: ++pendingSeqRef.current });
+            bucket.attrOps.set(snap.attr, { ...op, seq: editLedger.next() });
             if (sharedAnchor?.isConnected) sharedAnchor.setAttribute(snap.attr, op.previewUrl);
           } else {
             bucket.attrOps.delete(snap.attr);
@@ -1054,6 +1057,7 @@ export function InspectorProvider({
       bucket: Bucket;
       seq: number;
       instanceId?: string;
+      property?: string;
       edit: Edit;
       onSuccess: (bucket: Bucket) => void;
     };
@@ -1076,6 +1080,7 @@ export function InspectorProvider({
         pending.push({
           bucket,
           seq: op.seq,
+          property: `${slideId}\n${line}:${column}\nstyle:${k}`,
           edit: {
             line,
             column,
@@ -1091,6 +1096,7 @@ export function InspectorProvider({
         pending.push({
           bucket,
           seq: op.seq,
+          property: `${slideId}\n${line}:${column}\nattr:${attr}`,
           edit: {
             line,
             column,
@@ -1136,14 +1142,27 @@ export function InspectorProvider({
         }
       }
     }
-    pending.sort((a, b) => a.seq - b.seq);
+    const settle = (item: PendingItem) => {
+      item.onSuccess(item.bucket);
+      if (item.property) editLedger.record(item.property, item.seq);
+      if (!bucketIsEmpty(item.bucket)) return;
+      for (const [key, pendingBucket] of pendingRef.current) {
+        if (pendingBucket === item.bucket) pendingRef.current.delete(key);
+      }
+    };
+    const writes = pending.filter((item) => {
+      if (!item.property || !editLedger.superseded(item.property, item.seq)) return true;
+      settle(item);
+      return false;
+    });
+    writes.sort((a, b) => a.seq - b.seq);
     const lastTextEdit = new Map<string, number>();
-    for (const [index, item] of pending.entries()) {
+    for (const [index, item] of writes.entries()) {
       if (!item.instanceId) continue;
       item.edit.dependsOn = lastTextEdit.get(item.instanceId);
       lastTextEdit.set(item.instanceId, index);
     }
-    if (pending.length === 0) {
+    if (writes.length === 0) {
       pendingRef.current = new Map();
       setPendingCount(0);
       history.clear();
@@ -1151,19 +1170,13 @@ export function InspectorProvider({
     }
     setCommitting(true);
     try {
-      const results = await applyEdits(pending.map((p) => p.edit));
+      const results = await applyEdits(writes.map((p) => p.edit));
       const failures: string[] = [];
       for (let i = 0; i < results.length; i++) {
-        const item = pending[i];
+        const item = writes[i];
         const r = results[i];
-        const bucket = item.bucket;
         if (r.ok) {
-          item.onSuccess(bucket);
-          if (bucketIsEmpty(bucket)) {
-            for (const [key, pendingBucket] of pendingRef.current) {
-              if (pendingBucket === bucket) pendingRef.current.delete(key);
-            }
-          }
+          settle(item);
         } else {
           failures.push(`line ${item.edit.line}: ${r.error ?? 'edit failed'}`);
         }
@@ -1182,7 +1195,7 @@ export function InspectorProvider({
       setCommitting(false);
       history.clear();
     }
-  }, [applyEdits, history, refreshCount, t]);
+  }, [applyEdits, history, refreshCount, slideId, t]);
 
   // Two commits in flight would send the same buffered ops twice.
   const commitEdits = useCallback(() => commitQueue.run(writeEdits), [commitQueue, writeEdits]);

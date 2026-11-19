@@ -37,13 +37,17 @@ export function loginEnv(): Promise<NodeJS.ProcessEnv> {
   return probe;
 }
 
+function pathOf(env: NodeJS.ProcessEnv): string | undefined {
+  return env.PATH ?? Object.entries(env).find(([key]) => key.toUpperCase() === 'PATH')?.[1];
+}
+
+// Windows inherits `Path`; one canonical key keeps a lookup from picking a stale variant.
 function withPath(login: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const paths = [login.PATH, process.env.PATH].flatMap((p) => (p ?? '').split(path.delimiter));
-  return {
-    ...process.env,
-    ...login,
-    PATH: [...new Set(paths.filter(Boolean))].join(path.delimiter),
-  };
+  const paths = [login.PATH, pathOf(process.env)].flatMap((p) => (p ?? '').split(path.delimiter));
+  const env: NodeJS.ProcessEnv = { ...process.env, ...login };
+  for (const key of Object.keys(env)) if (key.toUpperCase() === 'PATH') delete env[key];
+  env.PATH = [...new Set(paths.filter(Boolean))].join(path.delimiter);
+  return env;
 }
 
 function parseEnv(block: string): NodeJS.ProcessEnv | null {

@@ -199,4 +199,53 @@ describe('DeckCovers', () => {
     await vi.waitFor(() => expect(state.changes).toBe(1));
     expect(fixture.loads).toHaveLength(2);
   });
+  it('pictures open decks again when the server moves to another address', async () => {
+    const { covers, state, pictured } = setup();
+    covers.sync(['roadmap']);
+    await vi.waitFor(() => expect(state.changes).toBe(1));
+
+    covers.setBaseUrl('http://localhost:5174');
+
+    expect(covers.get('roadmap')).toBeNull();
+    await vi.waitFor(() =>
+      expect(pictured('roadmap')).toBe('http://localhost:5174/s/roadmap/preview'),
+    );
+  });
+
+  it('drops a capture from the old address when the server moved mid-capture', async () => {
+    const { covers, pictured } = setup();
+    let release = () => {};
+    fixture.hold = new Promise((resolve) => {
+      release = resolve;
+    });
+
+    covers.sync(['roadmap']);
+    await vi.waitFor(() => expect(fixture.loads).toHaveLength(1));
+    covers.setBaseUrl('http://localhost:5174');
+    release();
+
+    await vi.waitFor(() => expect(fixture.loads).toHaveLength(2));
+    await vi.waitFor(() =>
+      expect(pictured('roadmap')).toBe('http://localhost:5174/s/roadmap/preview'),
+    );
+  });
+
+  it('throws away a window whose capture hangs and moves on to the next deck', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { covers } = setup();
+      fixture.hold = new Promise(() => {});
+
+      covers.sync(['stuck', 'roadmap']);
+      await vi.waitFor(() => expect(fixture.loads).toHaveLength(1));
+      fixture.hold = null;
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      await vi.waitFor(() => expect(covers.get('roadmap')).not.toBeNull());
+      expect(covers.get('stuck')).toBeNull();
+      expect(fixture.windows).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -233,11 +233,16 @@ export function Slide() {
     };
   }, [curtain, playMode]);
 
+  const routedRef = useRef(slideId);
+  routedRef.current = slideId;
   const modulePages = useMemo(() => slide?.default ?? [], [slide]);
-  const [pages, setPages] = useState<typeof modulePages>(modulePages);
+  // Tagged with its deck: right after a route change the old deck's module is
+  // still loaded under the new slideId.
+  const [deck, setDeck] = useState({ slideId, pages: modulePages });
   useEffect(() => {
-    setPages(modulePages);
+    setDeck({ slideId: routedRef.current, pages: modulePages });
   }, [modulePages]);
+  const pages = deck.pages;
   const pageCount = pages.length;
   const rawIndex = Number(searchParams.get('p') ?? '1') - 1;
   const index = Number.isFinite(rawIndex) ? Math.max(0, Math.min(pageCount - 1, rawIndex)) : 0;
@@ -291,38 +296,41 @@ export function Slide() {
     seenPageCount.current = pageCount;
   }, [agentWriting, pageCount, goTo]);
 
-  const pagesRef = useRef(pages);
-  pagesRef.current = pages;
+  const deckRef = useRef(deck);
+  deckRef.current = deck;
   const indexRef = useRef(index);
   indexRef.current = index;
 
   // Notes can be mid-save when a page op is asked for, so the op is planned from
-  // the pages and position current once those writes settle.
+  // the pages and position current once those writes settle, and dropped if the
+  // route has moved to another deck by then.
   const changePages = useCallback(
     (plan: (order: number[]) => PagePlan | null) =>
       changeNotesPages(slideId, () => {
-        const before = pagesRef.current;
+        const { slideId: owner, pages: before } = deckRef.current;
+        if (routedRef.current !== slideId || owner !== slideId) return null;
         const at = indexRef.current;
         const next = plan(before.map((_, i) => i));
         if (!next) return null;
+        const moved = next.order.map((i) => before[i]);
         const position = next.order.indexOf(at);
         const nextIndex = position < 0 ? Math.min(at, next.order.length - 1) : position;
         return {
           order: next.order,
           apply: async () => {
-            setPages(next.order.map((i) => before[i]));
+            setDeck({ slideId, pages: moved });
             if (nextIndex !== at) showPage(nextIndex);
-            try {
-              const res = await fetch(next.request, next.init);
-              if (!res.ok) {
-                const detail = await res.json().catch(() => ({ error: res.statusText }));
-                throw new Error(detail.error ?? `HTTP ${res.status}`);
-              }
-            } catch (err) {
-              setPages(before);
-              if (nextIndex !== at) showPage(at);
-              throw err;
-            }
+            const res = await fetch(next.request, next.init);
+            const body = (await res.json().catch(() => ({ error: res.statusText }))) as {
+              error?: string;
+              layout?: string;
+            };
+            if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+            return body.layout;
+          },
+          revert: () => {
+            setDeck((current) => (current.pages === moved ? { slideId, pages: before } : current));
+            if (nextIndex !== at && routedRef.current === slideId) showPage(at);
           },
         };
       }),
