@@ -48,7 +48,7 @@ export function Composer({
           rows={1}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing) return;
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               if (canSend) onSend();

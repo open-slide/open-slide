@@ -275,7 +275,7 @@ function UserEditor({
         aria-label={t.agent.editMessage}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return;
+          if (e.nativeEvent.isComposing || e.keyCode === 229) return;
           if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
@@ -583,7 +583,13 @@ function QuestionItem({
                 value={other[q.question] ?? ''}
                 onChange={(e) => setOther((prev) => ({ ...prev, [q.question]: e.target.value }))}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing && complete && !busy) {
+                  if (
+                    e.key === 'Enter' &&
+                    !e.nativeEvent.isComposing &&
+                    e.keyCode !== 229 &&
+                    complete &&
+                    !busy
+                  ) {
                     e.preventDefault();
                     submit();
                   }
