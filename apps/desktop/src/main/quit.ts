@@ -16,10 +16,14 @@ export class QuitGate {
   beforeQuit(event: { preventDefault(): void }) {
     if (this.state === 'done') return;
     event.preventDefault();
-    if (this.state === 'idle') void this.run();
+    this.request();
   }
 
-  private async run() {
+  request(finish: () => void = this.opts.quit) {
+    if (this.state === 'idle') void this.run(finish);
+  }
+
+  private async run(finish: () => void) {
     this.state = 'asking';
     const confirmed = await this.opts.confirm().catch(() => false);
     if (!confirmed) {
@@ -29,6 +33,6 @@ export class QuitGate {
     this.state = 'cleaning';
     await this.opts.cleanup().catch(() => {});
     this.state = 'done';
-    this.opts.quit();
+    finish();
   }
 }

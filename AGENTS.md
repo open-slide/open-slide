@@ -35,6 +35,7 @@ Filter to one package: `pnpm core <script>` / `pnpm cli <script>`.
 
 - **Biome must pass before commit.** Run `pnpm check` (or `pnpm check:fix`). CI and the user's review both expect a clean tree.
 - **If `packages/core` or `packages/cli` changes, add a changeset.** Run `pnpm changeset`, pick the right package(s) and bump (`patch` for fixes/polish, `minor` for new public API, `major` for breaking). Apps (`demo`, `web`) and root tooling do **not** need one.
+- **`desktop` has its own version**, independent of core (it started at `0.0.1`). Add a `desktop` changeset for user-facing changes to `apps/desktop`, and also when a core release should reach desktop users: the app ships whatever core is in the repo when it is built. Merging the release PR that bumps it builds and publishes the app (`.github/workflows/desktop.yml`).
 - **Changeset descriptions: short and direct.** One line, present-tense, what changed from a user's perspective. Match the tone of `.changeset/*.md` already in the repo. No paragraphs, no rationale, no "this PR…".
   - Good: `Replace spinner with a hairline + sliding bar for slide and presenter loading states.`
   - Bad: `This change introduces a new loading indicator because the previous spinner felt heavy and we wanted something more subtle for presentation contexts…`
@@ -46,6 +47,8 @@ Filter to one package: `pnpm core <script>` / `pnpm cli <script>`.
 ## Releasing (reference)
 
 `pnpm release` builds `core` + `cli` and runs `changeset publish`. Triggered by the maintainer, not by agents.
+
+The desktop app releases from `.github/workflows/desktop.yml`: when `apps/desktop/package.json` on `main` holds a version with no `desktop-v<version>` release yet, it builds macOS (arm64, x64), Windows, and Linux, publishes `desktop-v<version>`, then points the `desktop-latest` update feed at it.
 
 <!-- BEGIN:turborepo-agent-rules -->
 

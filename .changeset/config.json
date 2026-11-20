@@ -7,9 +7,9 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": [],
+  "ignore": ["demo", "web", "core-e2e-fixture"],
   "privatePackages": {
-    "version": false,
+    "version": true,
     "tag": false
   }
 }

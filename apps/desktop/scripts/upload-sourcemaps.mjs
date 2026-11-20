@@ -12,8 +12,7 @@ if (!process.env.POSTHOG_CLI_API_KEY || !process.env.POSTHOG_CLI_PROJECT_ID) {
   process.exit(0);
 }
 
-const core = path.join(root, 'node_modules/@open-slide/core/package.json');
-const { version } = JSON.parse(fs.readFileSync(core, 'utf8'));
+const { version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const isWindows = process.platform === 'win32';
 const dist = path.join(root, 'dist');
 

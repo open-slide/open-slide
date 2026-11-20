@@ -177,7 +177,8 @@ export function startCrashReporter() {
 export function initTelemetry() {
   if (client || !allowed()) return;
   base = {
-    $app_version: bundledCore().version,
+    $app_version: app.getVersion(),
+    core_version: bundledCore().version,
     $os: OS_NAMES[process.platform] ?? process.platform,
     $os_version: process.getSystemVersion(),
     arch: process.arch,
@@ -238,7 +239,7 @@ function findDumps(dir: string, since: number): number {
 }
 
 function trackLaunch() {
-  const version = bundledCore().version;
+  const version = app.getVersion();
   const previous = settings.lastVersion();
   const checkedAt = settings.crashCheckedAt();
   settings.setCrashCheckedAt(Date.now());

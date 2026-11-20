@@ -1,0 +1,198 @@
+name: Desktop
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/desktop/**
+      - packages/core/**
+      - packages/cli/**
+      - pnpm-lock.yaml
+      - .github/workflows/desktop.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - apps/desktop/**
+      - .github/workflows/desktop.yml
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      release: ${{ steps.plan.outputs.release }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Decide whether to release
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          tag="desktop-v$version"
+          release=false
+          if [ "$GITHUB_EVENT_NAME" != pull_request ] && [ "$GITHUB_REF" = refs/heads/main ] \
+            && ! gh release view "$tag" >/dev/null 2>&1; then
+            release=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "Desktop $version, release: $release" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            slug: mac-arm64
+            runner: macos-latest
+            target: --mac --arm64
+          - name: macOS x64
+            slug: mac-x64
+            runner: macos-15-intel
+            target: --mac --x64
+          - name: Windows x64
+            slug: win-x64
+            runner: windows-latest
+            target: --win --x64
+          - name: Linux x64
+            slug: linux-x64
+            runner: ubuntu-latest
+            target: --linux --x64
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps/desktop
+    env:
+      RELEASE: ${{ needs.plan.outputs.release }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build core and cli
+        run: pnpm build:deps
+
+      - name: Build app
+        env:
+          MAIN_VITE_POSTHOG_TOKEN: ${{ needs.plan.outputs.release == 'true' && secrets.MAIN_VITE_POSTHOG_TOKEN || '' }}
+        run: pnpm build
+
+      - name: Upload source maps
+        if: needs.plan.outputs.release == 'true'
+        env:
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: ${{ secrets.POSTHOG_CLI_PROJECT_ID }}
+        run: node scripts/upload-sourcemaps.mjs
+
+      - name: Package
+        env:
+          CSC_LINK: ${{ needs.plan.outputs.release == 'true' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ needs.plan.outputs.release == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # electron-builder reads a set-but-empty variable as a value.
+          [ -n "$CSC_LINK" ] || unset CSC_LINK CSC_KEY_PASSWORD
+          [ -n "$APPLE_ID" ] || unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+          pnpm exec electron-builder ${{ matrix.target }} --publish never
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.slug }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish ${{ needs.plan.outputs.tag }}
+    needs: [plan, build]
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      FEED: desktop-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter desktop
+
+      - name: Download builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: artifacts
+
+      - name: Write update feed
+        run: node apps/desktop/scripts/release.mjs feed artifacts feed
+
+      - name: Create release
+        run: |
+          node apps/desktop/scripts/release.mjs notes > notes.md
+          find artifacts -type f ! -name 'latest*.yml' -print0 \
+            | xargs -0 gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "open-slide desktop $VERSION" \
+              --notes-file notes.md \
+              --latest=false
+
+      # Installed apps read their feed from here, so it moves only once the release has its files.
+      - name: Point the update feed at this release
+        run: |
+          if ! gh release view "$FEED" >/dev/null 2>&1; then
+            gh release create "$FEED" \
+              --target "$GITHUB_SHA" \
+              --title "open-slide desktop update feed" \
+              --notes "Read by the desktop app to find updates. Downloads are in each desktop-v* release." \
+              --prerelease \
+              --latest=false
+          fi
+          gh release upload "$FEED" feed/*.yml --clobber

@@ -75,4 +75,12 @@ describe('QuitGate', () => {
     expect(order).not.toContain('cleanup');
     expect(order).not.toContain('quit');
   });
+
+  it('ends a requested quit with its own finish step instead of quitting', async () => {
+    const { gate, order, finishCleanup } = setup(true);
+    gate.request(() => order.push('install'));
+    await vi.waitFor(() => expect(order).toEqual(['confirm', 'cleanup']));
+    finishCleanup();
+    await vi.waitFor(() => expect(order).toEqual(['confirm', 'cleanup', 'install']));
+  });
 });

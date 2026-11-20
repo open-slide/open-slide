@@ -81,6 +81,7 @@ vi.mock('electron', async () => {
           fixture.ready = resolve;
         }),
       setAboutPanelOptions: () => {},
+      getVersion: () => '0.0.1',
       getPath: () => fixture.home,
       getAppPath: () => fixture.home,
       quit: () => {},
@@ -177,6 +178,7 @@ vi.mock('./agent-cli', () => ({
 }));
 vi.mock('./agents', () => ({ listAgents: async () => [], logout: async () => ({ ok: true }) }));
 vi.mock('./haptics', () => ({ performHaptic() {} }));
+vi.mock('./update-source', () => ({ electronUpdateSource: () => null }));
 vi.mock('./process', () => ({ terminateRunning: async () => {} }));
 vi.mock('./shell-env', () => ({
   shellEnv: async () => ({}),

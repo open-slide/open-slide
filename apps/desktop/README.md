@@ -15,8 +15,20 @@ pnpm --filter desktop dist      # installers
 - `src/renderer`: tab strip, welcome, and settings, built from core's UI primitives and tokens.
 - Closing or reloading a tab, switching workspaces, and quitting first ask each tab to save or discard unsaved work (`src/main/unsaved.ts`).
 - First launch plays a full-screen intro, then a short tour. **Help → Welcome to open-slide** replays both.
-- Core's Vite cache lives under the app's user data, built-in skills sync into a workspace once per app version, and core's in-app update is hidden: updating the app updates core.
+- Core's Vite cache lives under the app's user data, built-in skills sync into a workspace once per bundled core version, and core's in-app update is hidden: updating the app updates core.
 - Opening a workspace runs its code. A workspace the app just created is trusted; any other folder is confirmed once with a native prompt and remembered in `settings.json`.
+
+## Updates and releases
+
+The app has its own version in `package.json`, independent of `@open-slide/core`, and is versioned by changesets like the packages (`pnpm changeset`, pick `desktop`). Merging the release PR that bumps it runs `.github/workflows/desktop.yml`, which builds every platform and publishes a `desktop-v<version>` GitHub release. The same workflow builds pull requests that touch the app, so their installers can be downloaded from the run.
+
+Installed apps check for updates on launch and every few hours with `electron-updater`, download in the background, and install on restart (**Restart to update** in the tab bar, Settings → About, or the app menu). The feed is the `latest*.yml` files on the `desktop-latest` release, which `scripts/release.mjs` points at the newest version's assets. It is a separate release because core's releases take GitHub's "latest" slot. Development builds never check; `OPEN_SLIDE_UPDATES=0` turns checks off in a packaged build.
+
+macOS installs updates only into an app signed with a Developer ID. Release builds sign and notarize when these repository secrets are set; without them the macOS builds are unsigned and can't update themselves:
+
+- `CSC_LINK`, `CSC_KEY_PASSWORD`: the Developer ID Application certificate as a base64 `.p12`, and its password.
+- `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`: notarization.
+- `MAIN_VITE_POSTHOG_TOKEN`, `POSTHOG_CLI_API_KEY`, `POSTHOG_CLI_PROJECT_ID`: telemetry and source maps, as below.
 
 ## Telemetry
 

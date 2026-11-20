@@ -1,22 +1,23 @@
-import { Bot, FolderClosed, Palette, ShieldCheck } from 'lucide-react';
+import { Bot, FolderClosed, Info, Palette, ShieldCheck } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { AppState, DesktopSettings, PackageManager } from '../../shared/types';
+import type { AppState, DesktopSettings, PackageManager, UpdateStatus } from '../../shared/types';
 import { desktop, TELEMETRY_DOCS_URL, useAppState, useLog } from '../lib/desktop';
 import { baseName, tildify } from '../lib/paths';
 import { rovingIndex } from '../lib/roving';
 import { openWorkspace } from '../lib/workspace-actions';
 import { AgentsSection } from './agents-section';
-import { LogView, SectionCard, Segmented, StatusDot } from './primitives';
+import { LogView, ProgressLine, SectionCard, Segmented, StatusDot } from './primitives';
 
-type SectionId = 'workspace' | 'agents' | 'appearance' | 'privacy';
+type SectionId = 'workspace' | 'agents' | 'appearance' | 'privacy' | 'about';
 
 const SECTIONS: { id: SectionId; label: string; icon: React.ReactNode }[] = [
   { id: 'workspace', label: 'Workspace', icon: <FolderClosed /> },
   { id: 'agents', label: 'Agents', icon: <Bot /> },
   { id: 'appearance', label: 'Appearance', icon: <Palette /> },
   { id: 'privacy', label: 'Privacy', icon: <ShieldCheck /> },
+  { id: 'about', label: 'About', icon: <Info /> },
 ];
 
 const SECTION_KEY = 'settings-section';
@@ -155,6 +156,7 @@ export function SettingsWindow() {
           {section === 'agents' && <AgentsSection />}
           {section === 'appearance' && <AppearanceSection {...sectionProps} />}
           {section === 'privacy' && <PrivacySection {...sectionProps} />}
+          {section === 'about' && <AboutSection {...sectionProps} />}
         </div>
       </div>
     </div>
@@ -361,5 +363,91 @@ function PrivacySection({ prefs, onUpdate }: SectionProps) {
         </Button>
       </div>
     </SectionCard>
+  );
+}
+
+const RELEASES_URL = 'https://github.com/open-slide/open-slide/releases?q=desktop';
+
+function updateSummary(update: UpdateStatus): {
+  tone: React.ComponentProps<typeof StatusDot>['tone'];
+  label: string;
+} {
+  switch (update.state) {
+    case 'unsupported':
+      return { tone: 'off', label: 'Updates are off in development builds' };
+    case 'idle':
+      return { tone: 'off', label: 'Checks for updates automatically' };
+    case 'checking':
+      return { tone: 'busy', label: 'Checking for updates…' };
+    case 'up-to-date':
+      return { tone: 'ok', label: 'Up to date' };
+    case 'downloading':
+      return { tone: 'busy', label: `Downloading ${update.version}… ${update.percent}%` };
+    case 'ready':
+      return { tone: 'ok', label: `${update.version} is ready to install` };
+    case 'error':
+      return { tone: 'warn', label: 'Couldn’t update' };
+  }
+}
+
+function AboutSection({ state }: SectionProps) {
+  const { update } = state;
+  const summary = updateSummary(update);
+  const busy = update.state === 'checking' || update.state === 'downloading';
+  return (
+    <>
+      <SectionCard
+        title="open-slide"
+        description="Slides as React code, edited alongside your agent."
+      >
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12.5px]">
+          <dt className="text-muted-foreground">Version</dt>
+          <dd className="selectable font-mono tabular-nums">{state.version}</dd>
+          <dt className="text-muted-foreground">Core</dt>
+          <dd className="selectable font-mono tabular-nums">{state.coreVersion}</dd>
+        </dl>
+      </SectionCard>
+
+      <SectionCard
+        title="Updates"
+        description="New versions download in the background and install when you restart."
+      >
+        <div className="flex items-center gap-2 text-[13px]">
+          <StatusDot tone={summary.tone} />
+          <span className="tabular-nums">{summary.label}</span>
+          <div className="ml-auto flex gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => desktop.openExternal(RELEASES_URL)}>
+              Release notes
+            </Button>
+            {update.state === 'ready' ? (
+              <Button size="sm" onClick={() => desktop.updates.install()}>
+                Restart to update
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={update.state === 'unsupported' || busy}
+                onClick={() => desktop.updates.check()}
+              >
+                Check now
+              </Button>
+            )}
+          </div>
+        </div>
+        {update.state === 'downloading' && (
+          <ProgressLine
+            value={update.percent / 100}
+            label={`Downloading open-slide ${update.version}`}
+            className="mt-3 w-full"
+          />
+        )}
+        {update.state === 'error' && (
+          <p className="selectable mt-3 text-[12px] leading-relaxed text-muted-foreground">
+            {update.message}
+          </p>
+        )}
+      </SectionCard>
+    </>
   );
 }
