@@ -136,22 +136,19 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
         const entry = resolveSlideEntry(ctx.slidesRoot, slideId);
         if (!entry) return json(res, 400, { error: 'invalid slideId' });
 
-        let source: string;
-        try {
-          source = await fs.readFile(entry, 'utf8');
-        } catch {
-          return json(res, 404, { error: 'slide not found' });
-        }
-
-        const added = addPageToDefaultExportInSource(source, afterIndex);
-        if (!added.ok) return json(res, added.status, { error: added.error });
-        await fs.writeFile(entry, added.source, 'utf8');
+        let added: { index: number; name: string } | undefined;
+        const result = await editSlideSource(entry, (source) => {
+          const next = addPageToDefaultExportInSource(source, afterIndex);
+          if (!next.ok) return next;
+          added = { index: next.index, name: next.name };
+          return { ok: true, source: next.source };
+        });
+        if (!result.ok) return json(res, result.status, { error: result.error });
         return json(res, 200, {
           ok: true,
           slideId,
-          index: added.index,
-          name: added.name,
-          layout: pageLayoutOfSource(added.source),
+          ...added,
+          layout: pageLayoutOfSource(result.source),
         });
       }
 

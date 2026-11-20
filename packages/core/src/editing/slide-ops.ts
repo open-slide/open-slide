@@ -785,26 +785,29 @@ function insertIntoArraySplice(
 // Follow the deck's own numbering when its page identifiers share a
 // `<prefix><n>` shape (Page1, Slide02…); otherwise fall back to `Page<n>`.
 function choosePageName(pageNames: string[], used: Set<string>, position: number): string {
-  const groups = new Map<string, { max: number; width: number; count: number }>();
+  // Suffixes are kept as BigInt so an oversized number still counts up.
+  type Group = { max: bigint; width: number; count: number };
+  const groups = new Map<string, Group>();
   for (const name of pageNames) {
     const m = name.match(/^([A-Za-z_$][\w$]*?)(\d+)$/);
     if (!m) continue;
     const [, prefix, digits] = m;
-    const g = groups.get(prefix) ?? { max: 0, width: 0, count: 0 };
-    g.max = Math.max(g.max, Number(digits));
+    const g = groups.get(prefix) ?? { max: 0n, width: 0, count: 0 };
+    const value = BigInt(digits);
+    if (value > g.max) g.max = value;
     if (digits.length > 1 && digits.startsWith('0')) g.width = Math.max(g.width, digits.length);
     g.count++;
     groups.set(prefix, g);
   }
-  let best: [string, { max: number; width: number; count: number }] | null = null;
+  let best: [string, Group] | null = null;
   for (const entry of groups) {
     if (!best || entry[1].count > best[1].count) best = entry;
   }
   const [prefix, width, start] =
     best && (best[1].count >= 2 || best[1].count === pageNames.length)
-      ? [best[0], best[1].width, best[1].max + 1]
-      : ['Page', 0, position + 1];
-  for (let n = start; ; n++) {
+      ? [best[0], best[1].width, best[1].max + 1n]
+      : ['Page', 0, BigInt(position + 1)];
+  for (let n = start; ; n += 1n) {
     const candidate = `${prefix}${String(n).padStart(width, '0')}`;
     if (!used.has(candidate)) return candidate;
   }
@@ -904,7 +907,9 @@ export function addPageToDefaultExportInSource(source: string, afterIndex: numbe
   if (notes === 'invalid') {
     return refuse('could not add page — `notes` export is not an array literal');
   }
-  if (notes && index < notes.elements.length) {
+  if (notes) {
+    // A spread hides how many notes there are, so it is refused even when the
+    // page lands past the literal elements.
     const noteElements: t.Node[] = [];
     for (const el of notes.elements) {
       if (!el || t.isSpreadElement(el)) {
@@ -912,8 +917,10 @@ export function addPageToDefaultExportInSource(source: string, afterIndex: numbe
       }
       noteElements.push(el);
     }
-    const notesSplice = insertIntoArraySplice(source, notes, noteElements, index, 'undefined');
-    if (notesSplice) splices.push(notesSplice);
+    if (index < noteElements.length) {
+      const notesSplice = insertIntoArraySplice(source, notes, noteElements, index, 'undefined');
+      if (notesSplice) splices.push(notesSplice);
+    }
   }
 
   const applied = applySplices(source, splices);

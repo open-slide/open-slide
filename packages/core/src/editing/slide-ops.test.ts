@@ -769,6 +769,20 @@ describe('addPageToDefaultExportInSource', () => {
     expect(addPageToDefaultExportInSource(badNotes, 0).ok).toBe(false);
   });
 
+  it('refuses a notes spread even when the page lands past its literal elements', () => {
+    const spread =
+      'const A = () => <div />;\nconst B = () => <div />;\n' +
+      "export const notes = [...['a', 'b']];\nexport default [A, B];";
+    expect(addPageToDefaultExportInSource(spread, 0)).toMatchObject({ ok: false, status: 422 });
+    expect(addPageToDefaultExportInSource(spread, 1)).toMatchObject({ ok: false, status: 422 });
+  });
+
+  it('keeps counting past a page number too large for a double', () => {
+    const source =
+      'const Page9007199254740992 = () => <div />;\nexport default [Page9007199254740992];';
+    expect(added(source, 0).name).toBe('Page9007199254740993');
+  });
+
   it('refuses a source that does not parse', () => {
     expect(addPageToDefaultExportInSource('export default [A,,', 0).ok).toBe(false);
   });
