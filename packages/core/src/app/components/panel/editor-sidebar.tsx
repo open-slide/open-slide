@@ -5,6 +5,7 @@ import { useInspector } from '@/components/inspector/inspector-provider';
 import type { PageInfo } from '@/components/inspector/page-panel';
 import { useDesignPanelState } from '@/components/style-panel/design-provider';
 import { DesignPanel } from '@/components/style-panel/style-panel';
+import type { DesignSystem } from '@/lib/design';
 import { useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import { PANEL_TRANSITION_MS, PANEL_W, usePanelMount } from './panel-shell';
@@ -20,12 +21,14 @@ const AGENT_MAX_W = 720;
 // them only retargets one width transition instead of collapsing one column
 // while another grows.
 export function EditorSidebar({
+  design,
   designOpen,
   onCloseDesign,
   agentOpen = false,
   agent,
   page,
 }: {
+  design?: DesignSystem;
   designOpen: boolean;
   onCloseDesign: () => void;
   agentOpen?: boolean;
@@ -121,7 +124,12 @@ export function EditorSidebar({
           {lastEditor === 'design' ? (
             <DesignPanel onClose={onCloseDesign} />
           ) : (
-            <InspectorPanel preferredTab={preferredTab} onTabChange={setPreferredTab} page={page} />
+            <InspectorPanel
+              preferredTab={preferredTab}
+              onTabChange={setPreferredTab}
+              page={page}
+              design={design}
+            />
           )}
         </SwapPane>
       )}
