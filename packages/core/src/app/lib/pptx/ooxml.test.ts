@@ -182,6 +182,60 @@ describe('buildPptxFiles', () => {
     expect(xml).toContain('stAng="0"');
   });
 
+  it('emits run hyperlinks with one external relationship per URL', () => {
+    const linked: RunStyle = { ...style, link: 'https://example.com/sheet?a=1&b=2' };
+    const linkDeck: DeckScene = {
+      images: [],
+      slides: [
+        {
+          background: null,
+          notes: null,
+          nodes: [
+            {
+              kind: 'text',
+              name: 'Text: Source',
+              box: { x: 0, y: 0, w: 600, h: 100 },
+              rotationDeg: 0,
+              flipV: false,
+              paragraphs: [
+                {
+                  lineSpacingPx: 48,
+                  align: 'l',
+                  bullet: null,
+                  marginLeftPx: 0,
+                  indentPx: 0,
+                  endSizePx: 40,
+                  lines: [
+                    {
+                      runs: [
+                        { text: 'Source: ', style },
+                        { text: 'Pricing', style: linked },
+                        { text: ' and ', style },
+                        { text: 'sheet', style: linked },
+                      ],
+                      sizePx: 40,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const out = buildPptxFiles(linkDeck);
+    const slide = strFromU8(out['ppt/slides/slide1.xml']);
+    const rels = strFromU8(out['ppt/slides/_rels/slide1.xml.rels']);
+    expect(
+      slide.match(/<a:hlinkClick r:id="rId2"\/><\/a:rPr><a:t>(Pricing|sheet)<\/a:t>/g),
+    ).toHaveLength(2);
+    expect(slide).toContain('<a:cs typeface="Inter"/></a:rPr><a:t>Source: </a:t>');
+    expect(rels.match(/\/hyperlink"/g)).toHaveLength(1);
+    expect(rels).toContain(
+      'Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com/sheet?a=1&amp;b=2" TargetMode="External"',
+    );
+  });
+
   it('strips control characters', () => {
     expect(escapeXml('a\u0000b\u0007c\td')).toBe('abc\td');
   });

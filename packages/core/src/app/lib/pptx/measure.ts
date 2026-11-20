@@ -1056,7 +1056,7 @@ function collectTextAtoms(
   if (rects.length === 0) return;
   const whiteSpace = cs.whiteSpace;
   const preserve = whiteSpace.startsWith('pre') && whiteSpace !== 'pre-line';
-  const style = runStyle(ctx, cs, inherited);
+  const style: RunStyle = { ...runStyle(ctx, cs, inherited), link: linkOf(node) };
   const styleKey = JSON.stringify(style);
   const transform = cs.textTransform;
   const transformed = applyTextTransform(text, transform);
@@ -1088,6 +1088,25 @@ function collectTextAtoms(
       : applyTextTransform(segment, transform);
     atoms.push({ text: piece, rect: rel(ctx, r), styleKey, style, preserveSpaces: preserve });
   }
+}
+
+function linkOf(node: Text): string | null {
+  const anchor = node.parentElement?.closest('a[href]');
+  if (!(anchor instanceof HTMLAnchorElement)) return null;
+  return exportableHref(anchor.href, window.location.origin);
+}
+
+// Same-origin links (in-app routes, `#hash`) point at the dev server and would be dead in the file.
+export function exportableHref(href: string, origin: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return null;
+  }
+  if (url.protocol === 'mailto:') return href;
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  return url.origin === origin ? null : href;
 }
 
 function runStyle(ctx: Ctx, cs: CSSStyleDeclaration, inherited: Inherited): RunStyle {

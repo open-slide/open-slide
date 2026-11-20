@@ -103,8 +103,15 @@ export function imageFileName(image: SceneImage): string {
   return `image${image.id}.${image.format}`;
 }
 
+type RelEntry = {
+  id: string;
+  type: string;
+  target: string;
+  targetMode?: 'External';
+};
+
 class SlideRels {
-  readonly entries: { id: string; type: string; target: string }[] = [
+  readonly entries: RelEntry[] = [
     { id: 'rId1', type: `${OD_REL}/slideLayout`, target: '../slideLayouts/slideLayout1.xml' },
   ];
   private readonly byTarget = new Map<string, string>();
@@ -115,6 +122,21 @@ class SlideRels {
     const id = `rId${this.entries.length + 1}`;
     this.entries.push({ id, type: `${OD_REL}/image`, target: `../media/${target}` });
     this.byTarget.set(target, id);
+    return id;
+  }
+
+  hyperlink(url: string): string {
+    const key = `hyperlink:${url}`;
+    const existing = this.byTarget.get(key);
+    if (existing) return existing;
+    const id = `rId${this.entries.length + 1}`;
+    this.entries.push({
+      id,
+      type: `${OD_REL}/hyperlink`,
+      target: url,
+      targetMode: 'External',
+    });
+    this.byTarget.set(key, id);
     return id;
   }
 
@@ -246,7 +268,10 @@ function notesSlideRelsXml(idx: number): string {
 function slideRelsXml(rels: SlideRels, notesIdx: number | null): string {
   if (notesIdx !== null) rels.notes(notesIdx);
   const body = rels.entries
-    .map((r) => `<Relationship Id="${r.id}" Type="${r.type}" Target="${r.target}"/>`)
+    .map((r) => {
+      const mode = r.targetMode ? ` TargetMode="${r.targetMode}"` : '';
+      return `<Relationship Id="${r.id}" Type="${r.type}" Target="${escapeXml(r.target)}"${mode}/>`;
+    })
     .join('');
   return `${XML_DECL}<Relationships xmlns="${REL_NS}">${body}</Relationships>`;
 }
@@ -317,17 +342,17 @@ function cropXml(crop: PictureNode['crop']): string {
 
 function textXml(node: TextNode, ctx: EmitContext): string {
   const id = ctx.nextId++;
-  const paragraphs = node.paragraphs.map(paragraphXml).join('');
+  const paragraphs = node.paragraphs.map((p) => paragraphXml(p, ctx)).join('');
   return `<p:sp><p:nvSpPr>${nvPr(id, node.name)}<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xfrmXml(node)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`;
 }
 
-function paragraphXml(p: Paragraph): string {
+function paragraphXml(p: Paragraph, ctx: EmitContext): string {
   const marL = p.marginLeftPx > 0 ? ` marL="${px(p.marginLeftPx)}"` : '';
   const indent = p.indentPx !== 0 ? ` indent="${px(p.indentPx)}"` : '';
   const pPr = `<a:pPr${marL}${indent} algn="${p.align}"><a:lnSpc><a:spcPts val="${pxToHundredthsPt(p.lineSpacingPx)}"/></a:lnSpc><a:spcBef><a:spcPts val="0"/></a:spcBef><a:spcAft><a:spcPts val="0"/></a:spcAft>${bulletXml(p.bullet)}</a:pPr>`;
   const body = p.lines
     .map((line, i) => {
-      const runs = line.runs.map(runXml).join('');
+      const runs = line.runs.map((r) => runXml(r, ctx)).join('');
       const br =
         i < p.lines.length - 1 ? `<a:br><a:rPr lang="en-US" sz="${sz(line.sizePx)}"/></a:br>` : '';
       return runs + br;
@@ -350,8 +375,9 @@ function sz(sizePx: number): number {
   return Math.max(100, pxToHundredthsPt(sizePx));
 }
 
-function runXml(run: Run): string {
+function runXml(run: Run, ctx: EmitContext): string {
   const s = run.style;
+  const link = s.link ? `<a:hlinkClick r:id="${ctx.rels.hyperlink(s.link)}"/>` : '';
   const attrs = [
     'lang="en-US"',
     `sz="${sz(s.sizePx)}"`,
@@ -376,7 +402,7 @@ function runXml(run: Run): string {
     ? `<a:effectLst><a:outerShdw blurRad="${px(s.shadow.blur)}" dist="${px(s.shadow.dist)}" dir="${degrees(s.shadow.dirDeg)}" algn="ctr" rotWithShape="0">${colorXml(s.shadow.color)}</a:outerShdw></a:effectLst>`
     : '';
   const font = escapeXml(s.font);
-  return `<a:r><a:rPr ${attrs}>${outline}<a:solidFill>${colorXml(s.color)}</a:solidFill>${shadow}<a:latin typeface="${font}"/><a:ea typeface="${font}"/><a:cs typeface="${font}"/></a:rPr><a:t>${escapeXml(run.text)}</a:t></a:r>`;
+  return `<a:r><a:rPr ${attrs}>${outline}<a:solidFill>${colorXml(s.color)}</a:solidFill>${shadow}<a:latin typeface="${font}"/><a:ea typeface="${font}"/><a:cs typeface="${font}"/>${link}</a:rPr><a:t>${escapeXml(run.text)}</a:t></a:r>`;
 }
 
 function xfrmXml(node: { box: Rect; rotationDeg: number; flipV: boolean }): string {
