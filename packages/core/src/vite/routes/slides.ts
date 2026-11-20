@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import type { ViteDevServer } from 'vite';
 import {
+  addPageToDefaultExportInSource,
   createBlankSlideDir,
   duplicateNotesElementInSource,
   duplicatePageInDefaultExportInSource,
@@ -25,6 +26,7 @@ import { type ApiContext, json, readBody } from './context.ts';
 
 // POST   /__slides                        create a blank slide → { slideId }
 // PUT    /__slides/:id/reorder            reorder pages { order: number[] } → { layout }
+// POST   /__slides/:id/pages              add blank page { afterIndex } → { layout }
 // DELETE /__slides/:id/pages/:i           remove page → { layout }
 // POST   /__slides/:id/pages/:i/duplicate duplicate page → { layout }
 // POST   /__slides/:id/duplicate          duplicate slide directory { newId? }
@@ -112,6 +114,40 @@ export function registerSlideRoutes(server: ViteDevServer, ctx: ApiContext): voi
           ok: true,
           slideId,
           order,
+          layout: pageLayoutOfSource(result.source),
+        });
+      }
+
+      const addPageMatch = url.pathname.match(/^\/([^/]+)\/pages$/);
+      if (addPageMatch && method === 'POST') {
+        const requestCheck = validateMutationRequest(req, { requireJsonBody: true });
+        if (!requestCheck.ok) {
+          return json(res, requestCheck.status, { error: requestCheck.error });
+        }
+        const slideId = addPageMatch[1];
+        if (!SLIDE_ID_RE.test(slideId)) return json(res, 400, { error: 'invalid slideId' });
+
+        const body = (await readBody(req)) as { afterIndex?: unknown };
+        const afterIndex = body.afterIndex;
+        if (typeof afterIndex !== 'number' || !Number.isInteger(afterIndex) || afterIndex < -1) {
+          return json(res, 400, { error: 'invalid afterIndex' });
+        }
+
+        const entry = resolveSlideEntry(ctx.slidesRoot, slideId);
+        if (!entry) return json(res, 400, { error: 'invalid slideId' });
+
+        let added: { index: number; name: string } | undefined;
+        const result = await editSlideSource(entry, (source) => {
+          const next = addPageToDefaultExportInSource(source, afterIndex);
+          if (!next.ok) return next;
+          added = { index: next.index, name: next.name };
+          return { ok: true, source: next.source };
+        });
+        if (!result.ok) return json(res, result.status, { error: result.error });
+        return json(res, 200, {
+          ok: true,
+          slideId,
+          ...added,
           layout: pageLayoutOfSource(result.source),
         });
       }
