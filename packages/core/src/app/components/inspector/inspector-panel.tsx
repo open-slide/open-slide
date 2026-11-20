@@ -398,6 +398,7 @@ export function InspectorPanel({
                   <>
                     {palette && !contentRange && !rangeSelected && (
                       <DesignTokenSwatches
+                        label={t.inspector.textColor}
                         palette={palette}
                         value={styleValue(selected, 'color')}
                         onPick={(value) =>
@@ -416,6 +417,7 @@ export function InspectorPanel({
                 )}
                 {palette && (
                   <DesignTokenSwatches
+                    label={t.inspector.backgroundColor}
                     palette={palette}
                     value={styleValue(selected, 'backgroundColor')}
                     onPick={(value) =>

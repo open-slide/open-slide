@@ -4,10 +4,14 @@ import { format, useLocale } from '@/lib/use-locale';
 const PALETTE_TOKENS = ['bg', 'text', 'accent'] as const;
 
 export function DesignTokenSwatches({
+  label,
   palette,
   value,
   onPick,
 }: {
+  // Names the property the row sets (text or background), so a screen reader
+  // can tell two rows of identically named swatches apart.
+  label: string;
   palette: DesignPalette;
   value?: string | null;
   onPick: (value: string) => void;
@@ -22,7 +26,7 @@ export function DesignTokenSwatches({
   return (
     <div className="grid grid-cols-[68px_1fr] items-center gap-3">
       <span aria-hidden />
-      <div className="flex items-center gap-1.5">
+      <div role="group" aria-label={label} className="flex items-center gap-1.5">
         {PALETTE_TOKENS.map((token) => {
           const tokenVar = paletteTokenVar(token);
           const label = format(t.inspector.designTokenSwatchAria, { name: labels[token] });
