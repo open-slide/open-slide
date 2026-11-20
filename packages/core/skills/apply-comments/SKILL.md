@@ -29,7 +29,7 @@ Your job: read those markers, perform the described edits, and delete the marker
 
 ## Structured intent
 
-A payload may carry an optional `intent` naming a structural edit on the target element (the enclosing element from step 3). `note` still carries any detail, and keeping the result valid, well-formatted JSX is still your job.
+A payload may carry an optional `intent` naming a structural edit on the target element. Resolve that element with step 3 first: a hoisted marker (self-closing child) or a `rect` payload means the intent applies to the child or region the comment refers to, not to the element the marker sits in. If the target stays ambiguous, leave the marker in place and report it as skipped rather than applying the intent to the enclosing element. `note` still carries any detail, and keeping the result valid, well-formatted JSX is still your job.
 
 | `intent` | What to do |
 | --- | --- |
@@ -39,7 +39,7 @@ A payload may carry an optional `intent` naming a structural edit on the target 
 | `move-after` | Move the element after the sibling the `note` names (default: its next sibling). |
 | `wrap` | Wrap the element in a new container as the `note` describes. |
 
-No `intent` means a plain free-text comment. Any other value isn't part of the format: treat the comment as free text. If markers on the same element carry conflicting intents, don't guess: leave them in place and report them as skipped.
+No `intent` means a plain free-text comment. Any other value isn't part of the format: treat the comment as free text. If markers on the same element carry conflicting intents, don't guess: leave them in place and report them as skipped. A structural edit must never remove a marker that has to stay in place (a skipped one, or one you have not processed yet): if a `delete` or `wrap` would take such a marker with it, skip that edit too, keep both markers, and report both as skipped.
 
 ## Procedure
 
