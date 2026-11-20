@@ -112,9 +112,7 @@ export function InspectorEmptyState({
     >
       <Icon aria-hidden className="size-8 text-muted-foreground/50" />
       <div className="flex flex-col gap-1.5">
-        <h2 className="text-[13px] font-medium">
-          {untraced ? t.inspector.untracedTitle : t.inspector.emptySelectionTitle}
-        </h2>
+        {untraced && <h2 className="text-[13px] font-medium">{t.inspector.untracedTitle}</h2>}
         <p className="text-[12px] leading-relaxed text-muted-foreground">
           {untraced
             ? format(t.inspector.untracedHint, {

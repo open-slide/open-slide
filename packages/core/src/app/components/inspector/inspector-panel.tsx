@@ -451,10 +451,10 @@ export function InspectorPanel({
               <ArrangePanel />
             </TabsContent>
           </>
-        ) : page ? (
-          <PagePanel page={page} />
-        ) : (
+        ) : status.kind === 'untraced' || !page ? (
           <InspectorEmptyState slideId={slideId} status={status} />
+        ) : (
+          <PagePanel page={page} />
         )}
       </PanelShell>
     </Tabs>
