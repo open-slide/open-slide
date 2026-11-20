@@ -152,6 +152,8 @@ export function useVisualEditor({
   removeElements,
 }: Options) {
   const [snapping, setSnapping] = useState(true);
+  const [thirds, setThirds] = useState(false);
+  const [grid, setGrid] = useState({ enabled: false, size: 8 });
   const t = useLocale();
   const move = useCallback(
     (deltas: { x: number; y: number }[], coalesceKey?: string) => {
@@ -425,6 +427,10 @@ export function useVisualEditor({
     () => ({
       snapping,
       setSnapping,
+      thirds,
+      setThirds,
+      grid,
+      setGrid,
       align,
       distribute,
       setFrame,
@@ -432,6 +438,6 @@ export function useVisualEditor({
       selectParent,
       selectAll,
     }),
-    [snapping, align, distribute, setFrame, arrange, selectParent, selectAll],
+    [snapping, thirds, grid, align, distribute, setFrame, arrange, selectParent, selectAll],
   );
 }
