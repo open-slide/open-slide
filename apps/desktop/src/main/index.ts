@@ -40,7 +40,6 @@ import { QuitGate } from './quit';
 import { installPermissionPolicy, restrictContents } from './security';
 import { DevServer } from './server';
 import { settings } from './settings';
-import { SettingsWindow } from './settings-window';
 import { loginEnv, shellEnv } from './shell-env';
 import {
   accent,
@@ -83,7 +82,6 @@ const WINDOW_SHOW_TIMEOUT_MS = 2000;
 
 let window: BrowserWindow | null = null;
 let tabs: TabManager | null = null;
-const settingsWindow = new SettingsWindow();
 const intro = new IntroWindow({ main: () => window, onChange: broadcast });
 
 async function childEnv(read = shellEnv): Promise<NodeJS.ProcessEnv> {
@@ -123,9 +121,7 @@ function state(): AppState {
 }
 
 function shellWindows(): BrowserWindow[] {
-  return [window, settingsWindow.window, intro.window].filter(
-    (w): w is BrowserWindow => !!w && !w.isDestroyed(),
-  );
+  return [window, intro.window].filter((w): w is BrowserWindow => !!w && !w.isDestroyed());
 }
 
 function shellWindowOf(contents: WebContents | null): BrowserWindow | null {
@@ -186,12 +182,25 @@ async function ensureMainWindow(): Promise<BrowserWindow> {
   return window;
 }
 
+function sendWhenLoaded(contents: WebContents, channel: string, payload: unknown) {
+  const send = () => contents.send(channel, payload);
+  if (contents.isLoading()) contents.once('did-finish-load', send);
+  else send();
+}
+
 function sendCommand(command: ShellCommand) {
-  void ensureMainWindow().then(({ webContents }) => {
-    const send = () => webContents.send('command', command);
-    if (webContents.isLoading()) webContents.once('did-finish-load', send);
-    else send();
-  });
+  void ensureMainWindow().then(({ webContents }) =>
+    sendWhenLoaded(webContents, 'command', command),
+  );
+}
+
+let settingsOpen = false;
+
+async function openSettings() {
+  const { webContents } = await ensureMainWindow();
+  if (settingsOpen) return;
+  const backdrop = (await tabs?.snapshot()) ?? null;
+  sendWhenLoaded(webContents, 'settings:open', backdrop);
 }
 
 let serverStartedAt = 0;
@@ -325,7 +334,13 @@ function createWindow(): BrowserWindow {
   win.on('closed', () => {
     manager.destroy();
     if (tabs === manager) tabs = null;
-    if (window === win) window = null;
+    if (window === win) {
+      window = null;
+      settingsOpen = false;
+    }
+  });
+  win.webContents.on('did-finish-load', () => {
+    settingsOpen = false;
   });
   loadShell(win.webContents);
   return win;
@@ -479,27 +494,18 @@ function registerAppIpc() {
   ipcMain.on('telemetry:error', (e, report: unknown) => {
     const win = shellWindowOf(e.sender);
     if (!win) return;
-    const kind =
-      win === settingsWindow.window ? 'settings' : win === intro.window ? 'intro' : 'main';
+    const kind = win === intro.window ? 'intro' : 'main';
     reportRendererError(report, kind);
   });
 }
 
 function registerSettingsIpc() {
-  listen('settings:open-window', () => settingsWindow.open());
+  listen('settings:open', () => void openSettings());
+  listen('settings:set-open', (open: unknown) => {
+    settingsOpen = open === true;
+  });
   handle('settings:get', () => settings.get());
   handle('settings:update', updateSettings);
-  ipcMain.on('window:fit-content', (e, height: unknown) => {
-    const win = shellWindowOf(e.sender);
-    if (
-      win &&
-      win === settingsWindow.window &&
-      typeof height === 'number' &&
-      Number.isFinite(height)
-    ) {
-      settingsWindow.fitContent(height);
-    }
-  });
 }
 
 function registerIntroIpc() {
@@ -625,7 +631,7 @@ nativeTheme.on('updated', () => {
 });
 
 const menuActions: MenuActions = {
-  openSettings: () => settingsWindow.open(),
+  openSettings: () => void openSettings(),
   openWorkspace: () => sendCommand('open-workspace'),
   newWorkspace: () => sendCommand('new-workspace'),
   revealWorkspace,
@@ -633,6 +639,10 @@ const menuActions: MenuActions = {
     const focused = BrowserWindow.getFocusedWindow();
     if (focused && focused !== window) {
       focused.close();
+      return;
+    }
+    if (settingsOpen) {
+      window?.webContents.send('settings:close');
       return;
     }
     if (!tabs?.closeActive() && !isMac) window?.close();

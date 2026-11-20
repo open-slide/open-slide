@@ -52,6 +52,14 @@ textarea,
   background-color: oklch(0 0 0 / 0.3);
 }
 
+[data-slot="dialog-overlay"]:has(~ .settings-dialog) {
+  background-color: oklch(0 0 0 / 0.18);
+}
+
+.dark [data-slot="dialog-overlay"]:has(~ .settings-dialog) {
+  background-color: oklch(0 0 0 / 0.45);
+}
+
 html[data-route="intro"] body,
 html[data-route="switcher"] body {
   background-color: transparent;

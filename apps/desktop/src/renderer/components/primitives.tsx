@@ -74,7 +74,7 @@ export function LogView({ text, className }: { text: string; className?: string 
   );
 }
 
-export function SectionCard({
+export function SettingsGroup({
   title,
   description,
   children,
@@ -84,10 +84,10 @@ export function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-[10px] border border-border bg-card p-4 shadow-edge">
+    <section className="flex flex-col gap-2.5">
       {title && (
-        <header className="mb-3">
-          <h3 className="font-heading text-[13.5px] font-semibold tracking-tight">{title}</h3>
+        <header>
+          <h3 className="text-[13px] font-semibold tracking-tight">{title}</h3>
           {description && (
             <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
               {description}
@@ -95,8 +95,34 @@ export function SectionCard({
           )}
         </header>
       )}
-      {children}
+      <div className="flex flex-col divide-y divide-hairline rounded-[10px] border border-border bg-card shadow-edge">
+        {children}
+      </div>
     </section>
+  );
+}
+
+export function SettingRow({
+  label,
+  description,
+  children,
+}: {
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-14 items-center gap-4 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium">{label}</div>
+        {description && (
+          <div className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+            {description}
+          </div>
+        )}
+      </div>
+      {children && <div className="flex shrink-0 items-center gap-1.5">{children}</div>}
+    </div>
   );
 }
 

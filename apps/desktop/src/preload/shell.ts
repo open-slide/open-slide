@@ -20,8 +20,6 @@ const api: ShellApi = {
   window: {
     isFocused: () => ipcRenderer.invoke('window:is-focused'),
     onFocus: (listener) => subscribe('window:focus', listener),
-    fitContent: (height) => ipcRenderer.send('window:fit-content', height),
-    openSettings: () => ipcRenderer.send('settings:open-window'),
   },
   onboarding: {
     finish: () => ipcRenderer.send('onboarding:finish'),
@@ -35,6 +33,10 @@ const api: ShellApi = {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     update: (patch) => ipcRenderer.invoke('settings:update', patch),
+    open: () => ipcRenderer.send('settings:open'),
+    onOpen: (listener) => subscribe('settings:open', listener),
+    onClose: (listener) => subscribe('settings:close', () => listener()),
+    setOpen: (open) => ipcRenderer.send('settings:set-open', open),
   },
   tabs: {
     activate: (id) => ipcRenderer.send('tabs:activate', id),
