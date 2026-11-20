@@ -12,7 +12,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import type { WorkspaceError } from '../shared/types';
 import { type CreateTarget, CreateWorkspaceDialog } from './components/create-workspace-dialog';
 import { ServerScreen } from './components/server-screen';
-import { SettingsWindow } from './components/settings';
+import { SettingsDialog, useSettingsSession } from './components/settings';
 import { TabStrip } from './components/tab-strip';
 import { TabSwitcher } from './components/tab-switcher';
 import { Welcome } from './components/welcome';
@@ -40,13 +40,14 @@ export function App() {
 function Shell() {
   useWindowAppearance();
   if (route === 'switcher') return <TabSwitcher />;
-  return route === 'settings' ? <SettingsWindow /> : <MainWindow />;
+  return <MainWindow />;
 }
 
 function MainWindow() {
   const state = useAppState();
   const [createTarget, setCreateTarget] = useState<CreateTarget | null>(null);
   const { starting, choose, createNew, quickStart } = useWorkspaceActions(setCreateTarget);
+  const settings = useSettingsSession();
 
   useEffect(
     () =>
@@ -71,7 +72,8 @@ function MainWindow() {
   const raisedError = inlineError || createTarget !== null ? null : error;
 
   // Tab contents are native views stacked above this page, hidden while the shell draws over them.
-  const overlay = screen !== 'tabs' || createTarget !== null || raisedError !== null;
+  const overlay =
+    screen !== 'tabs' || createTarget !== null || raisedError !== null || settings.session !== null;
   useEffect(() => desktop.setOverlay(overlay), [overlay]);
 
   if (!state) return null;
@@ -107,6 +109,13 @@ function MainWindow() {
           )}
         </main>
       </div>
+      <SettingsDialog
+        state={state}
+        session={settings.session}
+        showBackdrop={screen === 'tabs'}
+        onClose={settings.close}
+        onClosed={settings.finish}
+      />
       <CreateWorkspaceDialog target={createTarget} onClose={() => setCreateTarget(null)} />
       <WorkspaceErrorDialog error={raisedError} />
     </TooltipProvider>

@@ -116,6 +116,8 @@ export type LogEvent = { task: LogTask; chunk: string };
 
 export type ShellCommand = 'open-workspace' | 'new-workspace';
 
+export type Backdrop = { src: string; top: number };
+
 export type IntroTarget = {
   x: number;
   y: number;
@@ -138,8 +140,6 @@ export type ShellApi = {
   window: {
     isFocused(): Promise<boolean>;
     onFocus(listener: (focused: boolean) => void): () => void;
-    fitContent(height: number): void;
-    openSettings(): void;
   };
   onboarding: {
     finish(): void;
@@ -153,6 +153,10 @@ export type ShellApi = {
   settings: {
     get(): Promise<DesktopSettings>;
     update(patch: Partial<DesktopSettings>): Promise<DesktopSettings>;
+    open(): void;
+    onOpen(listener: (backdrop: Backdrop | null) => void): () => void;
+    onClose(listener: () => void): () => void;
+    setOpen(open: boolean): void;
   };
   tabs: {
     activate(id: string): void;
