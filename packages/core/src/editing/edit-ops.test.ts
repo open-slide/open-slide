@@ -754,6 +754,45 @@ describe('applyEdit / set-text', () => {
     expect(r.source).toContain('<Eyebrow>Second</Eyebrow>');
   });
 
+  it('counts a mixed call site with preserved whitespace against a literal twin', () => {
+    const src = [
+      'const Card = ({ children }) => (',
+      '  <div>{children}</div>',
+      ');',
+      'export default [() => (',
+      '  <section>',
+      "    <Card>{'Alpha  Beta'}</Card>",
+      '    <Card>Alpha  <b>Beta</b></Card>',
+      '  </section>',
+      ')];',
+      '',
+    ].join('\n');
+    const r = applyEdit(src, 2, 2, [{ kind: 'set-text', value: 'X', prevText: 'Alpha  Beta' }]);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error('expected failure');
+    expect(r.error).toMatch(/cannot disambiguate/);
+    expect(src).toContain("{'Alpha  Beta'}");
+  });
+
+  it('counts a mixed call site inside a single wrapper against a literal twin', () => {
+    const src = [
+      'const Card = ({ children }) => (',
+      '  <div>{children}</div>',
+      ');',
+      'export default [() => (',
+      '  <section>',
+      '    <Card>Alpha Beta</Card>',
+      '    <Card><span>Alpha <b>Beta</b></span></Card>',
+      '  </section>',
+      ')];',
+      '',
+    ].join('\n');
+    const r = applyEdit(src, 2, 2, [{ kind: 'set-text', value: 'X', prevText: 'Alpha Beta' }]);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error('expected failure');
+    expect(r.error).toMatch(/cannot disambiguate/);
+  });
+
   it('bails on a children-slot element when prevText is missing and call sites differ', () => {
     const src = [
       'const Eyebrow = ({ children }) => (',
