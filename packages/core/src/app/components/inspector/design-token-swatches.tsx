@@ -26,7 +26,8 @@ export function DesignTokenSwatches({
   return (
     <div className="grid grid-cols-[68px_1fr] items-center gap-3">
       <span aria-hidden />
-      <div role="group" aria-label={label} className="flex items-center gap-1.5">
+      <fieldset className="m-0 flex min-w-0 items-center gap-1.5 border-0 p-0">
+        <legend className="sr-only">{label}</legend>
         {PALETTE_TOKENS.map((token) => {
           const tokenVar = paletteTokenVar(token);
           const label = format(t.inspector.designTokenSwatchAria, { name: labels[token] });
@@ -43,7 +44,7 @@ export function DesignTokenSwatches({
             />
           );
         })}
-      </div>
+      </fieldset>
     </div>
   );
 }
