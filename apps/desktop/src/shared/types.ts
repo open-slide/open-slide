@@ -42,8 +42,20 @@ export type WorkspaceInfo = { root: string; name: string };
 
 export type WorkspaceError = { id: number; message: string };
 
+export type UpdateStatus =
+  | { state: 'unsupported' }
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'up-to-date' }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'ready'; version: string }
+  | { state: 'error'; message: string };
+
 export type AppState = {
   platform: string;
+  version: string;
+  coreVersion: string;
+  update: UpdateStatus;
   translucent: boolean;
   accent: string | null;
   fullscreen: boolean;
@@ -180,6 +192,10 @@ export type ShellApi = {
   server: {
     restart(): void;
     log(): Promise<string>;
+  };
+  updates: {
+    check(): void;
+    install(): void;
   };
   agents: {
     list(): Promise<AgentInfo[]>;

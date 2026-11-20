@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "productName": "open-slide",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "description": "open-slide as a native desktop app.",
   "type": "module",
@@ -17,9 +17,10 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.306",
-    "@open-slide/cli": "workspace:*",
-    "@open-slide/core": "workspace:*",
+    "@open-slide/cli": "workspace:^",
+    "@open-slide/core": "workspace:^",
     "@openai/codex-sdk": "^0.163.0",
+    "electron-updater": "^6.8.11",
     "posthog-node": "^5.63.1"
   },
   "devDependencies": {
@@ -36,6 +37,7 @@
     "react-dom": "^19.2.8",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.3.3"
+    "vite": "^8.3.3",
+    "yaml": "^2.9.1"
   }
 }

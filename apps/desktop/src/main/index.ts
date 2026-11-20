@@ -26,6 +26,7 @@ import {
   type PackageManager,
   type ShellCommand,
   TAB_STRIP_HEIGHT,
+  type UpdateStatus,
 } from '../shared/types';
 import { cancelAllInstalls, managedCliDirs, syncManagedClis } from './agent-cli';
 import { AgentLogins } from './agent-logins';
@@ -64,6 +65,8 @@ import {
   startCrashReporter,
   track,
 } from './telemetry';
+import { electronUpdateSource } from './update-source';
+import { RESTART_NOW, Updater, updateDialog } from './updater';
 import { isHttpUrl } from './url';
 import {
   availablePackageManagers,
@@ -83,6 +86,7 @@ const WINDOW_SHOW_TIMEOUT_MS = 2000;
 
 let window: BrowserWindow | null = null;
 let tabs: TabManager | null = null;
+let updater: Updater | null = null;
 const settingsWindow = new SettingsWindow();
 const intro = new IntroWindow({ main: () => window, onChange: broadcast });
 
@@ -108,6 +112,9 @@ function state(): AppState {
   const info = tabs?.info ?? { tabs: [], activeTabId: null };
   return {
     platform: process.platform,
+    version: app.getVersion(),
+    coreVersion: bundledCore().version,
+    update: updateStatus(),
     translucent: translucent(),
     accent: accent(),
     fullscreen: window?.isFullScreen() ?? false,
@@ -137,14 +144,19 @@ function sendToShell(channel: string, payload: unknown) {
   tabs?.switcherContents?.send(channel, payload);
 }
 
-let menuRecent: string | null = null;
+function updateStatus(): UpdateStatus {
+  return updater?.status ?? { state: 'unsupported' };
+}
+
+let menuKey: string | null = null;
 
 function refreshMenu() {
   const recent = settings.recent();
-  const key = recent.join('\n');
-  if (key === menuRecent) return;
-  menuRecent = key;
-  installMenu(menuActions, recent);
+  const update = updateStatus();
+  const key = JSON.stringify([recent, update.state === 'ready', update.state === 'unsupported']);
+  if (key === menuKey) return;
+  menuKey = key;
+  installMenu(menuActions, recent, update);
 }
 
 let broadcastQueued = false;
@@ -248,6 +260,7 @@ const quitGate = new QuitGate({
   confirm: async () => (await tabs?.confirmLeave('quit')) ?? true,
   cleanup: async () => {
     blockInputWhileQuitting();
+    updater?.stop();
     workspaces.persistSession();
     settings.flush();
     logins.cancelAll();
@@ -257,6 +270,26 @@ const quitGate = new QuitGate({
   },
   quit: () => app.quit(),
 });
+
+async function showUpdateResult(status: UpdateStatus) {
+  const options = updateDialog(status, app.getVersion());
+  if (!options) return;
+  const parent = BrowserWindow.getFocusedWindow() ?? window;
+  const { response } = parent
+    ? await dialog.showMessageBox(parent, options)
+    : await dialog.showMessageBox(options);
+  if (status.state === 'ready' && response === RESTART_NOW) updater?.install();
+}
+
+function startUpdater() {
+  updater = new Updater({
+    source: electronUpdateSource(),
+    onChange: broadcast,
+    restart: (install) => quitGate.request(install),
+    notify: (status) => void showUpdateResult(status),
+  });
+  updater.start();
+}
 
 async function restartServer() {
   if (tabs && !(await tabs.confirmLeave('restart'))) return;
@@ -474,6 +507,8 @@ function registerAppIpc() {
     broadcast();
   });
   listen('server:restart', () => void restartServer());
+  listen('update:check', () => updater?.check());
+  listen('update:install', () => updater?.install());
   handle('server:log', () => server.log);
   ipcMain.handle('window:is-focused', (e) => shellWindowOf(e.sender)?.isFocused() ?? false);
   ipcMain.on('telemetry:error', (e, report: unknown) => {
@@ -646,6 +681,8 @@ const menuActions: MenuActions = {
     (BrowserWindow.getFocusedWindow() ?? window)?.webContents.toggleDevTools(),
   openRecent: (root) => void workspaces.open(root, 'menu'),
   replayIntro,
+  checkForUpdates: () => updater?.check(true),
+  installUpdate: () => updater?.install(),
   clearRecent: () => {
     for (const root of settings.recent()) {
       if (root !== workspaces.current?.root) forgetWorkspace(root);
@@ -670,11 +707,12 @@ function start() {
     isShellPage: (contents) => shellWindowOf(contents) !== null,
   });
   registerIpc();
+  startUpdater();
   refreshMenu();
   app.setAboutPanelOptions({
     applicationName: 'open-slide',
-    applicationVersion: bundledCore().version,
-    version: '',
+    applicationVersion: app.getVersion(),
+    version: `core ${bundledCore().version}`,
     credits: 'Slides as React code, edited alongside your agent.',
     website: 'https://open-slide.dev',
   });

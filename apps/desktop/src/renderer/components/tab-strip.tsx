@@ -1,4 +1,4 @@
-import { FolderClosed, LayoutGrid, Presentation, Settings, X } from 'lucide-react';
+import { CircleArrowDown, FolderClosed, LayoutGrid, Presentation, Settings, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { AppState, TabInfo } from '../../shared/types';
@@ -129,6 +129,18 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
         </div>
       ) : (
         <div className="flex-1" />
+      )}
+
+      {state.update.state === 'ready' && (
+        <button
+          type="button"
+          title={`Restart to install open-slide ${state.update.version}`}
+          onClick={() => desktop.updates.install()}
+          className="no-drag flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] px-2 text-[12px] font-medium text-ring outline-none transition-colors hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          <CircleArrowDown className="size-3.5 shrink-0" aria-hidden />
+          <span>Restart to update</span>
+        </button>
       )}
 
       {state.workspace && (
