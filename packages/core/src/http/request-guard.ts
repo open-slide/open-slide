@@ -74,3 +74,8 @@ export function validateMutationRequest(
 
   return { ok: true };
 }
+
+export function isLoopbackRequest(req: Connect.IncomingMessage): boolean {
+  const address = req.socket.remoteAddress ?? '';
+  return address === '::1' || address.startsWith('127.') || address.startsWith('::ffff:127.');
+}

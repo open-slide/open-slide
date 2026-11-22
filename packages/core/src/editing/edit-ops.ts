@@ -14,7 +14,8 @@ export type EditOp =
       prevText?: string;
     }
   | { kind: 'set-attr-asset'; attr: string; assetPath: string }
-  | { kind: 'replace-placeholder-with-image'; assetPath: string };
+  | { kind: 'replace-placeholder-with-image'; assetPath: string }
+  | { kind: 'remove-element' };
 
 export type ApplyEditResult =
   | { ok: true; source: string }
@@ -214,6 +215,8 @@ export function findElementForEdit(
   column: number,
   ops: EditOp[],
 ): t.JSXElement | null {
+  // Removal never falls back to an enclosing element: a guess would delete too much.
+  if (ops.some((op) => op.kind === 'remove-element')) return findJsxByStart(ast, line, column);
   const element = findInnermostJsxElement(ast, line, column);
   const prevText = fallbackTextForOps(ops);
   if (prevText === null) return element;
@@ -1126,6 +1129,32 @@ function planReplacePlaceholder(
   return { importSplice, elementSplice: spliceRange(element, replacement) };
 }
 
+function isJsxChild(ast: t.File, element: t.JSXElement): boolean {
+  let found = false;
+  walkJsx(ast, (n) => {
+    if ((t.isJSXElement(n) || t.isJSXFragment(n)) && n.children.includes(element)) {
+      found = true;
+      return 'stop';
+    }
+  });
+  return found;
+}
+
+// Outside a JSX parent (`return`, `&&`, ternary, array) the element is an
+// expression, so it becomes `null` instead of leaving a hole.
+function planRemoveElement(ast: t.File, source: string, element: t.JSXElement): Splice {
+  if (!isJsxChild(ast, element)) return spliceRange(element, 'null');
+  const start = element.start ?? 0;
+  const end = element.end ?? 0;
+  const lineStart = source.lastIndexOf('\n', start - 1) + 1;
+  const newline = source.indexOf('\n', end);
+  const lineEnd = newline === -1 ? source.length : newline;
+  if (source.slice(lineStart, start).trim() || source.slice(end, lineEnd).trim()) {
+    return { from: start, to: end, text: '' };
+  }
+  return { from: lineStart, to: newline === -1 ? lineEnd : newline + 1, text: '' };
+}
+
 export function applyEdit(
   source: string,
   line: number,
@@ -1152,6 +1181,10 @@ export function planEdit(
     ? findJsxByStart(ast, line, column)
     : findElementForEdit(ast, line, column, ops);
   if (!element) return { ok: false, status: 422, error: 'no JSX element at location' };
+
+  if (ops.some((op) => op.kind === 'remove-element')) {
+    return { ok: true, splices: [planRemoveElement(ast, source, element)] };
+  }
 
   const splices: Splice[] = [];
 

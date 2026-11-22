@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ViteDevServer } from 'vite';
 import { validateMutationRequest } from '../../http/request-guard.ts';
+import { isManagedCore } from '../../supervision.ts';
 import { type ApiContext, json } from './context.ts';
 
 // GET /__update-check  → { current, latest, outdated }
@@ -121,19 +122,24 @@ function formatCommand(spec: CommandSpec): string {
   return [spec.cmd, ...spec.args].join(' ');
 }
 
-async function runCommand(spec: CommandSpec, cwd: string): Promise<void> {
+export async function runCommand(
+  spec: CommandSpec,
+  cwd: string,
+  timeoutMs = COMMAND_TIMEOUT_MS,
+): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(spec.cmd, spec.args, {
       cwd,
       env: process.env,
       shell: process.platform === 'win32',
       stdio: ['ignore', 'ignore', 'pipe'],
+      windowsHide: true,
     });
     let stderr = '';
     const timer = setTimeout(() => {
       child.kill();
       reject(new Error(`${formatCommand(spec)} timed out`));
-    }, COMMAND_TIMEOUT_MS);
+    }, timeoutMs);
 
     child.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString('utf8');
@@ -176,7 +182,7 @@ async function updatePackage(ctx: ApiContext): Promise<UpdateResult> {
 export function registerUpdateRoutes(server: ViteDevServer, ctx: ApiContext): void {
   server.middlewares.use('/__update-check', async (req, res, next) => {
     if ((req.method ?? 'GET') !== 'GET') return next();
-    const latest = await fetchLatest(Date.now());
+    const latest = isManagedCore() ? null : await fetchLatest(Date.now());
     const result: CheckResult = {
       current: ctx.coreVersion,
       latest,
@@ -191,6 +197,9 @@ export function registerUpdateRoutes(server: ViteDevServer, ctx: ApiContext): vo
 
     const guard = validateMutationRequest(req);
     if (!guard.ok) return json(res, guard.status, { error: guard.error });
+    if (isManagedCore()) {
+      return json(res, 409, { error: 'open-slide is updated by the app that runs it.' });
+    }
 
     try {
       updateInFlight ??= updatePackage(ctx).finally(() => {

@@ -56,14 +56,14 @@ test.describe('home slide browser', () => {
   test('theme toggle switches to dark mode', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Toggle theme' }).click();
-    await page.getByRole('menuitem', { name: 'Dark' }).click();
+    await page.getByRole('menuitemradio', { name: 'Dark' }).click();
     await expect(page.locator('html')).toHaveClass(/dark/);
   });
 
   test('language toggle switches locale and persists across reloads', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: 'Change language' }).click();
-    await page.getByRole('menuitem', { name: '繁體中文' }).click();
+    await page.getByRole('menuitemradio', { name: '繁體中文' }).click();
     await expect(page.getByText('投影片').first()).toBeVisible();
 
     await page.reload();

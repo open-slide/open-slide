@@ -12,8 +12,10 @@ import {
   Play,
   Presentation,
   RectangleHorizontal,
+  Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { openHomeInHost } from '@/lib/desktop';
 import { format, useLocale } from '@/lib/use-locale';
 import { type CommandGroupSpec, CommandMenu, type CommandSpec } from './command-menu';
 
@@ -26,6 +28,7 @@ export type SlideCommandHandlers = {
   onCopyLink: () => void;
   onOverview: () => void;
   onToggleDesignPanel: () => void;
+  onToggleAgentPanel: () => void;
   onExportHtml: () => void;
   onExportPdf: () => void;
   onExportPptx: () => void;
@@ -105,6 +108,14 @@ export function SlideCommandMenu({
         shortcut: 'D',
         run: handlers.onToggleDesignPanel,
       });
+      deck.push({
+        id: 'agent-panel',
+        label: t.agent.openTitle,
+        icon: <Sparkles />,
+        keywords: ['agent', 'claude', 'codex', 'chat', 'ai'],
+        shortcut: 'A',
+        run: handlers.onToggleAgentPanel,
+      });
     }
     if (showSlideBrowser) {
       deck.push({
@@ -112,7 +123,9 @@ export function SlideCommandMenu({
         label: t.commandMenu.backToSlides,
         icon: <ChevronLeft />,
         keywords: ['home', 'back', 'slides'],
-        run: () => navigate('/'),
+        run: () => {
+          if (!openHomeInHost('/')) navigate('/');
+        },
       });
     }
 

@@ -8,7 +8,6 @@ import {
   Crop,
   ImageIcon,
   Italic,
-  MousePointer2,
   Move,
   MoveHorizontal,
   Paintbrush,
@@ -40,17 +39,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { opaqueHex, rgbToHex } from '@/lib/inspector/color';
 import { findSlideSource } from '@/lib/inspector/fiber';
 import { hasOnlyInlineTextChildren } from '@/lib/inspector/inline-text';
 import { styleContext } from '@/lib/inspector/text-selection';
 import type { EditOp } from '@/lib/inspector/use-editor';
 import { useAgentSocketConnected } from '@/lib/use-agent-socket';
 import { format, useLocale } from '@/lib/use-locale';
-import { cn, round2 } from '@/lib/utils';
+import { round2 } from '@/lib/utils';
 import type { Locale } from '../../../locale/types';
 import { ArrangePanel } from './arrange-panel';
 import { AssetPickerDialog } from './asset-picker-dialog';
 import { type SelectedTarget, useInspector } from './inspector-provider';
+import { type PageInfo, PagePanel } from './page-panel';
 
 type ElementSnapshot = {
   fontSize: number;
@@ -89,9 +90,11 @@ function resolveSelectedTarget(target: SelectedTarget, slideId: string): Selecte
 export function InspectorPanel({
   preferredTab,
   onTabChange,
+  page,
 }: {
   preferredTab: 'format' | 'arrange';
   onTabChange: (tab: 'format' | 'arrange') => void;
+  page?: PageInfo;
 }) {
   const {
     togglePanel,
@@ -107,7 +110,6 @@ export function InspectorPanel({
     bufferOps,
     pendingCount,
     opsVersion,
-    add,
     applyEdit,
   } = useInspector();
   const [snapshot, setSnapshot] = useState<ElementSnapshot | null>(null);
@@ -256,19 +258,14 @@ export function InspectorPanel({
   );
   const footer =
     selected && snapshot && !multiple ? (
-      <>
-        <CollapsibleSection title={t.inspector.leaveComment}>
-          <CommentsSection selected={selected} onAdd={add} />
-        </CollapsibleSection>
-        <CollapsibleSection title={t.inspector.sourceSection}>
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-[10.5px] text-muted-foreground">
-              &lt;{selected.anchor.tagName.toLowerCase()}&gt; · {selected.line}:{selected.column}
-            </span>
-            <AgentWatchingBadge />
-          </div>
-        </CollapsibleSection>
-      </>
+      <CollapsibleSection title={t.inspector.sourceSection}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-mono text-[10.5px] text-muted-foreground">
+            &lt;{selected.anchor.tagName.toLowerCase()}&gt; · {selected.line}:{selected.column}
+          </span>
+          <AgentWatchingBadge />
+        </div>
+      </CollapsibleSection>
     ) : undefined;
 
   return (
@@ -278,7 +275,7 @@ export function InspectorPanel({
         if (value === 'arrange') stopInlineEdit();
         if (value === 'format' || value === 'arrange') onTabChange(value);
       }}
-      className="h-full shrink-0 gap-0"
+      className="h-full w-full min-w-0 shrink-0 gap-0"
       onPointerDownCapture={(event) => {
         if (!inlineEdit || !(event.target instanceof Element)) return;
         const button = event.target.closest('button');
@@ -432,17 +429,9 @@ export function InspectorPanel({
               <ArrangePanel />
             </TabsContent>
           </>
-        ) : (
-          <div className="flex flex-col items-center gap-3 px-7 py-16 text-center">
-            <MousePointer2 aria-hidden className="size-8 text-muted-foreground/50" />
-            <div className="flex flex-col gap-1.5">
-              <h2 className="text-[13px] font-medium">{t.inspector.emptySelectionTitle}</h2>
-              <p className="text-[12px] leading-relaxed text-muted-foreground">
-                {t.inspector.emptySelectionHint}
-              </p>
-            </div>
-          </div>
-        )}
+        ) : page ? (
+          <PagePanel page={page} />
+        ) : null}
       </PanelShell>
     </Tabs>
   );
@@ -894,83 +883,6 @@ function AgentWatchingBadge() {
   );
 }
 
-// The cue animation re-mounts with every element selection; without this
-// guard it replays each time instead of once per inspector session.
-let commentCuePlayed = false;
-
-function CommentsSection({
-  selected,
-  onAdd,
-}: {
-  selected: { line: number; column: number };
-  onAdd: (line: number, column: number, text: string) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [showCue] = useState(() => !commentCuePlayed);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const t = useLocale();
-
-  useEffect(() => {
-    commentCuePlayed = true;
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '/') return;
-      if (!(e.metaKey || e.ctrlKey)) return;
-      if (e.altKey || e.shiftKey) return;
-      const ta = wrapRef.current?.querySelector('textarea');
-      if (!ta) return;
-      e.preventDefault();
-      const details = ta.closest('details');
-      if (details) details.open = true;
-      ta.focus({ preventScroll: true });
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  const submit = async () => {
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-    setSubmitting(true);
-    try {
-      await onAdd(selected.line, selected.column, trimmed);
-      setDraft('');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <>
-      <div ref={wrapRef} className={cn('rounded-[6px]', showCue && 'comment-cue')}>
-        <Textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          placeholder={t.inspector.commentPlaceholder}
-          className="min-h-16 resize-none text-[12px]"
-        />
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10.5px] text-muted-foreground/70">
-          {t.inspector.commentShortcutHint}
-        </span>
-        <Button size="sm" variant="brand" disabled={submitting || !draft.trim()} onClick={submit}>
-          {t.inspector.addComment}
-        </Button>
-      </div>
-    </>
-  );
-}
-
 function readSnapshot(el: HTMLElement): ElementSnapshot {
   const cs = getComputedStyle(el);
   const text =
@@ -996,7 +908,7 @@ function readSnapshot(el: HTMLElement): ElementSnapshot {
 
   return {
     ...readTypography(el),
-    backgroundColor: isTransparent(cs.backgroundColor) ? null : rgbToHex(cs.backgroundColor),
+    backgroundColor: opaqueHex(cs.backgroundColor),
     textAlign: normalizeTextAlign(cs.textAlign),
     lineHeight: parseLineHeight(cs.lineHeight, parseFloat(cs.fontSize) || 16),
     letterSpacing: parseLetterSpacing(cs.letterSpacing),
@@ -1049,28 +961,6 @@ function renderedTextNodeValue(node: Text): string {
     return value;
   }
   return value.replace(/\s+/g, ' ');
-}
-
-function rgbToHex(value: string): string | null {
-  const m = value.match(/^rgba?\(([^)]+)\)$/);
-  if (!m) return null;
-  const parts = m[1].split(',').map((s) => s.trim());
-  if (parts.length < 3) return null;
-  const r = clampByte(Number(parts[0]));
-  const g = clampByte(Number(parts[1]));
-  const b = clampByte(Number(parts[2]));
-  return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
-}
-
-function clampByte(n: number): number {
-  return Math.max(0, Math.min(255, Math.round(Number.isFinite(n) ? n : 0)));
-}
-
-function isTransparent(value: string): boolean {
-  if (!value) return true;
-  if (value === 'transparent' || value === 'rgba(0, 0, 0, 0)') return true;
-  const m = value.match(/^rgba\([^)]*,\s*0\)$/);
-  return Boolean(m);
 }
 
 function normalizeTextAlign(v: string): ElementSnapshot['textAlign'] {

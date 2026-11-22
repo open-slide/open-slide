@@ -82,6 +82,8 @@ If the user asked for a speech script / speaker notes (in the initial request or
 
 Run the checklist in `slide-authoring` ("Self-review before finishing"). It covers structural correctness, layout discipline, and asset existence.
 
+If the dev server is already running, screenshot each page through the preview route and fix what looks off — see **Previewing a page visually** in `slide-authoring`.
+
 ## Step 8 — Hand off to the user
 
 Tell the user:

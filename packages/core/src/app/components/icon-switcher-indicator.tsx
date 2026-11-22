@@ -1,4 +1,4 @@
-export function IconSwitcherIndicator({ index }: { index: 0 | 1 }) {
+export function IconSwitcherIndicator({ index }: { index: number }) {
   return (
     <span
       aria-hidden

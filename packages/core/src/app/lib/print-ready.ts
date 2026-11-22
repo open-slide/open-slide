@@ -11,27 +11,30 @@ export async function waitForFonts(): Promise<void> {
   await document.fonts.ready;
 }
 
+// Resolves false when any target was still missing at the deadline.
 export async function waitForDataWaitfor(
   root: HTMLElement,
   timeoutMs = DEFAULT_WAITFOR_TIMEOUT_MS,
-): Promise<void> {
+): Promise<boolean> {
   const targets = Array.from(root.querySelectorAll<HTMLElement>('[data-waitfor]'));
-  if (targets.length === 0) return;
+  if (targets.length === 0) return true;
   const deadline = performance.now() + timeoutMs;
-  await Promise.all(
+  const results = await Promise.all(
     targets.map(async (el) => {
       const selector = el.getAttribute('data-waitfor');
-      if (!selector) return;
+      if (!selector) return true;
       while (performance.now() < deadline) {
         try {
-          if (el.querySelector(selector)) return;
+          if (el.querySelector(selector)) return true;
         } catch {
-          return; // invalid selector — skip rather than hang
+          return true; // invalid selector — skip rather than hang
         }
         await nextFrame();
       }
+      return false;
     }),
   );
+  return results.every(Boolean);
 }
 
 export function isFrameAnimationSettled(frame: Element): boolean {

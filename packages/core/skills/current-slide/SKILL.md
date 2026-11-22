@@ -95,6 +95,7 @@ User: "tighten the spacing on this page"
 3. Read `pagePath` (e.g. `slides/q2-roadmap/index.tsx`).
 4. Identify the page at `pageIndex` in the default-exported array.
 5. Consult the `slide-authoring` skill for spacing rules, then edit that page in place.
+6. To check the result visually, screenshot `s/<slideId>/preview?p=<pageNumber>` on the dev server — see **Previewing a page visually** in `slide-authoring`.
 
 If `current.json` is missing or stale, ask: "Which slide and page should I tighten? The dev server hasn't published a current page recently."
 

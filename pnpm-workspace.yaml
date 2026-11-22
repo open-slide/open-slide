@@ -2,3 +2,12 @@ packages:
   - "apps/*"
   - "packages/*"
   - "packages/core/e2e/fixture"
+
+onlyBuiltDependencies:
+  - electron
+
+# electron-vite resolves `electron` from its own location but doesn't declare it.
+packageExtensions:
+  electron-vite:
+    peerDependencies:
+      electron: "*"
