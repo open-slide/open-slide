@@ -10,6 +10,7 @@ import {
   type ProviderRunOptions,
   ProviderUnavailableError,
 } from '../provider.ts';
+import { newId } from '../store.ts';
 import { type AgentModelOption, isAgentEffort } from '../types.ts';
 import type { CodexItem, CodexSdkModule, CodexThreadEvent } from './sdk-types.ts';
 
@@ -61,15 +62,19 @@ async function readCodexModels(): Promise<AgentModelOption[]> {
 }
 
 // The Codex SDK only reports completed items (no token deltas), so each
-// agent message lands as one finished block.
+// agent message lands as one finished block. Codex numbers items from
+// `item_0` again on every turn, so its ids can't key transcript items.
 export function createCodexMapper(emit: (event: ProviderEvent) => void) {
-  const started = new Set<string>();
+  const toolIds = new Map<string, string>();
   let resultSeen = false;
 
   const startTool = (item: CodexItem, name: string, title: string, detail: string | null) => {
-    if (started.has(item.id)) return;
-    started.add(item.id);
-    emit({ type: 'tool-start', id: item.id, name, title, detail });
+    const known = toolIds.get(item.id);
+    if (known) return known;
+    const id = newId('c');
+    toolIds.set(item.id, id);
+    emit({ type: 'tool-start', id, name, title, detail });
+    return id;
   };
 
   const describe = (item: CodexItem): { name: string; title: string; detail: string | null } => {
@@ -98,8 +103,9 @@ export function createCodexMapper(emit: (event: ProviderEvent) => void) {
         const asked = extractQuestionBlock(item.text);
         const text = asked ? asked.text : item.text;
         if (text) {
-          emit({ type: 'text-start', id: item.id });
-          emit({ type: 'text-end', id: item.id, text });
+          const id = newId('t');
+          emit({ type: 'text-start', id });
+          emit({ type: 'text-end', id, text });
         }
         if (asked) emit({ type: 'questions', questions: asked.questions });
         return;
@@ -112,10 +118,10 @@ export function createCodexMapper(emit: (event: ProviderEvent) => void) {
       case 'mcp_tool_call':
       case 'web_search': {
         const { name, title, detail } = describe(item);
-        startTool(item, name, title, detail);
+        const id = startTool(item, name, title, detail);
         if (phase === 'completed') {
           const status = 'status' in item ? item.status : 'completed';
-          emit({ type: 'tool-end', id: item.id, ok: status !== 'failed' });
+          emit({ type: 'tool-end', id, ok: status !== 'failed' });
         }
         return;
       }
