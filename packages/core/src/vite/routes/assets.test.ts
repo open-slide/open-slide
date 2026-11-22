@@ -25,7 +25,10 @@ async function startAssetServer(): Promise<AssetServer> {
         mounts.push({ prefix, handler }),
     },
   } as unknown as ViteDevServer;
-  registerAssetRoutes(fakeVite, makeContext({ userCwd: cwd, coreVersion: 'test' }));
+  registerAssetRoutes(
+    fakeVite,
+    makeContext({ userCwd: cwd, coreVersion: 'test', agentEnabled: true }),
+  );
 
   const server = http.createServer((req, res) => {
     const mount = mounts.find((m) => req.url?.startsWith(m.prefix));
