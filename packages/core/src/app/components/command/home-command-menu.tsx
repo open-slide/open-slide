@@ -1,6 +1,7 @@
 import { Presentation } from 'lucide-react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { openDeckInHost } from '@/lib/desktop';
 import { useLocale } from '@/lib/use-locale';
 import { useSlideTitles } from '@/lib/use-slide-titles';
 import type { Folder } from '../../lib/sdk';
@@ -32,7 +33,9 @@ export function HomeCommandMenu({
       label: titleMap[id] ?? loadedTitles[id] ?? id,
       icon: <Presentation />,
       keywords: [id],
-      run: () => navigate(`/s/${id}`),
+      run: () => {
+        if (!openDeckInHost(id)) navigate(`/s/${id}`);
+      },
     }));
 
     const folderItems: CommandSpec[] = [

@@ -4,10 +4,11 @@ import { buttonVariants } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LOCALE_OPTIONS, setLocale } from '@/lib/locale-store';
+import { LOCALE_OPTIONS, type LocaleId, setLocale } from '@/lib/locale-store';
 import { useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 
@@ -30,15 +31,16 @@ export function LanguageToggle() {
         </DropdownMenuTrigger>
       </IconTooltip>
       <DropdownMenuContent align="end" className="min-w-[140px]">
-        {LOCALE_OPTIONS.map((option) => (
-          <DropdownMenuItem
-            key={option.id}
-            onClick={() => setLocale(option.id)}
-            data-active={t.id === option.id}
-          >
-            {option.label}
-          </DropdownMenuItem>
-        ))}
+        <DropdownMenuRadioGroup
+          value={t.id}
+          onValueChange={(value) => setLocale(value as LocaleId)}
+        >
+          {LOCALE_OPTIONS.map((option) => (
+            <DropdownMenuRadioItem key={option.id} value={option.id} closeOnClick>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -16,6 +16,7 @@ type FiberLike = {
   stateNode?: unknown;
   _debugSource?: { fileName?: string; lineNumber?: number; columnNumber?: number };
   memoizedProps?: { __source?: { fileName?: string; lineNumber?: number; columnNumber?: number } };
+  _debugOwner?: { type?: unknown } | null;
 };
 
 function getFiber(el: Element): FiberLike | null {
@@ -82,4 +83,9 @@ export function findSlideSource(
     fiber = fiber.return;
   }
   return null;
+}
+
+// The component whose render produced this element's JSX — dev builds only.
+export function jsxOwnerType(el: Element): unknown {
+  return getFiber(el)?._debugOwner?.type;
 }

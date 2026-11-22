@@ -73,7 +73,7 @@ export function SaveCard({
           : 'translate-y-2 scale-[0.98] opacity-0',
       )}
     >
-      <div className="pointer-events-auto flex h-9 items-center gap-1 rounded-[8px] border border-border bg-popover/95 py-0.5 pr-0.5 pl-1 shadow-overlay backdrop-blur-md">
+      <div className="pointer-events-auto flex h-9 items-center gap-1 rounded-[8px] border border-border bg-material py-0.5 pr-0.5 pl-1 shadow-overlay backdrop-blur-xl backdrop-saturate-150">
         {showHistory && (
           <div className="flex items-center">
             <Button

@@ -1,0 +1,147 @@
+import { type ChildProcess, spawn } from 'node:child_process';
+import path from 'node:path';
+import { isWindows } from './platform';
+
+const OUTPUT_LIMIT = 64 * 1024;
+const KILL_GRACE_MS = 2000;
+const PIPE_DRAIN_MS = 1000;
+const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[ -/]*[@-~]`, 'g');
+
+type RunOptions = {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  onChunk?: (chunk: string) => void;
+  timeoutMs?: number;
+  stdin?: boolean;
+  killGraceMs?: number;
+};
+
+export type RunResult = { code: number | null; output: string; timedOut: boolean };
+
+export type RunHandle = {
+  child: ChildProcess;
+  done: Promise<RunResult>;
+  terminate: () => Promise<void>;
+};
+
+const running = new Set<RunHandle>();
+
+export function terminateRunning(): Promise<void> {
+  return Promise.all([...running].map((handle) => handle.terminate())).then(() => {});
+}
+
+export function stripAnsi(text: string): string {
+  return text.replace(ANSI_RE, '');
+}
+
+export function windowsTool(exe: string): string {
+  return path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', exe);
+}
+
+// Only safe before settlement, while the pid still names a live process group.
+function signalTree(child: ChildProcess, signal: NodeJS.Signals) {
+  const pid = child.pid;
+  if (pid === undefined) return;
+  if (isWindows) {
+    // child.kill() would orphan whatever a .cmd shim started.
+    spawn(windowsTool('taskkill.exe'), ['/pid', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    }).on('error', () => child.kill());
+    return;
+  }
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    child.kill(signal);
+  }
+}
+
+export function run(cmd: string, args: string[], opts: RunOptions): RunHandle {
+  const ownProcessGroup = !isWindows;
+  const child = spawn(cmd, args, {
+    cwd: opts.cwd,
+    env: { ...opts.env, FORCE_COLOR: '0', NO_COLOR: '1' },
+    stdio: [opts.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+    // Package managers are .cmd shims on Windows, which only a shell can run.
+    shell: isWindows && !path.isAbsolute(cmd),
+    windowsHide: true,
+    detached: ownProcessGroup,
+  });
+  let output = '';
+  let timedOut = false;
+  let stopping = false;
+  let settled = false;
+  let settle: (code: number | null) => void = () => {};
+  const timers = new Set<NodeJS.Timeout>();
+  const later = (fn: () => void, ms: number) => {
+    const timer = setTimeout(() => {
+      timers.delete(timer);
+      fn();
+    }, ms);
+    timers.add(timer);
+  };
+  const onData = (data: Buffer) => {
+    if (settled) return;
+    const chunk = stripAnsi(data.toString('utf8'));
+    output = (output + chunk).slice(-OUTPUT_LIMIT);
+    opts.onChunk?.(chunk);
+  };
+  child.stdout?.on('data', onData);
+  child.stderr?.on('data', onData);
+  const ignoreWriteAfterExit = () => {};
+  child.stdin?.on('error', ignoreWriteAfterExit);
+
+  const done = new Promise<RunResult>((resolve) => {
+    settle = (code) => {
+      if (settled) return;
+      settled = true;
+      for (const timer of timers) clearTimeout(timer);
+      running.delete(handle);
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      resolve({ code, output, timedOut });
+    };
+  });
+
+  const terminate = () => {
+    if (!settled && !stopping) {
+      stopping = true;
+      signalTree(child, 'SIGTERM');
+      later(() => {
+        signalTree(child, 'SIGKILL');
+        later(() => settle(child.exitCode), PIPE_DRAIN_MS);
+      }, opts.killGraceMs ?? KILL_GRACE_MS);
+    }
+    return done.then(() => {});
+  };
+
+  const handle: RunHandle = { child, done, terminate };
+  running.add(handle);
+
+  child.on('error', (err) => {
+    onData(Buffer.from(`${err.message}\n`));
+    const neverSpawned = child.pid === undefined;
+    if (neverSpawned) settle(-1);
+  });
+  const settleUnlessStopping = (code: number | null) => {
+    if (!stopping) settle(code);
+  };
+  child.on('exit', (code) => later(() => settleUnlessStopping(code), PIPE_DRAIN_MS));
+  child.on('close', settleUnlessStopping);
+  if (opts.timeoutMs) {
+    later(() => {
+      if (stopping) return;
+      timedOut = true;
+      void terminate();
+    }, opts.timeoutMs);
+  }
+  return handle;
+}
+
+export function runNodeScript(script: string, args: string[], opts: RunOptions): RunHandle {
+  return run(process.execPath, [script, ...args], {
+    ...opts,
+    env: { ...opts.env, ELECTRON_RUN_AS_NODE: '1' },
+  });
+}

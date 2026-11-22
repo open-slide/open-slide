@@ -2,7 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="./favicon.ico" />
+    <link rel="icon" href="./favicon.ico" sizes="32x32" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>open-slide</title>
     <style>
@@ -11,6 +12,9 @@
       }
       html.dark {
         background-color: oklch(0.145 0 0);
+      }
+      html[data-translucent] {
+        background-color: transparent;
       }
     </style>
     <script>
@@ -25,6 +29,10 @@
         (stored !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
       document.documentElement.classList.toggle('dark', dark);
       document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+      if (window.openSlideDesktop) {
+        document.documentElement.dataset.shell = 'desktop';
+        if (window.openSlideDesktop.translucent) document.documentElement.dataset.translucent = '';
+      }
     </script>
   </head>
   <body>

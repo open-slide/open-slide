@@ -6,8 +6,8 @@ export const PANEL_TRANSITION_MS = 240;
 
 // Defer the width expansion to the next frame so the browser paints once
 // at width=0 first; otherwise the transition has no starting frame.
-export function useAnimatedOpen(open: boolean): boolean {
-  const [animVisible, setAnimVisible] = useState(false);
+export function useAnimatedOpen(open: boolean, initial = false): boolean {
+  const [animVisible, setAnimVisible] = useState(initial);
   useEffect(() => {
     if (open) {
       const id = requestAnimationFrame(() => setAnimVisible(true));
@@ -20,8 +20,12 @@ export function useAnimatedOpen(open: boolean): boolean {
 
 // Stay mounted through the close-out width transition so the panel
 // visibly collapses instead of vanishing.
-export function usePanelMount(open: boolean): { mounted: boolean; animVisible: boolean } {
-  const [mounted, setMounted] = useState(false);
+export function usePanelMount(
+  open: boolean,
+  { animateInitial = true }: { animateInitial?: boolean } = {},
+): { mounted: boolean; animVisible: boolean } {
+  const [startOpen] = useState(() => open && !animateInitial);
+  const [mounted, setMounted] = useState(startOpen);
   useEffect(() => {
     if (open) {
       setMounted(true);
@@ -30,7 +34,7 @@ export function usePanelMount(open: boolean): { mounted: boolean; animVisible: b
     const t = setTimeout(() => setMounted(false), PANEL_TRANSITION_MS);
     return () => clearTimeout(t);
   }, [open]);
-  const animVisible = useAnimatedOpen(open && mounted);
+  const animVisible = useAnimatedOpen(open && mounted, startOpen);
   return { mounted, animVisible };
 }
 
@@ -45,8 +49,8 @@ type PanelShellProps = {
 export function PanelShell({ uiAttr, header, banner, footer, children }: PanelShellProps) {
   const dataAttrs = uiAttr === 'inspector' ? { 'data-inspector-ui': '' } : { 'data-design-ui': '' };
   return (
-    <aside {...dataAttrs} className="flex h-full shrink-0 bg-sidebar" style={{ width: PANEL_W }}>
-      <div style={{ width: PANEL_W }} className="flex h-full shrink-0 flex-col">
+    <aside {...dataAttrs} className="flex h-full w-full min-w-0 bg-sidebar">
+      <div className="flex h-full w-full min-w-0 flex-col">
         <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-hairline px-3">
           {header}
         </header>

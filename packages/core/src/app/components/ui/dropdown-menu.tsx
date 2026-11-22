@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react';
+import { CheckIcon, ChevronRightIcon } from 'lucide-react';
 import { Menu as DropdownMenuPrimitive } from '@base-ui/react/menu';
 
 import { cn } from '@/lib/utils';
@@ -48,7 +48,7 @@ function DropdownMenuContent({
           data-slot="dropdown-menu-content"
           className={cn(
             'z-50 max-h-(--available-height) min-w-[9rem] origin-(--transform-origin)',
-            'overflow-x-hidden overflow-y-auto rounded-[8px] border border-border bg-popover p-1 text-popover-foreground shadow-floating outline-none',
+            'overflow-x-hidden overflow-y-auto rounded-[8px] border border-border bg-material backdrop-blur-xl backdrop-saturate-150 p-1 text-popover-foreground shadow-floating outline-none',
             'transition-[transform,scale,opacity] data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0',
             className,
           )}
@@ -79,10 +79,9 @@ function DropdownMenuItem({
       data-variant={variant}
       className={cn(
         'relative flex cursor-default items-center gap-2 rounded-[5px] px-2 py-1.5 text-[12.5px] outline-hidden select-none transition-colors',
-        'focus:bg-foreground focus:text-background',
-        'data-[active=true]:bg-muted data-[active=true]:text-foreground',
+        'focus:bg-foreground/[0.07] dark:focus:bg-foreground/10',
         'data-[disabled]:pointer-events-none data-[disabled]:opacity-45 data-[inset]:pl-8',
-        'data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive data-[variant=destructive]:focus:text-white',
+        'data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10',
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg:not([class*='text-'])]:text-current [&_svg]:opacity-80",
         className,
       )}
@@ -101,7 +100,7 @@ function DropdownMenuCheckboxItem({
     <DropdownMenuPrimitive.CheckboxItem
       data-slot="dropdown-menu-checkbox-item"
       className={cn(
-        'relative flex cursor-default items-center gap-2 rounded-[5px] py-1.5 pr-2 pl-8 text-[12.5px] outline-hidden select-none focus:bg-foreground focus:text-background data-[disabled]:pointer-events-none data-[disabled]:opacity-45',
+        "relative flex cursor-default items-center gap-2 rounded-[5px] py-1.5 pr-2 pl-8 text-[12.5px] outline-hidden select-none focus:bg-foreground/[0.07] dark:focus:bg-foreground/10 data-[disabled]:pointer-events-none data-[disabled]:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
         className,
       )}
       checked={checked}
@@ -132,14 +131,14 @@ function DropdownMenuRadioItem({
     <DropdownMenuPrimitive.RadioItem
       data-slot="dropdown-menu-radio-item"
       className={cn(
-        'relative flex cursor-default items-center gap-2 rounded-[5px] py-1.5 pr-2 pl-8 text-[12.5px] outline-hidden select-none focus:bg-foreground focus:text-background data-[disabled]:pointer-events-none data-[disabled]:opacity-45',
+        "relative flex cursor-default items-center gap-2 rounded-[5px] py-1.5 pr-2 pl-8 text-[12.5px] outline-hidden select-none focus:bg-foreground/[0.07] dark:focus:bg-foreground/10 data-[disabled]:pointer-events-none data-[disabled]:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
         className,
       )}
       {...props}
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
         <DropdownMenuPrimitive.RadioItemIndicator>
-          <CircleIcon className="size-2 fill-current" />
+          <CheckIcon className="size-3.5" />
         </DropdownMenuPrimitive.RadioItemIndicator>
       </span>
       {children}
@@ -210,7 +209,7 @@ function DropdownMenuSubTrigger({
       data-slot="dropdown-menu-sub-trigger"
       data-inset={inset}
       className={cn(
-        'flex cursor-default items-center gap-2 rounded-[5px] px-2 py-1.5 text-[12.5px] outline-hidden select-none focus:bg-foreground focus:text-background data-[inset]:pl-8 data-popup-open:bg-muted',
+        'flex cursor-default items-center gap-2 rounded-[5px] px-2 py-1.5 text-[12.5px] outline-hidden select-none focus:bg-foreground/[0.07] dark:focus:bg-foreground/10 data-[inset]:pl-8 data-popup-open:bg-foreground/[0.07] dark:data-popup-open:bg-foreground/10',
         className,
       )}
       {...props}
@@ -237,7 +236,7 @@ function DropdownMenuSubContent({
         <DropdownMenuPrimitive.Popup
           data-slot="dropdown-menu-sub-content"
           className={cn(
-            'z-50 min-w-[9rem] overflow-hidden rounded-[8px] border border-border bg-popover p-1 text-popover-foreground shadow-floating outline-none',
+            'z-50 min-w-[9rem] overflow-hidden rounded-[8px] border border-border bg-material backdrop-blur-xl backdrop-saturate-150 p-1 text-popover-foreground shadow-floating outline-none',
             'transition-[transform,scale,opacity] data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0',
             className,
           )}

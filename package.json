@@ -7,6 +7,7 @@
     "dev": "turbo run dev",
     "dev:web": "turbo run dev --filter=web",
     "dev:demo": "turbo run dev --filter=demo",
+    "dev:desktop": "turbo run build --filter=@open-slide/cli --filter=@open-slide/core && pnpm --filter desktop start",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "format": "biome format --write .",
@@ -15,7 +16,8 @@
     "lint:fix": "biome lint --write .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "test": "vitest run",
+    "test": "vitest run --project unit",
+    "test:changelog": "vitest run --project changelog",
     "test:watch": "vitest",
     "test:e2e": "pnpm --filter @open-slide/core test:e2e",
     "core": "pnpm --filter @open-slide/core",
@@ -28,7 +30,7 @@
     "@biomejs/biome": "2.5.7",
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^3.0.2",
-    "turbo": "^2.11.2",
+    "turbo": "^2.11.7",
     "vitest": "^5.0.0"
   }
 }

@@ -1,0 +1,108 @@
+import { execFile } from 'node:child_process';
+import { statSync } from 'node:fs';
+import path from 'node:path';
+import { isWindows } from './platform';
+import { settings } from './settings';
+
+const MARKER = '__OPEN_SLIDE_ENV__';
+const TIMEOUT_MS = 5000;
+const MAX_ATTEMPTS = 3;
+const PROBE_SHELL_STATE = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'DISABLE_AUTO_UPDATE']);
+
+let probe: Promise<NodeJS.ProcessEnv> | null = null;
+let probed = false;
+let attempts = 0;
+
+// Apps launched from Finder inherit launchd's bare environment, so the login shell is asked
+// for a terminal's; until it answers, the PATH from the last launch stands in.
+export function shellEnv(): Promise<NodeJS.ProcessEnv> {
+  const login = loginEnv();
+  const cached = settings.loginPath();
+  if (probed || cached === null) return login;
+  return Promise.resolve(withPath({ PATH: cached }));
+}
+
+export function loginEnv(): Promise<NodeJS.ProcessEnv> {
+  probe ??= readLoginEnv().then((login) => {
+    if (!login?.PATH) {
+      if (++attempts < MAX_ATTEMPTS) probe = null;
+      return withPath({ PATH: settings.loginPath() ?? undefined });
+    }
+    settings.setLoginPath(login.PATH);
+    probed = true;
+    return withPath(login);
+  });
+  return probe;
+}
+
+function pathOf(env: NodeJS.ProcessEnv): string | undefined {
+  return env.PATH ?? Object.entries(env).find(([key]) => key.toUpperCase() === 'PATH')?.[1];
+}
+
+// Windows inherits `Path`; one canonical key keeps a lookup from picking a stale variant.
+function withPath(login: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const paths = [login.PATH, pathOf(process.env)].flatMap((p) => (p ?? '').split(path.delimiter));
+  const env: NodeJS.ProcessEnv = { ...process.env, ...login };
+  for (const key of Object.keys(env)) if (key.toUpperCase() === 'PATH') delete env[key];
+  env.PATH = [...new Set(paths.filter(Boolean))].join(path.delimiter);
+  return env;
+}
+
+function parseEnv(block: string): NodeJS.ProcessEnv | null {
+  const env: NodeJS.ProcessEnv = {};
+  for (const entry of block.split('\0')) {
+    const eq = entry.indexOf('=');
+    if (eq < 1) continue;
+    const key = entry.slice(0, eq);
+    if (!PROBE_SHELL_STATE.has(key)) env[key] = entry.slice(eq + 1);
+  }
+  return env.PATH ? env : null;
+}
+
+function readLoginEnv(): Promise<NodeJS.ProcessEnv | null> {
+  if (isWindows) return Promise.resolve(null);
+  const shell = process.env.SHELL || '/bin/zsh';
+  // PATH is printed on its own too, for an `env` without -0.
+  const script = `printf '${MARKER}'; command env -0; printf '${MARKER}%s${MARKER}' "$PATH"`;
+  return new Promise((resolve) => {
+    execFile(
+      shell,
+      ['-ilc', script],
+      {
+        timeout: TIMEOUT_MS,
+        killSignal: 'SIGKILL',
+        maxBuffer: 4 * 1024 * 1024,
+        env: { ...process.env, DISABLE_AUTO_UPDATE: 'true' },
+      },
+      (_err, stdout) => {
+        const parts = (stdout ?? '').split(MARKER);
+        if (parts.length < 4) return resolve(null);
+        const loginPath = parts.at(-2);
+        resolve(
+          parseEnv(parts.slice(1, -2).join(MARKER)) ?? (loginPath ? { PATH: loginPath } : null),
+        );
+      },
+    );
+  });
+}
+
+function search(command: string, env: NodeJS.ProcessEnv, exts: string[]): string | null {
+  for (const dir of (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean)) {
+    for (const ext of exts) {
+      const candidate = path.join(dir, command + ext.toLowerCase());
+      try {
+        if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate;
+      } catch {}
+    }
+  }
+  return null;
+}
+
+export function findOnPath(command: string, env: NodeJS.ProcessEnv): string | null {
+  return search(command, env, isWindows ? (env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';') : ['']);
+}
+
+// The result is spawned without a shell, which cannot run a Windows .cmd shim.
+export function findExecutable(command: string, env: NodeJS.ProcessEnv): string | null {
+  return search(command, env, [isWindows ? '.exe' : '']);
+}

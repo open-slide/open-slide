@@ -5,6 +5,7 @@ import {
   duplicateSlide,
   editorCanvas,
   openSlide,
+  pagePanel,
   readSlideSource,
   slideSourcePath,
 } from './helpers.ts';
@@ -89,7 +90,7 @@ test.describe('editor interaction flow', () => {
     request,
   }) => {
     const { panel, headline, body } = await openEditor(page, request, 'ux-stable-canvas');
-    await expect(panel.getByText('Select an object', { exact: true })).toBeVisible();
+    await expect(pagePanel(page)).toBeVisible();
     const canvas = editorCanvas(page).locator('[data-osd-canvas]');
     const original = await canvas.boundingBox();
     if (!original) throw new Error('Slide canvas has no bounding box');
@@ -105,7 +106,7 @@ test.describe('editor interaction flow', () => {
     await expectSameBox(canvas, original);
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-selection-frame]')).toHaveCount(0);
-    await expect(panel.getByText('Select an object', { exact: true })).toBeVisible();
+    await expect(pagePanel(page)).toBeVisible();
     await expectSameBox(canvas, original);
     await headline.click();
     await expectSameBox(canvas, original);
@@ -131,7 +132,7 @@ test.describe('editor interaction flow', () => {
     );
     await page.keyboard.press('Escape');
     await expect(page.locator('[data-selection-frame]')).toHaveCount(0);
-    await expect(panel.getByText('Select an object', { exact: true })).toBeVisible();
+    await expect(pagePanel(page)).toBeVisible();
   });
 
   test('sidebar formatting applies to the highlighted word and shares inline shortcuts', async ({
@@ -388,8 +389,8 @@ test.describe('editor interaction flow', () => {
     request,
   }) => {
     const { panel, headline, body } = await openEditor(page, request, 'ux-preview');
-    const preview = page.getByTitle('Preview', { exact: true });
-    const edit = page.getByTitle('Edit', { exact: true });
+    const preview = page.getByRole('button', { name: 'Preview', exact: true });
+    const edit = page.getByRole('button', { name: 'Edit', exact: true });
     await expect(preview).toBeVisible();
     await expect(edit).toBeVisible();
     await expect(preview).toHaveAttribute('aria-pressed', 'false');
@@ -474,7 +475,7 @@ test.describe('editor interaction flow', () => {
     await openSlide(page, 'alpha');
     await expect(page.locator('[data-inspector-ready]')).toBeVisible();
     captureBrowserErrors(page);
-    await page.getByTitle('Preview', { exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(page.locator('aside[data-inspector-ui]')).toHaveCount(0);
     await page.keyboard.press('ArrowRight');
     await expect(page).toHaveURL(/[?&]p=2/);

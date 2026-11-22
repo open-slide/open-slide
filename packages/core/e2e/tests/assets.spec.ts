@@ -11,7 +11,9 @@ test.describe('asset manager', () => {
   test('uploads an asset and deletes it from the grid', async ({ page, request }) => {
     await request.delete(`/__assets/@global/${ASSET}`);
     await page.goto('/assets');
-    await expect(page.getByText('Upload', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('label').getByText('Upload', { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
 
     await page.locator('input[type="file"]').setInputFiles({
       name: ASSET,

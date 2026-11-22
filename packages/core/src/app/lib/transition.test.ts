@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { holdOpacity } from './transition';
+import { describeTransition, holdOpacity } from './transition';
 
 describe('holdOpacity', () => {
   it('drops opacity from array keyframes and keeps everything else', () => {
@@ -27,5 +27,88 @@ describe('holdOpacity', () => {
 
   it('passes an undefined phase through', () => {
     expect(holdOpacity(undefined)).toBeUndefined();
+  });
+});
+
+describe('describeTransition', () => {
+  it('names a cross-fade and reports its longest phase', () => {
+    expect(
+      describeTransition({
+        duration: 200,
+        enter: { duration: 320, keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+        exit: { duration: 240, keyframes: [{ opacity: 1 }, { opacity: 0 }] },
+      }),
+    ).toEqual({ kind: 'fade', duration: 320 });
+  });
+
+  it('adds a phase delay to the duration it inherits', () => {
+    expect(
+      describeTransition({
+        duration: 300,
+        enter: { delay: 80, keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+      }).duration,
+    ).toBe(380);
+    expect(describeTransition({ duration: 300, morph: { delay: 50 } }).duration).toBe(350);
+  });
+
+  it('calls a translating entrance a slide', () => {
+    expect(
+      describeTransition({
+        duration: 240,
+        enter: {
+          keyframes: [
+            { opacity: 0, transform: 'translateX(10px)' },
+            { opacity: 1, transform: 'translateX(0)' },
+          ],
+        },
+      }).kind,
+    ).toBe('slide');
+  });
+
+  it('reads property-indexed keyframes', () => {
+    expect(
+      describeTransition({
+        duration: 300,
+        enter: { keyframes: { opacity: [0, 1], transform: ['scale(0.96)', 'scale(1)'] } },
+      }).kind,
+    ).toBe('zoom');
+  });
+
+  it('prefers morph and counts its duration', () => {
+    expect(
+      describeTransition({
+        duration: 300,
+        enter: { duration: 320, keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+        morph: { duration: 600, delay: 40 },
+      }),
+    ).toEqual({ kind: 'morph', duration: 640 });
+  });
+
+  it('ignores the base duration when explicit phase durations set the length', () => {
+    expect(
+      describeTransition({
+        duration: 600,
+        enter: { duration: 200, keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+      }).duration,
+    ).toBe(200);
+  });
+
+  it('uses the base duration for a bare morph', () => {
+    expect(
+      describeTransition({
+        duration: 500,
+        enter: { duration: 200, keyframes: [{ opacity: 0 }, { opacity: 1 }] },
+        morph: true,
+      }),
+    ).toEqual({ kind: 'morph', duration: 500 });
+  });
+
+  it('falls back to custom for anything else', () => {
+    expect(
+      describeTransition({
+        duration: 300,
+        enter: { keyframes: [{ filter: 'blur(8px)' }, { filter: 'blur(0)' }] },
+      }).kind,
+    ).toBe('custom');
   });
 });

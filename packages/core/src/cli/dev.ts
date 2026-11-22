@@ -2,8 +2,14 @@ import { type ChildProcess, fork } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { type BindCLIShortcutsOptions, createServer, mergeConfig, type ViteDevServer } from 'vite';
+import {
+  DEV_SUPERVISED_ENV,
+  isSupervised,
+  listeningMessage,
+  listeningPort,
+  RESTART_EXIT_CODE,
+} from '../supervision.ts';
 import { createViteConfig } from '../vite/config.ts';
-import { DEV_SUPERVISED_ENV, RESTART_EXIT_CODE } from '../vite/routes/restart.ts';
 import {
   createCliLogger,
   formatError,
@@ -21,7 +27,7 @@ export interface DevOptions {
 }
 
 export async function dev(opts: DevOptions = {}): Promise<void> {
-  if (process.env[DEV_SUPERVISED_ENV] === '1') {
+  if (isSupervised()) {
     await startServer(opts);
     return;
   }
@@ -29,6 +35,13 @@ export async function dev(opts: DevOptions = {}): Promise<void> {
 }
 
 async function startServer(opts: DevOptions): Promise<void> {
+  let server: ViteDevServer | undefined;
+  // A supervisor that crashes sends no signal, only closes the IPC channel, and
+  // can do so while the server is still starting.
+  process.once('disconnect', () => {
+    void Promise.resolve(server?.close()).finally(() => process.exit(0));
+  });
+
   const base = await createViteConfig({ userCwd: process.cwd() });
   const config = mergeConfig(base, {
     customLogger: createCliLogger(),
@@ -38,7 +51,7 @@ async function startServer(opts: DevOptions): Promise<void> {
       ...(opts.open !== undefined ? { open: opts.open } : {}),
     },
   });
-  const server = await createServer(config);
+  server = await createServer(config);
   await server.listen();
 
   printHeader(startupDuration());
@@ -50,7 +63,7 @@ async function startServer(opts: DevOptions): Promise<void> {
 
   const address = server.httpServer?.address();
   if (process.send && address && typeof address === 'object') {
-    process.send({ type: 'open-slide:listening', port: address.port });
+    process.send(listeningMessage(address.port));
   }
 }
 
@@ -95,12 +108,8 @@ function supervise(opts: DevOptions): void {
       process.exit(1);
     });
     child.on('message', (message) => {
-      if (typeof message !== 'object' || message === null) return;
-      const { type, port: reportedPort } = message as { type?: unknown; port?: unknown };
       // remember the resolved port so restarts land on the same address
-      if (type === 'open-slide:listening' && typeof reportedPort === 'number') {
-        port = reportedPort;
-      }
+      port = listeningPort(message) ?? port;
     });
     child.on('exit', (code, signal) => {
       if (shuttingDown) process.exit(0);

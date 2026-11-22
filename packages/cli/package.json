@@ -45,11 +45,11 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",
-    "chalk": "^6.0.0",
+    "chalk": "^6.0.1",
     "commander": "^15.0.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.6",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2"
   }

@@ -1,6 +1,8 @@
 import { Crop, ImageIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { haptic } from '@/lib/desktop';
 import { findSlideSource } from '@/lib/inspector/fiber';
+import { useFreezeSlideMotion } from '@/lib/inspector/freeze-motion';
 import {
   type Guide,
   type Point,
@@ -48,10 +50,13 @@ type Gesture = {
   candidates: Rect[];
   moved: boolean;
   edits: VisualEdit[];
+  guideKeys: Set<string>;
   previousSelection: SelectedTarget[];
   clickSelection: SelectedTarget[];
   additive: boolean;
 };
+
+const guideKey = (guide: Guide) => `${guide.axis}:${guide.position}`;
 
 type ScreenRect = { left: number; top: number; width: number; height: number };
 const HANDLES: { handle: ResizeHandle; x: number; y: number; cursor: string }[] = [
@@ -98,19 +103,7 @@ export function InspectOverlay() {
   const [scale, setScale] = useState(1);
   const displayed = localTargets ?? selection;
 
-  useEffect(() => {
-    if (!active) return;
-    const root = document.querySelector<HTMLElement>('[data-inspector-root]');
-    if (!root) return;
-    const style = document.createElement('style');
-    style.textContent = EDITING_FREEZE_CSS;
-    document.head.appendChild(style);
-    root.dataset.inspectorEditing = 'true';
-    return () => {
-      style.remove();
-      delete root.dataset.inspectorEditing;
-    };
-  }, [active]);
+  useFreezeSlideMotion(active ? 'edit' : null);
 
   useLayoutEffect(() => {
     if (!active) return;
@@ -273,6 +266,7 @@ export function InspectOverlay() {
         candidates,
         moved: false,
         edits: [],
+        guideKeys: new Set(),
         previousSelection: selection,
         clickSelection,
         additive: event.shiftKey,
@@ -374,6 +368,9 @@ export function InspectOverlay() {
         ];
       }
       for (const edit of gesture.edits) previewOps(edit.anchor, edit.ops);
+      const guideKeys = new Set(nextGuides.map(guideKey));
+      if ([...guideKeys].some((key) => !gesture.guideKeys.has(key))) haptic('alignment');
+      gesture.guideKeys = guideKeys;
       setGuides(nextGuides);
       measureRef.current?.();
     };
@@ -601,7 +598,7 @@ export function InspectOverlay() {
       {canvasFrame &&
         guides.map((guide) => (
           <div
-            key={`${guide.axis}:${guide.position}`}
+            key={guideKey(guide)}
             data-alignment-guide={guide.axis}
             className="absolute bg-cyan-500"
             style={
@@ -656,29 +653,3 @@ export function InspectOverlay() {
     </div>
   );
 }
-
-const EDITING_FREEZE_CSS = `
-[data-inspector-editing] { touch-action: none; }
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *),
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *)::before,
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *)::after {
-  animation-duration: 1ms !important;
-  animation-delay: 0s !important;
-  animation-iteration-count: 1 !important;
-  animation-fill-mode: forwards !important;
-  transition: none !important;
-  view-transition-name: none !important;
-  user-select: none;
-}
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *, [data-visual-gesture], [data-visual-gesture] *),
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *, [data-visual-gesture], [data-visual-gesture] *)::before,
-[data-inspector-editing] *:not([data-inspector-ui], [data-inspector-ui] *, [data-visual-gesture], [data-visual-gesture] *)::after {
-  cursor: default !important;
-}
-[data-inspector-editing] [data-visual-gesture],
-[data-inspector-editing] [data-visual-gesture] *,
-[data-inspector-editing] [data-visual-gesture] *::before,
-[data-inspector-editing] [data-visual-gesture] *::after {
-  cursor: var(--osd-gesture-cursor, default) !important;
-}
-`;

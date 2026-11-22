@@ -9,7 +9,13 @@ import { ThemeToggle } from './theme-toggle';
 const linkClass =
   'rounded-full px-3 py-1.5 text-[13.5px] font-medium text-[color:var(--color-text-soft)] transition-colors hover:bg-[color:var(--color-panel-hi)] hover:text-[color:var(--color-text)]';
 
-export function Nav({ githubStars }: { githubStars?: string | null }) {
+export function Nav({
+  githubStars,
+  themeToggle = true,
+}: {
+  githubStars?: string | null;
+  themeToggle?: boolean;
+}) {
   return (
     <header className="sticky top-0 z-40 border-b border-[color:var(--color-rule-soft)] bg-[color:var(--color-ink)]/80 backdrop-blur-md">
       <div className="relative mx-auto flex h-[60px] w-full max-w-[1200px] items-center justify-between px-6 sm:px-8">
@@ -18,19 +24,28 @@ export function Nav({ githubStars }: { githubStars?: string | null }) {
           className="flex items-center gap-2.5 text-[14px] font-medium tracking-[-0.01em]"
         >
           <Image
-            src="/open-slide.png"
+            src="/open-slide.svg"
             alt="open-slide logo"
             width={24}
             height={24}
             priority
-            className="block h-6 w-6 rounded-[4px]"
+            className="block h-6 w-6"
           />
           <span className="text-[color:var(--color-text)]">open-slide</span>
         </Link>
 
-        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 md:flex">
+        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-0.5 lg:flex">
           <Link href="/docs" className={linkClass}>
             Docs
+          </Link>
+          <Link href="/changelog" className={linkClass}>
+            Changelog
+          </Link>
+          <Link href="/desktop" className={`${linkClass} inline-flex items-center gap-1.5`}>
+            Desktop
+            <span className="rounded-full bg-[color:var(--color-accent)]/12 px-1.5 py-px text-[10px] font-medium text-[color:var(--color-accent)]">
+              Soon
+            </span>
           </Link>
           <a
             href="https://demo.open-slide.dev/"
@@ -61,7 +76,7 @@ export function Nav({ githubStars }: { githubStars?: string | null }) {
         </nav>
 
         <div className="flex items-center gap-3">
-          <ThemeToggle />
+          {themeToggle ? <ThemeToggle /> : null}
           <ButtonLink href="/docs">Get started</ButtonLink>
         </div>
       </div>
