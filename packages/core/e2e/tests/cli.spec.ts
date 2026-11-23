@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
+import { preview } from 'vite';
 import { coreRoot, fixtureDir, prepareScratchProject, runCli } from './helpers.ts';
 
 test.describe('open-slide cli', () => {
@@ -40,25 +41,22 @@ test.describe('open-slide export', () => {
         fixtureDir,
       );
       expect(result.code, result.stderr).toBe(0);
-      const files = await fs.readdir(outDir);
-      expect(files).toHaveLength(1);
-      const [filename] = files;
-      const output = path.join(outDir, filename);
+      const output = path.join(
+        outDir,
+        format === 'html' ? 'alpha/index.html' : `alpha.${format === 'pdf' ? 'pdf' : 'pptx'}`,
+      );
+      expect(await fs.readdir(outDir)).toEqual([
+        format === 'html' ? 'alpha' : path.basename(output),
+      ]);
       expect(result.stdout.trim().split('\n').at(-1)).toBe(output);
       const bytes = await fs.readFile(output);
       if (format === 'html') {
-        expect(filename).toMatch(/^alpha\.(html|zip)$/);
-        const html =
-          filename === 'alpha.zip'
-            ? strFromU8(unzipSync(bytes)['alpha.html'])
-            : bytes.toString('utf8');
-        expect(html).toContain('Alpha page three');
+        expect((await fs.readdir(path.dirname(output))).sort()).toEqual(['assets', 'index.html']);
+        expect(bytes.toString('utf8')).toContain('Alpha page three');
       } else if (format === 'pdf') {
-        expect(filename).toBe('alpha.pdf');
         expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
         expect(bytes.toString('latin1').match(/\/Type\s*\/Page\b/g)).toHaveLength(3);
       } else {
-        expect(filename).toBe('alpha.pptx');
         const parts = unzipSync(bytes);
         const firstSlide = strFromU8(parts['ppt/slides/slide1.xml']);
         if (format === 'pptx') {
@@ -73,7 +71,7 @@ test.describe('open-slide export', () => {
     });
   }
 
-  test('bundles slide assets with a configured base path', async () => {
+  test('serves exported assets under a nested path', async ({ page }) => {
     test.setTimeout(180_000);
     const project = prepareScratchProject('cli-export-assets');
     await fs.writeFile(
@@ -84,10 +82,10 @@ test.describe('open-slide export', () => {
     await fs.mkdir(slideDir);
     await fs.writeFile(
       path.join(slideDir, 'index.tsx'),
-      'import image from "./art.svg?no-inline"; export default [() => <img src={image} alt="Test art" />];',
+      'import image from "./test art.svg?no-inline"; export default [() => <img src={image} alt="Test art" />];',
     );
     await fs.writeFile(
-      path.join(slideDir, 'art.svg'),
+      path.join(slideDir, 'test art.svg'),
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle r="5"/></svg>',
     );
 
@@ -97,10 +95,26 @@ test.describe('open-slide export', () => {
       project,
     );
     expect(result.code, result.stderr).toBe(0);
-    const parts = unzipSync(await fs.readFile(path.join(outDir, 'with-assets.zip')));
-    const image = strFromU8(parts['with-assets.html']).match(/<img[^>]+alt="Test art"[^>]*>/)?.[0];
-    expect(image).toContain('src="assets/art.svg"');
-    expect(strFromU8(parts['assets/art.svg'])).toContain('<circle');
+    const server = await preview({
+      configFile: false,
+      appType: 'mpa',
+      base: '/project/decks/',
+      build: { outDir },
+      preview: { host: '127.0.0.1', port: 0 },
+    });
+    try {
+      const baseUrl = server.resolvedUrls?.local[0];
+      expect(baseUrl).toBeTruthy();
+      const url = new URL('with-assets/', baseUrl).href;
+      expect((await page.goto(url))?.ok()).toBe(true);
+      const image = page.getByAltText('Test art');
+      await expect(image).toHaveAttribute('src', /^assets\//);
+      await expect
+        .poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth))
+        .toBeGreaterThan(0);
+    } finally {
+      await server.close();
+    }
   });
 
   test('fails for unknown decks without writing an export', async () => {

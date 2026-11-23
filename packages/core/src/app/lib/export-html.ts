@@ -225,7 +225,8 @@ function rewriteUrls(
 ): string {
   let out = source;
   for (const [orig, { name }] of assets) {
-    const replacement = kind === 'css' ? `./assets/${name}` : `assets/${name}`;
+    const assetPath = `assets/${encodeURIComponent(name)}`;
+    const replacement = kind === 'css' ? `./${assetPath}` : assetPath;
     out = out.split(orig).join(replacement);
   }
   return out;

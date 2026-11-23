@@ -27,7 +27,7 @@ Once installed, the `open-slide` bin is available in the workspace:
 | `open-slide export` | Export one deck as HTML, PDF, editable PPTX, or image PPTX. Flags: `--slide <id>`, `--format <format>`, `--out-dir <dir>`. |
 | `open-slide preview` | Preview the production build. Flags: `-p, --port <port>`, `--host [host]`, `--open`. |
 
-The export command uses headless Chromium. See the [export CLI docs](https://open-slide.dev/docs/cli/export) for setup and format names.
+The export command uses headless Chromium. HTML exports write `<deck-id>/index.html` and `<deck-id>/assets/` under the output directory. See the [export CLI docs](https://open-slide.dev/docs/cli/export) for setup and format names.
 
 ## Config
 

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rename, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { Page } from '@playwright/test';
@@ -7,6 +7,7 @@ import type { ExportFormat } from '../app/lib/cli-export.ts';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../app/lib/sdk.ts';
 import { SLIDE_ID_RE } from '../editing/slide-ops.ts';
 import { createViteConfig } from '../vite/config.ts';
+import { saveHtmlOutput } from './html-output.ts';
 import { createCliLogger } from './ui.ts';
 
 const READY_TIMEOUT_MS = 60_000;
@@ -111,25 +112,27 @@ async function saveExport(
   });
 
   try {
-    let extension: string;
+    let downloadName: string | undefined;
     if (format === 'pdf') {
       await page.exposeFunction('openSlideCliSavePdf', async () => {
         await page.pdf({ path: stagedFile, preferCSSPageSize: true, printBackground: true });
         return true;
       });
       await Promise.race([runExport(), deadline]);
-      extension = 'pdf';
     } else {
       const download = page.waitForEvent('download', { timeout: EXPORT_TIMEOUT_MS });
       const [file] = await Promise.race([Promise.all([download, runExport()]), deadline]);
       await Promise.race([file.saveAs(stagedFile), deadline]);
-      extension = format === 'html' ? path.extname(file.suggestedFilename()).slice(1) : 'pptx';
-      if (format === 'html' && extension !== 'html' && extension !== 'zip') {
-        throw new Error(`Unexpected HTML export filename: ${file.suggestedFilename()}`);
-      }
+      downloadName = file.suggestedFilename();
     }
     if (renderError) throw renderError;
-    const output = path.join(outDir, `${slide}.${extension}`);
+    if (format === 'html') {
+      if (downloadName !== `${slide}.html` && downloadName !== `${slide}.zip`) {
+        throw new Error(`Unexpected HTML export filename: ${downloadName}`);
+      }
+      return await saveHtmlOutput(staging, outDir, slide, downloadName, await readFile(stagedFile));
+    }
+    const output = path.join(outDir, `${slide}.${format === 'pdf' ? 'pdf' : 'pptx'}`);
     await rename(stagedFile, output);
     return output;
   } finally {
