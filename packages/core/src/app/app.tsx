@@ -5,6 +5,7 @@ import { TooltipProvider } from './components/ui/tooltip';
 import { DesktopBridge } from './lib/desktop';
 import { useLocale } from './lib/use-locale';
 import { AssetsPage } from './routes/assets';
+import { Export } from './routes/export';
 import { Home } from './routes/home';
 import { HomeShell } from './routes/home-shell';
 import { Presenter } from './routes/presenter';
@@ -30,6 +31,9 @@ export function App() {
           <Route path="/s/:slideId" element={<Slide />} />
           <Route path="/s/:slideId/presenter" element={<Presenter />} />
           {import.meta.env.DEV && <Route path="/s/:slideId/preview" element={<Preview />} />}
+          {import.meta.env.OPEN_SLIDE_CLI_EXPORT && (
+            <Route path="/s/:slideId/export" element={<Export />} />
+          )}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </TooltipProvider>

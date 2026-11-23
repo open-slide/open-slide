@@ -337,6 +337,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.5
         version: 19.2.5(@types/react@19.2.18)
+      playwright:
+        specifier: ~1.63.0
+        version: 1.63.0
 
 packages:
 

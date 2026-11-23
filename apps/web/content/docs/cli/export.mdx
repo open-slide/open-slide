@@ -1,0 +1,31 @@
+---
+title: open-slide export
+description: Export a deck from the terminal.
+---
+
+Run these commands from your open-slide workspace:
+
+```bash
+npm install -D playwright
+npx playwright install chromium
+npx open-slide export --slide my-deck --format html --out-dir exports
+```
+
+Use the deck directory name, such as `my-deck` for `slides/my-deck/index.tsx`.
+The command starts a local server and uses headless Chromium to render the deck.
+On Linux CI runners that need Chromium system libraries, use
+`npx playwright install --with-deps chromium` during setup.
+
+| Format | Output |
+| --- | --- |
+| `html` | Standalone `.html` file, or a `.zip` with the HTML file and its assets |
+| `pdf` | PDF with one page per slide |
+| `pptx` | Editable PowerPoint file |
+| `pptx-images` | PowerPoint file with one rendered image per slide |
+
+Both PowerPoint formats use the filename `<deck-id>.pptx`. Use separate output
+directories to keep both copies. The default output directory is the current
+directory. A successful export prints the absolute output path and replaces any
+existing file with the same name.
+
+For a deployable site with the slide player, see [open-slide build](/docs/cli/build).

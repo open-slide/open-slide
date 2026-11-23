@@ -58,6 +58,7 @@ export type CreateViteConfigOptions = {
   userCwd: string;
   config?: OpenSlideConfig;
   mode?: 'serve' | 'build';
+  cliExport?: boolean;
 };
 
 export async function createViteConfig(opts: CreateViteConfigOptions): Promise<InlineConfig> {
@@ -76,6 +77,7 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
     root: APP_ROOT,
     configFile: false,
     envDir: userCwd,
+    define: { 'import.meta.env.OPEN_SLIDE_CLI_EXPORT': opts.cliExport === true },
     plugins: [
       locTagsPlugin({ userCwd, slidesDir }),
       react(),
@@ -92,7 +94,7 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
       }),
       notesPlugin({ userCwd, slidesDir }),
       currentPlugin({ userCwd, slidesDir }),
-      serverInfoPlugin({ userCwd }),
+      ...(opts.cliExport ? [] : [serverInfoPlugin({ userCwd })]),
     ],
     // The default cache sits inside core's package, which a bundling host ships read-only.
     cacheDir: process.env[CACHE_DIR_ENV] || undefined,
