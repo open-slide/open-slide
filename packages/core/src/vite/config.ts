@@ -90,7 +90,7 @@ export async function createViteConfig(opts: CreateViteConfigOptions): Promise<I
         slidesDir,
         assetsDir,
         coreVersion: CORE_VERSION,
-        agentEnabled: config.agent?.enabled ?? true,
+        agentEnabled: !opts.cliExport && (config.agent?.enabled ?? true),
       }),
       notesPlugin({ userCwd, slidesDir }),
       currentPlugin({ userCwd, slidesDir }),
