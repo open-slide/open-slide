@@ -1152,6 +1152,42 @@ const NUMBER_SCHEMES: Record<string, string> = {
 
 const BULLET_CHARS: Record<string, string> = { disc: '•', circle: '○', square: '▪' };
 
+/**
+ * Arial's bullet ink ends 0.30 em after the glyph origin (616 / 2048 units).
+ * PPTX places the text `indent` px after that origin, so the visible gap is
+ * `indent - 0.30 em`; #637 measured ~4 px instead of the ~15 px Chrome draws.
+ */
+const BULLET_INK_EM = 0.3;
+
+/**
+ * White space Chrome leaves between a disc marker and the text (#637): with
+ * `o = floor(ascent * 2 / 3)` the disc starts `o + 7` px before the text and is
+ * `floor((o + 1) / 2)` px wide, so the gap is `o + 7 - floor((o + 1) / 2)`.
+ * The 7 px do not scale with the font size.
+ */
+export function charBulletGapPx(ascentPx: number): number {
+  const o = Math.floor(ascentPx * (2 / 3));
+  return o + 7 - Math.floor((o + 1) / 2);
+}
+
+/** PPTX indentation from the bullet origin to the text for a char marker. */
+export function charBulletWidthPx(sizePx: number, ascentPx: number): number {
+  return charBulletGapPx(ascentPx) + BULLET_INK_EM * sizePx;
+}
+
+/** Chrome's rounded font ascent in px, or null when the canvas is unavailable. */
+function measureFontAscent(ctx: Ctx, cs: CSSStyleDeclaration): number | null {
+  const c = ctx.measureCanvas;
+  if (!c) return null;
+  try {
+    c.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const ascent = c.measureText('Ag').fontBoundingBoxAscent;
+    return Number.isFinite(ascent) && ascent > 0 ? ascent : null;
+  } catch {
+    return null;
+  }
+}
+
 function bulletFor(
   ctx: Ctx,
   m: Measured,
@@ -1181,7 +1217,11 @@ function bulletFor(
   }
   const char = BULLET_CHARS[type];
   if (!char) return null;
-  return { bullet: { kind: 'char', char, color, font: 'Arial' }, width: size * 0.5 };
+  // Only the preview canvas knows the real ascent; without it keep the
+  // historical 0.5 em width rather than guessing a platform font metric.
+  const ascent = measureFontAscent(ctx, cs);
+  const width = ascent === null ? size * 0.5 : charBulletWidthPx(size, ascent);
+  return { bullet: { kind: 'char', char, color, font: 'Arial' }, width };
 }
 
 function measureText(ctx: Ctx, cs: CSSStyleDeclaration, text: string): number {
