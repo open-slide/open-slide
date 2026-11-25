@@ -96,14 +96,26 @@ const GENERIC_WORKSPACE_NAMES = new Set([
 const PREFERRED_SUBFOLDERS = ['slides', 'deck', 'decks', 'open-slide', 'presentation'];
 
 export function workspaceDisplayName(root: string, pkgName?: string): string {
-  const base = pkgName?.trim() || path.basename(root);
+  const resolved = path.resolve(root);
+  const base = pkgName?.trim() || path.basename(resolved);
   if (GENERIC_WORKSPACE_NAMES.has(base.toLowerCase())) {
-    const parent = path.basename(path.dirname(root));
-    if (parent && parent !== '.open-slide' && parent !== path.basename(homedir())) {
-      return `${parent} / ${base}`;
+    const parentDir = path.dirname(resolved);
+    const home = path.resolve(homedir());
+    const defaultRoot = path.join(home, '.open-slide');
+    if (parentDir !== resolved && parentDir !== home && parentDir !== defaultRoot) {
+      const parent = path.basename(parentDir);
+      if (parent) return `${parent} / ${base}`;
     }
   }
   return base;
+}
+
+function safeInspect(dir: string): WorkspaceInspection | null {
+  try {
+    return inspectWorkspace(dir);
+  } catch {
+    return null;
+  }
 }
 
 export function inspectWorkspace(dir: string): WorkspaceInspection {
@@ -129,7 +141,7 @@ export function findNestedWorkspace(dir: string): string | null {
   const resolved = path.resolve(dir);
   for (const sub of PREFERRED_SUBFOLDERS) {
     const candidate = path.join(resolved, sub);
-    if (inspectWorkspace(candidate).kind === 'project') return candidate;
+    if (safeInspect(candidate)?.kind === 'project') return candidate;
   }
   try {
     const found: string[] = [];
@@ -138,7 +150,7 @@ export function findNestedWorkspace(dir: string): string | null {
         continue;
       }
       const candidate = path.join(resolved, entry.name);
-      if (inspectWorkspace(candidate).kind === 'project') found.push(candidate);
+      if (safeInspect(candidate)?.kind === 'project') found.push(candidate);
     }
     if (found.length === 1) return found[0];
   } catch {}
@@ -148,8 +160,9 @@ export function findNestedWorkspace(dir: string): string | null {
 export function suggestSubfolderName(dir: string): string {
   const resolved = path.resolve(dir);
   for (const candidate of ['slides', 'deck', 'open-slide', 'my-slides']) {
-    const kind = inspectWorkspace(path.join(resolved, candidate)).kind;
-    if (kind === 'missing' || kind === 'empty') return candidate;
+    const target = path.join(resolved, candidate);
+    if (!existsSync(target)) return candidate;
+    if (safeInspect(target)?.kind === 'empty') return candidate;
   }
   return 'slides-deck';
 }

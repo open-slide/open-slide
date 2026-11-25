@@ -44,8 +44,20 @@ describe('workspaceDisplayName', () => {
     expect(workspaceDisplayName('/projects/keynote/deck', 'deck')).toBe('keynote / deck');
   });
 
-  it('keeps the default ~/.open-slide/slides name unqualified', () => {
-    expect(workspaceDisplayName('/home/user/.open-slide/slides', 'slides')).toBe('slides');
+  it('keeps the default ~/.open-slide/slides and ~/slides names unqualified', () => {
+    const home = os.homedir();
+    expect(workspaceDisplayName(path.join(home, '.open-slide', 'slides'), 'slides')).toBe('slides');
+    expect(workspaceDisplayName(path.join(home, 'slides'), 'slides')).toBe('slides');
+  });
+
+  it('still qualifies unrelated folders that share a basename with home or .open-slide', () => {
+    const homeName = path.basename(os.homedir());
+    expect(workspaceDisplayName(path.join('/projects', homeName, 'slides'), 'slides')).toBe(
+      `${homeName} / slides`,
+    );
+    expect(workspaceDisplayName('/projects/.open-slide/slides', 'slides')).toBe(
+      '.open-slide / slides',
+    );
   });
 
   it('leaves specific package names unchanged', () => {
@@ -89,6 +101,14 @@ describe('suggestSubfolderName', () => {
 
     mkdirSync(path.join(parent, 'slides'));
     writeFileSync(path.join(parent, 'slides', 'notes.md'), 'hi');
+    expect(suggestSubfolderName(parent)).toBe('deck');
+  });
+
+  it('skips regular files that collide with a candidate name', () => {
+    const parent = path.join(tmp, 'talk-file');
+    mkdirSync(parent, { recursive: true });
+    writeFileSync(path.join(parent, 'slides'), 'not a directory');
+
     expect(suggestSubfolderName(parent)).toBe('deck');
   });
 });

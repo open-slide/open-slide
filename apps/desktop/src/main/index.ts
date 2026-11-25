@@ -75,6 +75,7 @@ import {
   inspectWorkspace,
   modulesDir,
   syncSkills,
+  workspaceDisplayName,
 } from './workspace';
 import { WorkspaceController } from './workspace-controller';
 
@@ -539,10 +540,13 @@ function showWorkspacePicker(anchor?: unknown) {
   const recent = settings.recent();
 
   const items: MenuItemConstructorOptions[] = recent.map((root) => {
-    const info = inspectWorkspace(root);
+    let labelName = workspaceDisplayName(root);
+    try {
+      labelName = inspectWorkspace(root).name;
+    } catch {}
     const shortPath = tildifyPath(root);
     return {
-      label: isMac ? info.name : `${info.name}  (${shortPath})`,
+      label: isMac ? labelName : `${labelName}  (${shortPath})`,
       ...(isMac ? { sublabel: shortPath } : {}),
       toolTip: root,
       type: 'checkbox',
