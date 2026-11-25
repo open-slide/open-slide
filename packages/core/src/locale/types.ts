@@ -642,10 +642,8 @@ export type Locale = {
     permissionModes: Record<AgentPermissionMode, string>;
     permissionHints: Record<AgentPermissionMode, string>;
     permissionHintsCodex: Record<AgentPermissionMode, string>;
-    resultDone: string;
     resultStopped: string;
     /** template: "{seconds}s" */
-    resultSeconds: string;
     errorEyebrow: string;
     statusLoading: string;
     disabled: string;
