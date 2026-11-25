@@ -1,11 +1,9 @@
-import { ChevronDown, FilePen, Hand, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Menu } from '@base-ui/react/menu';
+import { Check, ChevronDown, FilePen, Hand, ShieldCheck, ShieldOff } from 'lucide-react';
 import type { ComponentType } from 'react';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { setPermissionMode } from '@/lib/agent/use-agent';
@@ -54,44 +52,53 @@ export function PermissionMenu({
         <span className="truncate">{t.agent.permissionModes[mode]}</span>
         <ChevronDown className="size-3 shrink-0 opacity-70" aria-hidden />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[280px] p-1.5">
-        <DropdownMenuRadioGroup
+      <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[292px] p-1.5">
+        <Menu.RadioGroup
           value={mode}
           onValueChange={(next) => {
             if (isAgentPermissionMode(next)) setPermissionMode(next);
           }}
+          className="flex flex-col gap-px"
         >
-          <DropdownMenuLabel className="px-2 pt-1 pb-1.5 text-[11px] font-medium text-muted-foreground">
+          <Menu.GroupLabel className="px-2 pt-1 pb-1.5 text-[11px] font-medium text-muted-foreground">
             {t.agent.permissionMode}
-          </DropdownMenuLabel>
+          </Menu.GroupLabel>
           {AGENT_PERMISSION_MODES.map((m) => {
             const ItemIcon = MODE_ICONS[m];
+            const danger = m === 'fullAccess';
             return (
-              <DropdownMenuRadioItem
+              <Menu.RadioItem
                 key={m}
                 value={m}
                 closeOnClick
-                className={cn(
-                  'items-start',
-                  m === 'fullAccess' && 'data-[checked]:text-destructive',
-                )}
+                className="grid cursor-default grid-cols-[14px_minmax(0,1fr)_14px] items-start gap-x-2.5 rounded-[6px] px-2 py-1.5 outline-none select-none focus:bg-foreground/[0.07] dark:focus:bg-foreground/10"
               >
                 <ItemIcon
                   className={cn(
-                    'mt-px size-3.5',
-                    m === 'fullAccess' ? 'text-destructive' : 'text-muted-foreground',
+                    'mt-[2px] size-3.5',
+                    danger ? 'text-destructive' : 'text-muted-foreground',
                   )}
                 />
                 <span className="min-w-0">
-                  <span className="block font-medium">{t.agent.permissionModes[m]}</span>
-                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                  <span
+                    className={cn(
+                      'block text-[12.5px] leading-[18px] font-medium',
+                      danger && 'text-destructive',
+                    )}
+                  >
+                    {t.agent.permissionModes[m]}
+                  </span>
+                  <span className="block text-[11px] leading-[15px] text-pretty text-muted-foreground">
                     {hint(m)}
                   </span>
                 </span>
-              </DropdownMenuRadioItem>
+                <Menu.RadioItemIndicator className="mt-[2px] text-foreground">
+                  <Check className="size-3.5" />
+                </Menu.RadioItemIndicator>
+              </Menu.RadioItem>
             );
           })}
-        </DropdownMenuRadioGroup>
+        </Menu.RadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

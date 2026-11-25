@@ -628,7 +628,6 @@ export const es: Locale = {
       auto: 'Edita y ejecuta comandos dentro del sandbox del espacio de trabajo.',
       fullAccess: 'Ejecuta comandos y ediciones sin sandbox.',
     },
-    resultStopped: 'Detenido',
     errorEyebrow: 'Error',
     statusLoading: 'Comprobando agentes',
     disabled: 'El panel del agente está desactivado en open-slide.config.ts.',

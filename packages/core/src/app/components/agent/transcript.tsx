@@ -71,7 +71,7 @@ export function Transcript({
 }
 
 function isShown(block: Block): boolean {
-  return 'tools' in block || block.item.kind !== 'result' || block.item.aborted;
+  return 'tools' in block || block.item.kind !== 'result';
 }
 
 function WorkingIndicator() {
@@ -130,8 +130,6 @@ function TranscriptItem({
       return <PermissionItem item={item} onRespond={onRespond} />;
     case 'error':
       return <ErrorItem text={item.text} />;
-    case 'result':
-      return <StoppedItem />;
     default:
       return null;
   }
@@ -421,11 +419,6 @@ function ErrorItem({ text }: { text: string }) {
       </pre>
     </div>
   );
-}
-
-function StoppedItem() {
-  const t = useLocale();
-  return <p className="folio text-muted-foreground/70">{t.agent.resultStopped}</p>;
 }
 
 function PermissionItem({

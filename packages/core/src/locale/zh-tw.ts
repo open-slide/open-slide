@@ -617,7 +617,6 @@ export const zhTW: Locale = {
       auto: '在工作區沙盒內編輯和執行指令。',
       fullAccess: '不受沙盒限制地執行指令和編輯。',
     },
-    resultStopped: '已停止',
     errorEyebrow: '錯誤',
     statusLoading: '正在檢查 agent',
     disabled: 'agent 面板已在 open-slide.config.ts 中停用。',

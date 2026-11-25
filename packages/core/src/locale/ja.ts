@@ -626,7 +626,6 @@ export const ja: Locale = {
       auto: 'ワークスペースのサンドボックス内で編集とコマンドを実行します。',
       fullAccess: 'サンドボックスなしでコマンドと編集を実行します。',
     },
-    resultStopped: '停止',
     errorEyebrow: 'エラー',
     statusLoading: 'エージェントを確認中',
     disabled: 'エージェントパネルは open-slide.config.ts で無効化されています。',

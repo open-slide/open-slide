@@ -610,8 +610,8 @@ export const en: Locale = {
     },
     permissionHints: {
       supervised: 'Asks before commands and file changes.',
-      acceptEdits: 'Approves file edits automatically; other actions can still ask.',
-      auto: 'An automatic review approves routine actions and asks about the rest.',
+      acceptEdits: 'Edits files freely; asks before other actions.',
+      auto: 'Approves routine actions; asks about the rest.',
       fullAccess: 'Runs commands and edits without asking.',
     },
     permissionHintsCodex: {
@@ -620,7 +620,6 @@ export const en: Locale = {
       auto: 'Edits and runs commands inside the workspace sandbox.',
       fullAccess: 'Runs commands and edits with no sandbox.',
     },
-    resultStopped: 'Stopped',
     errorEyebrow: 'Error',
     statusLoading: 'Checking agents',
     disabled: 'The agent panel is disabled in open-slide.config.ts.',
