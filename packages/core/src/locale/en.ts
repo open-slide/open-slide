@@ -663,15 +663,6 @@ export const en: Locale = {
     effortAuto: 'Auto',
     effortFaster: 'Faster',
     effortSmarter: 'Smarter',
-    effortHints: {
-      auto: 'Lets the model decide how long to think.',
-      minimal: 'Answers almost instantly.',
-      low: 'Quick, light reasoning.',
-      medium: 'Balanced speed and depth.',
-      high: 'Thinks longer on hard problems.',
-      xhigh: 'Deep reasoning for complex work.',
-      max: 'Its deepest thinking. No shortcuts.',
-    },
     efforts: {
       minimal: 'Minimal',
       low: 'Low',

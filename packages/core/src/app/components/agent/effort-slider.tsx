@@ -86,7 +86,6 @@ export function EffortSlider({
   };
 
   const label = auto ? t.agent.effortAuto : t.agent.efforts[levels[index]];
-  const hint = auto ? t.agent.effortHints.auto : t.agent.effortHints[levels[index]];
 
   return (
     <div
@@ -112,20 +111,13 @@ export function EffortSlider({
         </button>
       </div>
 
-      <div className="mt-2 flex h-[34px] flex-col justify-end overflow-hidden">
+      <div className="mt-1.5 h-5 overflow-hidden">
         <span
           key={label}
           data-direction={direction}
-          className="effort-slider-label effort-slider-level block truncate text-[14px] font-semibold tracking-tight"
+          className="effort-slider-label effort-slider-level block truncate text-[14px] leading-5 font-semibold tracking-tight"
         >
           {label}
-        </span>
-        <span
-          key={`${label}-hint`}
-          data-direction={direction}
-          className="effort-slider-label block truncate text-[11px] leading-snug text-muted-foreground"
-        >
-          {hint}
         </span>
       </div>
 
