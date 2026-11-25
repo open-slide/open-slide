@@ -671,6 +671,17 @@ export const es: Locale = {
     modelDefault: 'Predeterminado',
     reasoning: 'Razonamiento',
     effortAuto: 'Auto',
+    effortFaster: 'Más rápido',
+    effortSmarter: 'Más listo',
+    effortHints: {
+      auto: 'Deja que el modelo decida cuánto pensar.',
+      minimal: 'Responde casi al instante.',
+      low: 'Razonamiento rápido y ligero.',
+      medium: 'Equilibrio entre velocidad y profundidad.',
+      high: 'Piensa más en los problemas difíciles.',
+      xhigh: 'Razonamiento profundo para trabajo complejo.',
+      max: 'Su pensamiento más profundo. Sin atajos.',
+    },
     efforts: {
       minimal: 'Mínimo',
       low: 'Bajo',

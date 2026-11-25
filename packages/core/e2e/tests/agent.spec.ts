@@ -334,11 +334,18 @@ test.describe('agent panel', () => {
       'true',
     );
     await menu.getByRole('button', { name: 'Sonnet', exact: true }).click();
-    await menu.getByRole('button', { name: 'High', exact: true }).click();
-    await expect(menu.getByRole('button', { name: 'High', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    const reasoning = menu.getByRole('slider', { name: 'Reasoning' });
+    await expect(reasoning).toHaveAttribute('aria-valuetext', 'Auto');
+    const track = await reasoning.boundingBox();
+    if (!track) throw new Error('reasoning slider has no box');
+    await page.mouse.move(track.x + 8, track.y + track.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(track.x + track.width + 40, track.y + track.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await expect(reasoning).toHaveAttribute('aria-valuetext', 'Max');
+    await reasoning.press('ArrowLeft');
+    await reasoning.press('ArrowLeft');
+    await expect(reasoning).toHaveAttribute('aria-valuetext', 'High');
     await menu.getByRole('tab', { name: 'Codex' }).click();
     await expect(menu.getByRole('button', { name: 'Connect' })).toBeVisible();
     await page.keyboard.press('Escape');

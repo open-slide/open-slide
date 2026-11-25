@@ -6,6 +6,7 @@ import { resolveModelChoice, setModelChoice, type useAgentStatus } from '@/lib/a
 import { format, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import type { AgentEffort, AgentModelOption, AgentProviderId } from '../../../agent/types';
+import { EffortSlider } from './effort-slider';
 import { ProviderLogo } from './provider-logo';
 
 type AgentStatusState = ReturnType<typeof useAgentStatus>;
@@ -55,7 +56,11 @@ export function ModelMenu({
         <span className="truncate font-medium text-foreground">
           {model ? modelLabel(model, t) : t.agent.title}
         </span>
-        {effort && <span className="shrink-0">{t.agent.efforts[effort]}</span>}
+        {effort && (
+          <span className={cn('shrink-0', effort === model?.efforts.at(-1) && 'effort-peak-text')}>
+            {t.agent.efforts[effort]}
+          </span>
+        )}
         <ChevronDown className="size-3 shrink-0 opacity-70" aria-hidden />
       </PopoverTrigger>
       <PopoverContent
@@ -136,29 +141,13 @@ export function ModelMenu({
         ) : null}
 
         {shown?.ready && selectedModel && selectedModel.efforts.length > 0 && (
-          <div className="mt-1.5 border-t border-hairline px-1 pt-2 pb-1">
-            <div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">
-              {t.agent.reasoning}
-            </div>
-            <div className="flex gap-0.5 rounded-[6px] bg-muted p-0.5">
-              {([null, ...selectedModel.efforts] as (AgentEffort | null)[]).map((e) => {
-                const checked = e === selectedEffort;
-                return (
-                  <button
-                    key={e ?? 'auto'}
-                    type="button"
-                    aria-pressed={checked}
-                    onClick={() => setModelChoice(shown.id, { model: selectedModel.id, effort: e })}
-                    className={cn(
-                      'h-6 min-w-0 flex-1 truncate rounded-[4px] px-1 text-[11.5px] text-muted-foreground outline-none transition-colors duration-100 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30',
-                      checked && 'bg-background font-medium text-foreground shadow-edge',
-                    )}
-                  >
-                    {e ? t.agent.efforts[e] : t.agent.effortAuto}
-                  </button>
-                );
-              })}
-            </div>
+          <div className="mt-1.5 border-t border-hairline px-2 pt-2.5 pb-2">
+            <EffortSlider
+              levels={selectedModel.efforts}
+              value={selectedEffort}
+              provider={shown.id}
+              onChange={(e) => setModelChoice(shown.id, { model: selectedModel.id, effort: e })}
+            />
           </div>
         )}
 

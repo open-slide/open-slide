@@ -688,6 +688,9 @@ export type Locale = {
     modelDefault: string;
     reasoning: string;
     effortAuto: string;
+    effortFaster: string;
+    effortSmarter: string;
+    effortHints: Record<AgentEffort | 'auto', string>;
     efforts: Record<AgentEffort, string>;
     /** template: "{provider} is editing" */
     presenceEditing: string;
