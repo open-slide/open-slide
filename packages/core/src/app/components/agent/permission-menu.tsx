@@ -52,17 +52,13 @@ export function PermissionMenu({
         <span className="truncate">{t.agent.permissionModes[mode]}</span>
         <ChevronDown className="size-3 shrink-0 opacity-70" aria-hidden />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-[292px] p-1.5">
+      <DropdownMenuContent side="top" align="start" sideOffset={8} className="min-w-[184px] p-1">
         <Menu.RadioGroup
           value={mode}
           onValueChange={(next) => {
             if (isAgentPermissionMode(next)) setPermissionMode(next);
           }}
-          className="flex flex-col gap-px"
         >
-          <Menu.GroupLabel className="px-2 pt-1 pb-1.5 text-[11px] font-medium text-muted-foreground">
-            {t.agent.permissionMode}
-          </Menu.GroupLabel>
           {AGENT_PERMISSION_MODES.map((m) => {
             const ItemIcon = MODE_ICONS[m];
             const danger = m === 'fullAccess';
@@ -71,28 +67,15 @@ export function PermissionMenu({
                 key={m}
                 value={m}
                 closeOnClick
-                className="grid cursor-default grid-cols-[14px_minmax(0,1fr)_14px] items-start gap-x-2.5 rounded-[6px] px-2 py-1.5 outline-none select-none focus:bg-foreground/[0.07] dark:focus:bg-foreground/10"
+                title={hint(m)}
+                className={cn(
+                  'flex h-8 cursor-default items-center gap-2.5 rounded-[5px] px-2 text-[12.5px] outline-none select-none focus:bg-foreground/[0.07] dark:focus:bg-foreground/10',
+                  danger && 'text-destructive',
+                )}
               >
-                <ItemIcon
-                  className={cn(
-                    'mt-[2px] size-3.5',
-                    danger ? 'text-destructive' : 'text-muted-foreground',
-                  )}
-                />
-                <span className="min-w-0">
-                  <span
-                    className={cn(
-                      'block text-[12.5px] leading-[18px] font-medium',
-                      danger && 'text-destructive',
-                    )}
-                  >
-                    {t.agent.permissionModes[m]}
-                  </span>
-                  <span className="block text-[11px] leading-[15px] text-pretty text-muted-foreground">
-                    {hint(m)}
-                  </span>
-                </span>
-                <Menu.RadioItemIndicator className="mt-[2px] text-foreground">
+                <ItemIcon className={cn('size-3.5 shrink-0', !danger && 'text-muted-foreground')} />
+                <span className="flex-1 truncate">{t.agent.permissionModes[m]}</span>
+                <Menu.RadioItemIndicator className="text-foreground">
                   <Check className="size-3.5" />
                 </Menu.RadioItemIndicator>
               </Menu.RadioItem>
