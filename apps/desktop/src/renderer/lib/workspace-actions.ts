@@ -19,7 +19,13 @@ export function useWorkspaceActions(openCreate: (target: CreateTarget) => void) 
 
   const choose = useCallback(async () => {
     const picked = await desktop.workspace.choose().catch(() => null);
-    if (picked) openCreate({ parent: picked.create, name: '', inPlace: true });
+    if (picked) {
+      openCreate({
+        parent: picked.create,
+        name: picked.inPlace ? '' : (picked.defaultName ?? 'slides'),
+        inPlace: picked.inPlace,
+      });
+    }
   }, [openCreate]);
 
   const createNew = useCallback(async () => {

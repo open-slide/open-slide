@@ -317,23 +317,37 @@ describe('choosing a folder', () => {
     expect(fixture.events).toEqual(['ensure-window']);
   });
 
-  it('reports a folder that is not a workspace', async () => {
+  it('offers to create a slides subfolder inside a non-empty project folder', async () => {
     fixture.picked = path.join(fixture.home, 'photos');
     mkdirSync(fixture.picked);
     writeFileSync(path.join(fixture.picked, 'cat.jpg'), '');
     const { controller } = setup();
 
-    expect(await controller.choose()).toBe(null);
-    expect(controller.error?.message).toContain('“photos” isn’t an open-slide workspace');
+    expect(await controller.choose()).toEqual({
+      create: fixture.picked,
+      inPlace: false,
+      defaultName: 'slides',
+    });
+    expect(controller.error).toBe(null);
     expect(started()).toEqual([]);
   });
 
-  it('hands an empty folder back to be set up', async () => {
+  it('opens a nested open-slide workspace when picking its parent project folder', async () => {
+    fixture.picked = path.join(fixture.home, 'lecture');
+    mkdirSync(fixture.picked);
+    const nested = project(path.join(fixture.picked, 'slides'));
+    const { controller } = setup();
+
+    expect(await controller.choose()).toBe(null);
+    expect(started()).toEqual([`start: ${nested}`]);
+  });
+
+  it('hands an empty folder back to be set up in place', async () => {
     fixture.picked = path.join(fixture.home, 'empty');
     mkdirSync(fixture.picked);
     const { controller } = setup();
 
-    expect(await controller.choose()).toEqual({ create: fixture.picked });
+    expect(await controller.choose()).toEqual({ create: fixture.picked, inPlace: true });
     expect(controller.error).toBe(null);
   });
 

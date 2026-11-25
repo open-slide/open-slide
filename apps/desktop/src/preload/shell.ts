@@ -56,6 +56,7 @@ const api: ShellApi = {
     createDefault: () => ipcRenderer.invoke('workspace:create-default'),
     install: () => ipcRenderer.invoke('workspace:install'),
     reveal: () => ipcRenderer.send('workspace:reveal'),
+    showPicker: (anchor) => ipcRenderer.send('workspace:picker', anchor),
     forget: (path) => ipcRenderer.send('workspace:forget', path),
     dismissError: (id) => ipcRenderer.send('workspace:dismiss-error', id),
   },
