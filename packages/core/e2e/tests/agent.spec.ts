@@ -234,7 +234,7 @@ test.describe('agent panel', () => {
       'Reading the cover first.\n\nBolded the **cover** title.',
     );
 
-    await dock.getByText('Make the cover bolder').hover();
+    await dock.getByRole('list').getByText('Make the cover bolder').hover();
     await dock.getByRole('button', { name: 'Edit', exact: true }).click();
     const editor = dock.getByRole('textbox', { name: 'Edit', exact: true });
     await expect(editor).toBeFocused();
@@ -243,7 +243,7 @@ test.describe('agent panel', () => {
     await expect(editor).toHaveCount(0);
     await expect(dock).toBeVisible();
 
-    await dock.getByText('Make the cover bolder').hover();
+    await dock.getByRole('list').getByText('Make the cover bolder').hover();
     await dock.getByRole('button', { name: 'Edit', exact: true }).click();
     await editor.fill('Make the cover title red');
     await editor.press('Enter');
@@ -281,7 +281,8 @@ test.describe('agent panel', () => {
 
     await openSlide(page, 'alpha');
     const dock = page.locator('[data-agent-dock]');
-    await expect(dock.getByText('Tighten the alpha cover')).toBeVisible();
+    await expect(dock.getByRole('list').getByText('Tighten the alpha cover')).toBeVisible();
+    await expect(dock.getByRole('heading', { name: 'Tighten the alpha cover' })).toBeVisible();
 
     await openSlide(page, 'steps');
     await expect(dock.getByPlaceholder(/Ask Claude Code/)).toBeVisible();
@@ -290,7 +291,7 @@ test.describe('agent panel', () => {
     await dock.getByRole('button', { name: 'History', exact: true }).click();
     await dock.getByRole('button', { name: /Tighten the alpha cover/ }).click();
     await expect(page).toHaveURL(/\/s\/alpha$/);
-    await expect(dock.getByText('Tighten the alpha cover')).toBeVisible();
+    await expect(dock.getByRole('list').getByText('Tighten the alpha cover')).toBeVisible();
   });
 
   test('New deck opens a blank deck with the agent dock asking for a brief', async ({
@@ -338,6 +339,11 @@ test.describe('agent panel', () => {
     await expect(menu.getByRole('button', { name: 'Connect' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dock.getByRole('button', { name: 'Sonnet High' })).toBeVisible();
+
+    const autoApprove = dock.getByRole('button', { name: 'Auto-approve' });
+    await expect(autoApprove).toHaveAttribute('aria-pressed', 'false');
+    await autoApprove.click();
+    await expect(autoApprove).toHaveAttribute('aria-pressed', 'true');
 
     expect((await request.delete(`/__slides/${slideId}`)).status()).toBe(200);
   });
