@@ -217,6 +217,165 @@
   .folio {
     @apply nums font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground;
   }
+
+  /* Markdown body for speaker notes; .agent-prose tunes it for chat replies. */
+  .md {
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+  .md :is(ul, ol) {
+    padding-left: var(--md-indent, 1.35em);
+  }
+  .md > * + *,
+  .md li > * {
+    margin-top: var(--md-gap, 0.65em);
+  }
+  .md li > :is(ul, ol) {
+    margin-top: var(--md-item-gap, 0.25em);
+  }
+  .md :is(h4, h5, h6) {
+    font-weight: 600;
+    line-height: 1.35;
+  }
+  .md h4 {
+    font-size: 1.25em;
+  }
+  .md h5 {
+    font-size: 1.12em;
+  }
+  .md h6 {
+    font-size: 1.05em;
+  }
+  .md strong {
+    font-weight: 600;
+  }
+  .md ul {
+    list-style-type: disc;
+  }
+  .md ol {
+    list-style-type: decimal;
+  }
+  .md :is(ul, ol) ul {
+    list-style-type: circle;
+  }
+  .md :is(ul, ol) :is(ul, ol) ul {
+    list-style-type: square;
+  }
+  .md li {
+    padding-left: var(--md-marker-gap, 0.15em);
+  }
+  .md li + li {
+    margin-top: var(--md-item-gap, 0.25em);
+  }
+  .md li::marker {
+    color: var(--muted-foreground);
+  }
+  .md ol > li::marker {
+    font-variant-numeric: tabular-nums;
+  }
+  .md hr {
+    border-top: 1px solid var(--hairline);
+  }
+  .md code {
+    @apply rounded-[4px] bg-foreground/[0.07] font-mono;
+    padding: 0.1em 0.32em;
+    font-size: 0.88em;
+  }
+
+  .agent-prose {
+    --md-gap: 0.8em;
+    --md-item-gap: 0.3em;
+    --md-indent: 1.3em;
+    --md-marker-gap: 0.2em;
+    font-size: 13.5px;
+    line-height: 1.7;
+    letter-spacing: -0.003em;
+    color: color-mix(in oklch, var(--foreground) 88%, transparent);
+    text-wrap: pretty;
+  }
+  .agent-prose > * + * {
+    margin-top: var(--md-gap);
+  }
+  .agent-prose :is(h4, h5, h6, strong) {
+    color: var(--foreground);
+  }
+  .agent-prose :is(h4, h5, h6) {
+    letter-spacing: -0.012em;
+  }
+  .agent-prose h4 {
+    font-size: 1.18em;
+  }
+  .agent-prose h5 {
+    font-size: 1.07em;
+  }
+  .agent-prose h6 {
+    font-size: 1em;
+  }
+  .agent-prose * + :is(h4, h5, h6) {
+    margin-top: 1.5em;
+  }
+  .agent-prose :is(h4, h5, h6) + * {
+    margin-top: 0.45em;
+  }
+  .agent-prose hr {
+    margin-block: 1.4em;
+  }
+  .agent-prose pre {
+    @apply overflow-x-auto rounded-[8px] border border-hairline bg-muted/50 font-mono;
+    padding: 0.7em 0.9em;
+    font-size: 11.5px;
+    line-height: 1.6;
+    white-space: pre;
+  }
+  .agent-prose pre code {
+    padding: 0;
+    background: none;
+    font-size: inherit;
+  }
+}
+
+/* Fades a scroll container's edges only while there is more to scroll that
+   way. Browsers without scroll timelines keep the edges crisp. */
+@property --fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes osd-fade-top {
+  to {
+    --fade-top: var(--fade-size);
+  }
+}
+@keyframes osd-fade-bottom {
+  from {
+    --fade-bottom: var(--fade-size);
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  .scroll-fade {
+    --fade-size: 28px;
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--fade-top),
+      #000 calc(100% - var(--fade-bottom)),
+      transparent
+    );
+    animation:
+      osd-fade-top linear both,
+      osd-fade-bottom linear both;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range:
+      0 var(--fade-size),
+      calc(100% - var(--fade-size)) 100%;
+  }
 }
 
 /* Lets the desktop window's native material show through the chrome; content

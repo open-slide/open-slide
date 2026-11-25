@@ -40,7 +40,7 @@ export function Transcript({
         const node = e.currentTarget;
         stickRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
       }}
-      className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+      className="scroll-fade min-h-0 flex-1 overflow-y-auto px-4 py-4"
     >
       <ol className="flex flex-col gap-3">
         {toBlocks(session.items).map((block) => (
@@ -217,7 +217,7 @@ function UserItem({
 
   return (
     <div className="group/message flex flex-col items-end">
-      <div className="max-w-[88%] whitespace-pre-wrap rounded-[8px] rounded-br-[3px] bg-muted px-3 py-2 text-[12.5px] leading-[1.5]">
+      <div className="max-w-[88%] whitespace-pre-wrap rounded-[10px] rounded-br-[4px] bg-muted px-3 py-2 text-[13.5px] leading-[1.6]">
         {text}
       </div>
       <div className={cn(ACTIONS_REVEAL, '-mr-1.5 -mb-2 mt-0.5')}>

@@ -31,10 +31,10 @@ export function Composer({
   useAutoGrow(textareaRef, value, 160);
 
   return (
-    <div className="relative z-10 shrink-0 bg-sidebar px-3 pt-1 pb-3">
+    <div className="relative z-10 shrink-0 bg-sidebar px-3 pb-3">
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-full h-5 bg-gradient-to-t from-sidebar to-transparent"
+        className="pointer-events-none absolute inset-x-0 bottom-full h-5 bg-gradient-to-t from-sidebar to-transparent supports-[animation-timeline:scroll()]:hidden"
       />
       <div
         className={cn(
