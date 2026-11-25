@@ -554,9 +554,6 @@ export const zhTW: Locale = {
   },
   agent: {
     title: 'Agent',
-    beta: 'Beta',
-    betaTitle: '搶先體驗版',
-    betaHint: '回覆、編輯或工具呼叫偶爾可能失敗，或出現預期之外的結果。',
     open: 'Agent',
     openTitle: '開啟 agent 面板',
     close: '關閉 agent 面板',

@@ -557,9 +557,6 @@ export const en: Locale = {
 
   agent: {
     title: 'Agent',
-    beta: 'Beta',
-    betaTitle: 'Early preview',
-    betaHint: 'Replies, edits and tool calls can occasionally fail or do something unexpected.',
     open: 'Agent',
     openTitle: 'Open the agent panel',
     close: 'Close agent panel',

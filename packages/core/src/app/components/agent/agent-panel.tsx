@@ -13,7 +13,6 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   autoConnect,
   clearNewDeck,
@@ -234,7 +233,6 @@ export function AgentPanel({
               {session?.title || t.agent.title}
             </h2>
           )}
-          <BetaBadge />
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {connected && !showConnect && (
@@ -468,32 +466,5 @@ function QuickAction({
         <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{hint}</span>
       </span>
     </button>
-  );
-}
-
-function BetaBadge() {
-  const t = useLocale();
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className="ml-1 shrink-0 cursor-default rounded-[3px] border border-border px-1 py-px font-medium text-[9px] text-muted-foreground uppercase leading-none tracking-wider outline-none focus-visible:ring-1 focus-visible:ring-brand"
-          >
-            {t.agent.beta}
-          </button>
-        }
-      />
-      <TooltipContent
-        side="bottom"
-        align="start"
-        sideOffset={6}
-        className="w-64 px-3 py-2.5 text-left text-pretty"
-      >
-        <p className="font-medium text-[12px]">{t.agent.betaTitle}</p>
-        <p className="mt-1 text-[11.5px] text-background/70 leading-relaxed">{t.agent.betaHint}</p>
-      </TooltipContent>
-    </Tooltip>
   );
 }

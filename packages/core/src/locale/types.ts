@@ -589,9 +589,6 @@ export type Locale = {
 
   agent: {
     title: string;
-    beta: string;
-    betaTitle: string;
-    betaHint: string;
     open: string;
     openTitle: string;
     close: string;

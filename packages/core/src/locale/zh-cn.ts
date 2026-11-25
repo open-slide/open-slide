@@ -554,9 +554,6 @@ export const zhCN: Locale = {
   },
   agent: {
     title: 'Agent',
-    beta: 'Beta',
-    betaTitle: '抢先体验版',
-    betaHint: '回复、编辑或工具调用偶尔可能失败，或出现预期之外的结果。',
     open: 'Agent',
     openTitle: '打开 agent 面板',
     close: '关闭 agent 面板',

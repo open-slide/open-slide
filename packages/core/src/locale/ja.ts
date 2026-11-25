@@ -563,9 +563,6 @@ export const ja: Locale = {
   },
   agent: {
     title: 'エージェント',
-    beta: 'Beta',
-    betaTitle: 'プレビュー版',
-    betaHint: '返答・編集・ツール実行が失敗したり、思わぬ動作をしたりすることがあります。',
     open: 'エージェント',
     openTitle: 'エージェントパネルを開く',
     close: 'エージェントパネルを閉じる',
