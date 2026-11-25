@@ -19,16 +19,12 @@ import type {
 } from './sdk-types.ts';
 
 // `codex exec` has no channel to ask for approval mid-turn, so each mode is a
-// sandbox: manual keeps Codex read-only and leaves the edits to the user.
-const CODEX_SANDBOXES: Record<
-  AgentPermissionMode,
-  Pick<CodexThreadOptions, 'sandboxMode' | 'networkAccessEnabled'>
-> = {
-  manual: { sandboxMode: 'read-only' },
-  acceptEdits: { sandboxMode: 'workspace-write' },
-  auto: { sandboxMode: 'workspace-write' },
-  autoApprove: { sandboxMode: 'workspace-write', networkAccessEnabled: true },
-  fullAccess: { sandboxMode: 'danger-full-access' },
+// sandbox: supervised keeps Codex read-only and leaves the edits to the user.
+const CODEX_SANDBOXES: Record<AgentPermissionMode, CodexThreadOptions['sandboxMode']> = {
+  supervised: 'read-only',
+  acceptEdits: 'workspace-write',
+  auto: 'workspace-write',
+  fullAccess: 'danger-full-access',
 };
 
 const CODEX_SDK_PACKAGE = '@openai/codex-sdk';
@@ -200,7 +196,7 @@ export function createCodexProvider(): AgentProvider {
       const threadOptions = {
         workingDirectory: opts.cwd,
         skipGitRepoCheck: true,
-        ...CODEX_SANDBOXES[opts.permissionMode],
+        sandboxMode: CODEX_SANDBOXES[opts.permissionMode],
         approvalPolicy: 'never' as const,
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.effort ? { modelReasoningEffort: opts.effort } : {}),

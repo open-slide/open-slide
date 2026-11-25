@@ -33,10 +33,9 @@ const CLAUDE_MODELS: AgentModelOption[] = [
 const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
 
 const CLAUDE_PERMISSION_MODES: Record<AgentPermissionMode, ClaudePermissionMode> = {
-  auto: 'auto',
-  manual: 'default',
+  supervised: 'default',
   acceptEdits: 'acceptEdits',
-  autoApprove: 'default',
+  auto: 'auto',
   fullAccess: 'bypassPermissions',
 };
 
@@ -209,7 +208,7 @@ export function createClaudeProvider(): AgentProvider {
         }
         const target = input.file_path ?? input.notebook_path;
         if (
-          opts.permissionMode !== 'manual' &&
+          opts.permissionMode !== 'supervised' &&
           EDIT_TOOLS.has(toolName) &&
           isInsideRoots(opts.cwd, target, opts.writableRoots)
         ) {

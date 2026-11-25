@@ -232,7 +232,6 @@ export function createAgentRunner(opts: {
       });
 
     const permissionMode = options.permissionMode ?? 'auto';
-    const autoAllow = permissionMode === 'autoApprove' || permissionMode === 'fullAccess';
     const requestPermission = (request: PermissionRequest) =>
       new Promise<boolean>((resolve) => {
         if (controller.signal.aborted) return resolve(false);
@@ -243,9 +242,8 @@ export function createAgentRunner(opts: {
           tool: request.tool,
           title: request.title,
           detail: request.detail,
-          status: autoAllow ? 'allowed' : 'pending',
+          status: 'pending',
         });
-        if (autoAllow) return resolve(true);
         pending.set(item.id, {
           kind: 'permission',
           resolve: (allow) => {

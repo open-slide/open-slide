@@ -96,7 +96,6 @@ export type CodexThreadOptions = {
   workingDirectory?: string;
   skipGitRepoCheck?: boolean;
   sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
-  networkAccessEnabled?: boolean;
   approvalPolicy?: 'never' | 'on-request' | 'on-failure' | 'untrusted';
   model?: string;
   modelReasoningEffort?: AgentEffort;

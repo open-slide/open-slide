@@ -51,7 +51,6 @@ const ACTIVE_KEY = 'open-slide:agent-session';
 const PROVIDER_KEY = 'open-slide:agent-provider';
 const MODEL_KEY = 'open-slide:agent-model';
 const PERMISSION_KEY = 'open-slide:agent-permission-mode';
-const LEGACY_AUTO_APPROVE_KEY = 'open-slide:agent-auto-approve';
 const DOCK_KEY = 'open-slide:agent-dock';
 const NEW_DECK_KEY = 'open-slide:agent-new-deck';
 const HANDOFF_KEY = 'open-slide:agent-handoff';
@@ -497,13 +496,11 @@ export function resolveModelChoice(
 
 function readPermissionMode(): AgentPermissionMode {
   const stored = readStorage(PERMISSION_KEY);
-  if (isAgentPermissionMode(stored)) return stored;
-  return readStorage(LEGACY_AUTO_APPROVE_KEY) === '1' ? 'autoApprove' : 'auto';
+  return isAgentPermissionMode(stored) ? stored : 'auto';
 }
 
 export function setPermissionMode(mode: AgentPermissionMode): void {
   writeStorage(PERMISSION_KEY, mode);
-  writeStorage(LEGACY_AUTO_APPROVE_KEY, null);
   setState({ permissionMode: mode });
 }
 

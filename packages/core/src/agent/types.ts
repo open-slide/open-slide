@@ -6,13 +6,7 @@ export const AGENT_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'
 
 export type AgentEffort = (typeof AGENT_EFFORTS)[number];
 
-export const AGENT_PERMISSION_MODES = [
-  'auto',
-  'manual',
-  'acceptEdits',
-  'autoApprove',
-  'fullAccess',
-] as const;
+export const AGENT_PERMISSION_MODES = ['supervised', 'acceptEdits', 'auto', 'fullAccess'] as const;
 
 export type AgentPermissionMode = (typeof AGENT_PERMISSION_MODES)[number];
 

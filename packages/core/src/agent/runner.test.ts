@@ -255,32 +255,20 @@ describe('createAgentRunner', () => {
     const session = store.create('claude', null);
     await runner.send(session.id, { text: 'go' });
     await settle();
-    await runner.send(session.id, { text: 'again', permissionMode: 'manual' });
+    await runner.send(session.id, { text: 'again', permissionMode: 'supervised' });
     await settle();
-    expect(captured.map((o) => o.permissionMode)).toEqual(['auto', 'manual']);
+    expect(captured.map((o) => o.permissionMode)).toEqual(['auto', 'supervised']);
   });
 
-  it('asks for permission in manual mode', async () => {
+  it('leaves permission requests to the user, even in full access', async () => {
     const { store, runner } = setup(async (opts) => {
       await opts.requestPermission({ tool: 'Bash', title: 'Run', detail: 'ls' });
     });
     const session = store.create('claude', null);
-    await runner.send(session.id, { text: 'go', permissionMode: 'manual' });
+    await runner.send(session.id, { text: 'go', permissionMode: 'fullAccess' });
     await settle();
     expect(sessionOf(store, session.id).items.find((i) => i.kind === 'permission')).toMatchObject({
       status: 'pending',
-    });
-  });
-
-  it('auto-approves permissions when asked to', async () => {
-    const { store, runner } = setup(async (opts) => {
-      await opts.requestPermission({ tool: 'Bash', title: 'Run', detail: 'ls' });
-    });
-    const session = store.create('claude', null);
-    await runner.send(session.id, { text: 'go', permissionMode: 'autoApprove' });
-    await settle();
-    expect(sessionOf(store, session.id).items.find((i) => i.kind === 'permission')).toMatchObject({
-      status: 'allowed',
     });
   });
 

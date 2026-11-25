@@ -1,4 +1,4 @@
-import { CheckCheck, ChevronDown, FilePen, Hand, ShieldCheck, ShieldOff } from 'lucide-react';
+import { ChevronDown, FilePen, Hand, ShieldCheck, ShieldOff } from 'lucide-react';
 import type { ComponentType } from 'react';
 import {
   DropdownMenu,
@@ -19,10 +19,9 @@ import {
 } from '../../../agent/types';
 
 const MODE_ICONS: Record<AgentPermissionMode, ComponentType<{ className?: string }>> = {
-  auto: ShieldCheck,
-  manual: Hand,
+  supervised: Hand,
   acceptEdits: FilePen,
-  autoApprove: CheckCheck,
+  auto: ShieldCheck,
   fullAccess: ShieldOff,
 };
 
@@ -36,9 +35,7 @@ export function PermissionMenu({
   const t = useLocale();
   const Icon = MODE_ICONS[mode];
   const hint = (m: AgentPermissionMode) =>
-    m === 'manual' && providerId === 'codex'
-      ? t.agent.permissionManualCodex
-      : t.agent.permissionHints[m];
+    providerId === 'codex' ? t.agent.permissionHintsCodex[m] : t.agent.permissionHints[m];
 
   return (
     <DropdownMenu>
