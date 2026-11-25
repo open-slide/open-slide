@@ -1,4 +1,10 @@
-import { findSpawnableCli, importAgentPackage } from '../detect.ts';
+import {
+  commandVersion,
+  findSpawnableCli,
+  importAgentPackage,
+  resolveAgentPackage,
+  versionAtLeast,
+} from '../detect.ts';
 import {
   type AgentProvider,
   clipDetail,
@@ -38,6 +44,24 @@ const CLAUDE_PERMISSION_MODES: Record<AgentPermissionMode, ClaudePermissionMode>
   auto: 'auto',
   fullAccess: 'bypassPermissions',
 };
+
+// The first SDK, and the CLI it bundles, that accept the `auto` permission mode.
+const AUTO_MODE_SDK = '0.2.91';
+const AUTO_MODE_CLI = '2.1.91';
+
+export function claudePermissionMode(
+  mode: AgentPermissionMode,
+  autoSupported: boolean,
+): ClaudePermissionMode {
+  if (mode === 'auto' && !autoSupported) return 'default';
+  return CLAUDE_PERMISSION_MODES[mode];
+}
+
+async function supportsAutoMode(cwd: string, localCli: string | null): Promise<boolean> {
+  const sdk = resolveAgentPackage(cwd, CLAUDE_SDK_PACKAGE);
+  if (!versionAtLeast(sdk?.version, AUTO_MODE_SDK)) return false;
+  return !localCli || versionAtLeast(await commandVersion(localCli), AUTO_MODE_CLI);
+}
 
 function claudeEffort(effort: AgentEffort | null) {
   return effort && effort !== 'minimal' ? effort : undefined;
@@ -225,13 +249,15 @@ export function createClaudeProvider(): AgentProvider {
       };
 
       const localCli = findSpawnableCli('claude');
+      const autoSupported =
+        opts.permissionMode === 'auto' && (await supportsAutoMode(opts.cwd, localCli));
       const effort = claudeEffort(opts.effort);
       let stderr = '';
       const stream = sdk.query({
         prompt: opts.prompt,
         options: {
           cwd: opts.cwd,
-          permissionMode: CLAUDE_PERMISSION_MODES[opts.permissionMode],
+          permissionMode: claudePermissionMode(opts.permissionMode, autoSupported),
           ...(opts.permissionMode === 'fullAccess'
             ? { allowDangerouslySkipPermissions: true }
             : {}),

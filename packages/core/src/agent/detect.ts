@@ -85,6 +85,19 @@ export function parseVersion(output: string): string | null {
   return m ? m[1] : null;
 }
 
+export function versionAtLeast(version: string | null | undefined, floor: string): boolean {
+  if (!version) return false;
+  const parts = (v: string) => v.split(/[-+]/)[0].split('.').map(Number);
+  const have = parts(version);
+  const need = parts(floor);
+  for (let i = 0; i < need.length; i++) {
+    const a = have[i] ?? 0;
+    if (Number.isNaN(a)) return false;
+    if (a !== need[i]) return a > need[i];
+  }
+  return true;
+}
+
 type PackageJson = {
   version?: string;
   main?: string;

@@ -128,7 +128,7 @@ export function EffortSlider({
         aria-label={t.agent.reasoning}
         aria-valuemin={0}
         aria-valuemax={last}
-        aria-valuenow={auto ? undefined : index}
+        aria-valuenow={auto ? Math.round(last / 2) : index}
         aria-valuetext={label}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
