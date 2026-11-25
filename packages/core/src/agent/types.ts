@@ -6,6 +6,14 @@ export const AGENT_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'
 
 export type AgentEffort = (typeof AGENT_EFFORTS)[number];
 
+export const AGENT_PERMISSION_MODES = ['supervised', 'acceptEdits', 'auto', 'fullAccess'] as const;
+
+export type AgentPermissionMode = (typeof AGENT_PERMISSION_MODES)[number];
+
+export function isAgentPermissionMode(value: unknown): value is AgentPermissionMode {
+  return typeof value === 'string' && (AGENT_PERMISSION_MODES as readonly string[]).includes(value);
+}
+
 export function isAgentProviderId(value: unknown): value is AgentProviderId {
   return typeof value === 'string' && (AGENT_PROVIDER_IDS as readonly string[]).includes(value);
 }

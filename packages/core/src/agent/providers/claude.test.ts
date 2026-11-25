@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProviderEvent } from '../provider.ts';
 import { isInsideRoots, parseQuestions } from '../provider.ts';
-import { createClaudeMapper, describeClaudeTool } from './claude.ts';
+import { claudePermissionMode, createClaudeMapper, describeClaudeTool } from './claude.ts';
 import type { ClaudeSdkMessage } from './sdk-types.ts';
 
 const CWD = '/ws/project';
@@ -11,6 +11,20 @@ function collect() {
   const mapper = createClaudeMapper((e) => events.push(e), CWD);
   return { events, mapper };
 }
+
+describe('claudePermissionMode', () => {
+  it('maps each panel mode to a Claude Code permission mode', () => {
+    expect(claudePermissionMode('supervised', true)).toBe('default');
+    expect(claudePermissionMode('acceptEdits', true)).toBe('acceptEdits');
+    expect(claudePermissionMode('auto', true)).toBe('auto');
+    expect(claudePermissionMode('fullAccess', true)).toBe('bypassPermissions');
+  });
+
+  it('falls back to asking when the installed Claude Code predates auto mode', () => {
+    expect(claudePermissionMode('auto', false)).toBe('default');
+    expect(claudePermissionMode('fullAccess', false)).toBe('bypassPermissions');
+  });
+});
 
 describe('describeClaudeTool', () => {
   it('summarises common tools with workspace-relative paths', () => {

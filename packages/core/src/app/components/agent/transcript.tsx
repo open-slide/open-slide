@@ -43,21 +43,23 @@ export function Transcript({
       className="scroll-fade min-h-0 flex-1 overflow-y-auto px-4 py-4"
     >
       <ol className="flex flex-col gap-3">
-        {toBlocks(session.items).map((block) => (
-          <li key={block.key}>
-            {'tools' in block ? (
-              <ToolGroup tools={block.tools} />
-            ) : (
-              <TranscriptItem
-                item={block.item}
-                running={running}
-                replyText={replies.get(block.item.id)}
-                onRespond={(payload) => onRespond(block.item.id, payload)}
-                onEdit={(text) => onEdit(block.item.id, text)}
-              />
-            )}
-          </li>
-        ))}
+        {toBlocks(session.items)
+          .filter(isShown)
+          .map((block) => (
+            <li key={block.key}>
+              {'tools' in block ? (
+                <ToolGroup tools={block.tools} />
+              ) : (
+                <TranscriptItem
+                  item={block.item}
+                  running={running}
+                  replyText={replies.get(block.item.id)}
+                  onRespond={(payload) => onRespond(block.item.id, payload)}
+                  onEdit={(text) => onEdit(block.item.id, text)}
+                />
+              )}
+            </li>
+          ))}
         {running && !(lastItem?.kind === 'assistant' && lastItem.streaming) && (
           <li>
             <WorkingIndicator />
@@ -66,6 +68,10 @@ export function Transcript({
       </ol>
     </div>
   );
+}
+
+function isShown(block: Block): boolean {
+  return 'tools' in block || block.item.kind !== 'result';
 }
 
 function WorkingIndicator() {
@@ -124,8 +130,6 @@ function TranscriptItem({
       return <PermissionItem item={item} onRespond={onRespond} />;
     case 'error':
       return <ErrorItem text={item.text} />;
-    case 'result':
-      return <ResultItem item={item} />;
     default:
       return null;
   }
@@ -415,18 +419,6 @@ function ErrorItem({ text }: { text: string }) {
       </pre>
     </div>
   );
-}
-
-function ResultItem({ item }: { item: Extract<AgentItem, { kind: 'result' }> }) {
-  const t = useLocale();
-  const parts = [item.aborted ? t.agent.resultStopped : t.agent.resultDone];
-  if (item.durationMs !== null) {
-    parts.push(
-      format(t.agent.resultSeconds, { seconds: Math.max(1, Math.round(item.durationMs / 1000)) }),
-    );
-  }
-  if (item.costUsd !== null && item.costUsd > 0) parts.push(`$${item.costUsd.toFixed(2)}`);
-  return <p className="folio text-muted-foreground/70">{parts.join(' · ')}</p>;
 }
 
 function PermissionItem({
