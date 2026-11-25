@@ -14,9 +14,18 @@ export type ClaudeCanUseTool = (
   options: { signal: AbortSignal; toolUseID: string },
 ) => Promise<ClaudePermissionResult>;
 
+export type ClaudePermissionMode =
+  | 'default'
+  | 'acceptEdits'
+  | 'bypassPermissions'
+  | 'plan'
+  | 'dontAsk'
+  | 'auto';
+
 type ClaudeQueryOptions = {
   cwd?: string;
-  permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan' | 'dontAsk' | 'auto';
+  permissionMode?: ClaudePermissionMode;
+  allowDangerouslySkipPermissions?: boolean;
   settingSources?: ('user' | 'project' | 'local')[];
   systemPrompt?: { type: 'preset'; preset: 'claude_code'; append?: string };
   resume?: string;
@@ -83,10 +92,11 @@ export type ClaudeSdkModule = {
 
 type CodexOptions = { codexPathOverride?: string };
 
-type CodexThreadOptions = {
+export type CodexThreadOptions = {
   workingDirectory?: string;
   skipGitRepoCheck?: boolean;
   sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
+  networkAccessEnabled?: boolean;
   approvalPolicy?: 'never' | 'on-request' | 'on-failure' | 'untrusted';
   model?: string;
   modelReasoningEffort?: AgentEffort;

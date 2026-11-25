@@ -9,6 +9,7 @@ import type { AgentProvider, PermissionRequest, ProviderEvent } from './provider
 import { newId, type SessionStore, titleFromPrompt } from './store.ts';
 import type {
   AgentEffort,
+  AgentPermissionMode,
   AgentProviderId,
   AgentQuestion,
   AgentTurnContext,
@@ -18,7 +19,7 @@ import type {
 type SendOptions = {
   text: string;
   context?: AgentTurnContext;
-  autoApprove?: boolean;
+  permissionMode?: AgentPermissionMode;
   model?: string | null;
   effort?: AgentEffort | null;
   // Set when the turn answers questions the agent asked in its last reply:
@@ -30,7 +31,7 @@ type SendOptions = {
 };
 
 export type TurnSettings = Partial<
-  Pick<SendOptions, 'context' | 'autoApprove' | 'model' | 'effort'>
+  Pick<SendOptions, 'context' | 'permissionMode' | 'model' | 'effort'>
 >;
 
 export type TurnEnd = { sessionId: string; userItemId: string };
@@ -230,6 +231,8 @@ export function createAgentRunner(opts: {
         });
       });
 
+    const permissionMode = options.permissionMode ?? 'auto';
+    const autoAllow = permissionMode === 'autoApprove' || permissionMode === 'fullAccess';
     const requestPermission = (request: PermissionRequest) =>
       new Promise<boolean>((resolve) => {
         if (controller.signal.aborted) return resolve(false);
@@ -240,9 +243,9 @@ export function createAgentRunner(opts: {
           tool: request.tool,
           title: request.title,
           detail: request.detail,
-          status: options.autoApprove ? 'allowed' : 'pending',
+          status: autoAllow ? 'allowed' : 'pending',
         });
-        if (options.autoApprove) return resolve(true);
+        if (autoAllow) return resolve(true);
         pending.set(item.id, {
           kind: 'permission',
           resolve: (allow) => {
@@ -294,6 +297,7 @@ export function createAgentRunner(opts: {
         resumeAt,
         model: options.model ?? null,
         effort: options.effort ?? null,
+        permissionMode,
         signal: controller.signal,
         emit,
         askUser,

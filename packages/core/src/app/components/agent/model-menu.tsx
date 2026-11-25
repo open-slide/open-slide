@@ -1,13 +1,8 @@
-import { Check, ChevronDown, Lock, LockOpen, Settings2 } from 'lucide-react';
+import { Check, ChevronDown, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  resolveModelChoice,
-  setAutoApprove,
-  setModelChoice,
-  type useAgentStatus,
-} from '@/lib/agent/use-agent';
+import { resolveModelChoice, setModelChoice, type useAgentStatus } from '@/lib/agent/use-agent';
 import { format, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import type { AgentEffort, AgentModelOption, AgentProviderId } from '../../../agent/types';
@@ -182,31 +177,5 @@ export function ModelMenu({
         </div>
       </PopoverContent>
     </Popover>
-  );
-}
-
-export function AutoApproveToggle({ autoApprove }: { autoApprove: boolean }) {
-  const t = useLocale();
-  return (
-    <button
-      type="button"
-      aria-pressed={autoApprove}
-      aria-label={t.agent.autoApprove}
-      title={t.agent.autoApproveHint}
-      onClick={() => setAutoApprove(!autoApprove)}
-      className={cn(
-        'flex h-7 min-w-7 shrink-0 items-center justify-center gap-1 rounded-[6px] px-1.5 text-[12px] text-muted-foreground outline-none transition-colors duration-100 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30',
-        autoApprove && 'bg-brand/10 text-brand hover:bg-brand/15 hover:text-brand',
-      )}
-    >
-      {autoApprove ? (
-        <>
-          <LockOpen className="size-3.5 shrink-0" aria-hidden />
-          <span className="truncate">{t.agent.autoApprove}</span>
-        </>
-      ) : (
-        <Lock className="size-3.5 shrink-0" aria-hidden />
-      )}
-    </button>
   );
 }

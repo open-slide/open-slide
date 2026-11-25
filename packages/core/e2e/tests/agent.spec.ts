@@ -248,7 +248,11 @@ test.describe('agent panel', () => {
     await editor.fill('Make the cover title red');
     await editor.press('Enter');
     await expect.poll(() => sent.length).toBe(1);
-    expect(sent[0]).toMatchObject({ text: 'Make the cover title red', edit: 'u-1' });
+    expect(sent[0]).toMatchObject({
+      text: 'Make the cover title red',
+      edit: 'u-1',
+      permissionMode: 'auto',
+    });
   });
 
   test('opening the panel on another deck starts a new conversation', async ({ page }) => {
@@ -340,10 +344,12 @@ test.describe('agent panel', () => {
     await page.keyboard.press('Escape');
     await expect(dock.getByRole('button', { name: 'Sonnet High' })).toBeVisible();
 
-    const autoApprove = dock.getByRole('button', { name: 'Auto-approve' });
-    await expect(autoApprove).toHaveAttribute('aria-pressed', 'false');
-    await autoApprove.click();
-    await expect(autoApprove).toHaveAttribute('aria-pressed', 'true');
+    await dock.getByRole('button', { name: 'Permissions: Auto' }).click();
+    await page.getByRole('menuitemradio', { name: /^Full access/ }).click();
+    await expect(dock.getByRole('button', { name: 'Permissions: Full access' })).toBeVisible();
+    expect(
+      await page.evaluate(() => localStorage.getItem('open-slide:agent-permission-mode')),
+    ).toBe('fullAccess');
 
     expect((await request.delete(`/__slides/${slideId}`)).status()).toBe(200);
   });

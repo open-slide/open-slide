@@ -1,5 +1,11 @@
 import path from 'node:path';
-import type { AgentEffort, AgentModelOption, AgentProviderId, AgentQuestion } from './types.ts';
+import type {
+  AgentEffort,
+  AgentModelOption,
+  AgentPermissionMode,
+  AgentProviderId,
+  AgentQuestion,
+} from './types.ts';
 
 export type ProviderEvent =
   | { type: 'session-id'; id: string }
@@ -29,6 +35,7 @@ export type ProviderRunOptions = {
   resumeAt: string | null;
   model: string | null;
   effort: AgentEffort | null;
+  permissionMode: AgentPermissionMode;
   signal: AbortSignal;
   emit: (event: ProviderEvent) => void;
   askUser: (questions: AgentQuestion[]) => Promise<Record<string, string> | null>;

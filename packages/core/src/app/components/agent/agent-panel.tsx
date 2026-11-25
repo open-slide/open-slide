@@ -38,7 +38,8 @@ import type { AgentTurnContext, RespondPayload } from '../../../agent/types';
 import { Composer, ContextChip } from './composer';
 import { ConnectView } from './connect-view';
 import { HistoryView } from './history-view';
-import { AutoApproveToggle, ModelMenu } from './model-menu';
+import { ModelMenu } from './model-menu';
+import { PermissionMenu } from './permission-menu';
 import { Transcript } from './transcript';
 
 const CREATE_THEME_PROMPT =
@@ -55,7 +56,7 @@ export function AgentPanel({
   const { status, loading, connected, provider, model, effort, modelChoices } = useAgentStatus();
   const { sessions, loaded: sessionsLoaded, activeId } = useAgentSessions();
   const session = useAgentSession(activeId);
-  const { request, autoApprove, newDeck, handoffs } = useAgentState();
+  const { request, permissionMode, newDeck, handoffs } = useAgentState();
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
@@ -347,7 +348,7 @@ export function AgentPanel({
                   modelChoices={modelChoices}
                   onManage={() => setManage(true)}
                 />
-                <AutoApproveToggle autoApprove={autoApprove} />
+                <PermissionMenu mode={permissionMode} providerId={provider?.id ?? null} />
               </>
             }
             textareaRef={textareaRef}

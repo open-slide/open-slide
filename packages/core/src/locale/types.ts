@@ -1,4 +1,4 @@
-import type { AgentEffort } from '../agent/types.ts';
+import type { AgentEffort, AgentPermissionMode } from '../agent/types.ts';
 
 export type Plural = { one: string; other: string };
 
@@ -638,8 +638,10 @@ export type Locale = {
     deny: string;
     allowed: string;
     denied: string;
-    autoApprove: string;
-    autoApproveHint: string;
+    permissionMode: string;
+    permissionModes: Record<AgentPermissionMode, string>;
+    permissionHints: Record<AgentPermissionMode, string>;
+    permissionManualCodex: string;
     resultDone: string;
     resultStopped: string;
     /** template: "{seconds}s" */

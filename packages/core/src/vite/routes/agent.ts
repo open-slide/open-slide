@@ -15,6 +15,7 @@ import {
   type AgentStreamEvent,
   type AgentTurnContext,
   isAgentEffort,
+  isAgentPermissionMode,
   isAgentProviderId,
   type RespondPayload,
 } from '../../agent/types.ts';
@@ -42,9 +43,9 @@ import { detectPackageManager } from './update.ts';
 // POST   /__agent/sessions                    { provider, slideId? } → AgentSession
 // GET    /__agent/sessions/:id                → AgentSession & { rev }
 // DELETE /__agent/sessions/:id                → { ok }
-// POST   /__agent/sessions/:id/messages       { text, context?, autoApprove?, model?, effort?, edit? } → { ok }
+// POST   /__agent/sessions/:id/messages       { text, context?, permissionMode?, model?, effort?, edit? } → { ok }
 // POST   /__agent/sessions/:id/stop           → { ok }
-// POST   /__agent/sessions/:id/respond        { itemId, answers? | allow? | cancel?, context?, autoApprove?, model?, effort? } → { ok }
+// POST   /__agent/sessions/:id/respond        { itemId, answers? | allow? | cancel?, context?, permissionMode?, model?, effort? } → { ok }
 // Turn progress streams as the `open-slide:agent` HMR event.
 
 function parseContext(raw: unknown): AgentTurnContext | undefined {
@@ -166,7 +167,7 @@ function parseTurnSettings(raw: Record<string, unknown>): TurnSettings {
   const settings: TurnSettings = {};
   const context = parseContext(raw.context);
   if (context) settings.context = context;
-  if (typeof raw.autoApprove === 'boolean') settings.autoApprove = raw.autoApprove;
+  if (isAgentPermissionMode(raw.permissionMode)) settings.permissionMode = raw.permissionMode;
   if ('model' in raw) settings.model = parseModel(raw.model);
   if ('effort' in raw) settings.effort = isAgentEffort(raw.effort) ? raw.effort : null;
   return settings;
@@ -301,7 +302,7 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
           const body = (await readBody(req, AGENT_BODY_LIMIT)) as {
             text?: unknown;
             context?: unknown;
-            autoApprove?: unknown;
+            permissionMode?: unknown;
             model?: unknown;
             effort?: unknown;
             edit?: unknown;
@@ -320,7 +321,9 @@ export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () 
           await runner.send(id, {
             text: body.text,
             context: parseContext(body.context),
-            autoApprove: body.autoApprove === true,
+            permissionMode: isAgentPermissionMode(body.permissionMode)
+              ? body.permissionMode
+              : undefined,
             model: parseModel(body.model),
             effort: isAgentEffort(body.effort) ? body.effort : null,
             edit: typeof body.edit === 'string' ? body.edit : undefined,

@@ -9,10 +9,11 @@ import {
   parseQuestions,
   relativeToCwd,
 } from '../provider.ts';
-import type { AgentEffort, AgentModelOption } from '../types.ts';
+import type { AgentEffort, AgentModelOption, AgentPermissionMode } from '../types.ts';
 import type {
   ClaudeCanUseTool,
   ClaudeContentBlock,
+  ClaudePermissionMode,
   ClaudeSdkMessage,
   ClaudeSdkModule,
 } from './sdk-types.ts';
@@ -30,6 +31,14 @@ const CLAUDE_MODELS: AgentModelOption[] = [
 ];
 
 const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
+
+const CLAUDE_PERMISSION_MODES: Record<AgentPermissionMode, ClaudePermissionMode> = {
+  auto: 'auto',
+  manual: 'default',
+  acceptEdits: 'acceptEdits',
+  autoApprove: 'default',
+  fullAccess: 'bypassPermissions',
+};
 
 function claudeEffort(effort: AgentEffort | null) {
   return effort && effort !== 'minimal' ? effort : undefined;
@@ -199,7 +208,11 @@ export function createClaudeProvider(): AgentProvider {
           return { behavior: 'allow', updatedInput: { ...input, answers } };
         }
         const target = input.file_path ?? input.notebook_path;
-        if (EDIT_TOOLS.has(toolName) && isInsideRoots(opts.cwd, target, opts.writableRoots)) {
+        if (
+          opts.permissionMode !== 'manual' &&
+          EDIT_TOOLS.has(toolName) &&
+          isInsideRoots(opts.cwd, target, opts.writableRoots)
+        ) {
           return { behavior: 'allow', updatedInput: input };
         }
         const { title, detail } = describeClaudeTool(toolName, input, opts.cwd);
@@ -219,7 +232,10 @@ export function createClaudeProvider(): AgentProvider {
         prompt: opts.prompt,
         options: {
           cwd: opts.cwd,
-          permissionMode: 'default',
+          permissionMode: CLAUDE_PERMISSION_MODES[opts.permissionMode],
+          ...(opts.permissionMode === 'fullAccess'
+            ? { allowDangerouslySkipPermissions: true }
+            : {}),
           settingSources: ['user', 'project', 'local'],
           systemPrompt: { type: 'preset', preset: 'claude_code', append: opts.systemPromptAppend },
           includePartialMessages: true,

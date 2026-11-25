@@ -609,9 +609,24 @@ export const es: Locale = {
     deny: 'Denegar',
     allowed: 'Permitido',
     denied: 'Denegado',
-    autoApprove: 'Aprobar automáticamente',
-    autoApproveHint:
-      'Ejecuta comandos sin preguntar. Las ediciones dentro del workspace siempre se permiten.',
+    permissionMode: 'Permisos',
+    permissionModes: {
+      auto: 'Automático',
+      manual: 'Manual',
+      acceptEdits: 'Aceptar ediciones',
+      autoApprove: 'Autoaprobar',
+      fullAccess: 'Acceso total',
+    },
+    permissionHints: {
+      auto: 'Edita la presentación por su cuenta y revisa antes las acciones de riesgo.',
+      manual: 'Pregunta antes de cada edición y comando.',
+      acceptEdits: 'Edita archivos sin preguntar; confirma antes de ejecutar comandos.',
+      autoApprove: 'Aprueba todo lo que habría preguntado, incluido el acceso a la red.',
+      fullAccess:
+        'Sin comprobaciones de permisos ni sandbox. Úsalo solo en espacios de trabajo de confianza.',
+    },
+    permissionManualCodex:
+      'Codex no puede preguntar durante un turno, así que solo lee y sugiere cambios.',
     resultDone: 'Listo',
     resultStopped: 'Detenido',
     resultSeconds: '{seconds}s',
