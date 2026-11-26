@@ -39,6 +39,7 @@ const deck: DeckScene = {
           box: { x: 100, y: 100, w: 400, h: 200 },
           rotationDeg: 0,
           flipV: false,
+          href: 'https://redmine.acpay.com.tw/issues/4840',
           geometry: { kind: 'roundRect', radius: 24 },
           fill: {
             kind: 'gradient',
@@ -184,6 +185,15 @@ describe('buildPptxFiles', () => {
 
   it('strips control characters', () => {
     expect(escapeXml('a\u0000b\u0007c\td')).toBe('abc\td');
+  });
+
+  it('emits shape click hyperlinks as external relationships', () => {
+    const slide = text('ppt/slides/slide1.xml');
+    expect(slide).toContain('<a:hlinkClick r:id="rId2"/>');
+    const rels = text('ppt/slides/_rels/slide1.xml.rels');
+    expect(rels).toContain('Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"');
+    expect(rels).toContain('Target="https://redmine.acpay.com.tw/issues/4840"');
+    expect(rels).toContain('TargetMode="External"');
   });
 
   it('round-trips through a zip', () => {
