@@ -624,7 +624,7 @@ function IslandHint({
     <div
       data-comment-hint
       className={cn(
-        'island-enter grid max-w-[calc(100%-2rem)] justify-items-start overflow-hidden rounded-full border bg-card/95 px-3 py-1.5 text-[11px] text-muted-foreground shadow-floating backdrop-blur',
+        'island-enter grid max-w-[calc(100%-2rem)] justify-items-start overflow-hidden rounded-full border bg-material px-3 py-1.5 text-[11px] text-muted-foreground shadow-floating backdrop-blur-xl backdrop-saturate-150',
         'motion-safe:transition-[width] motion-safe:duration-500 motion-safe:ease-[cubic-bezier(0.32,0.72,0,1)]',
         tone === 'error' && 'text-destructive',
       )}
@@ -776,7 +776,7 @@ function CommentPin({
           <div
             ref={cardRef}
             data-comment-preview
-            className="island-arrive pointer-events-none absolute w-72 origin-top-left rounded-[10px] border border-border/80 bg-card text-[12.5px] shadow-overlay"
+            className="island-arrive pointer-events-none absolute w-72 origin-top-left rounded-[10px] border border-border/80 bg-material text-[12.5px] shadow-overlay backdrop-blur-xl backdrop-saturate-150"
             style={card}
           >
             <div className="truncate px-3 pt-2 font-mono text-[10px] text-muted-foreground">
@@ -933,7 +933,7 @@ function CommentCard({
     <div
       {...props}
       className={cn(
-        'island-arrive pointer-events-auto absolute w-72 origin-top-left rounded-[10px] border border-border/80 bg-card shadow-overlay',
+        'island-arrive pointer-events-auto absolute w-72 origin-top-left rounded-[10px] border border-border/80 bg-material shadow-overlay backdrop-blur-xl backdrop-saturate-150',
         className,
       )}
     />

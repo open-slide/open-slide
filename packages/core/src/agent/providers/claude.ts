@@ -1,4 +1,10 @@
-import { findSpawnableCli, importWorkspacePackage } from '../detect.ts';
+import {
+  commandVersion,
+  findSpawnableCli,
+  importAgentPackage,
+  resolveAgentPackage,
+  versionAtLeast,
+} from '../detect.ts';
 import {
   type AgentProvider,
   clipDetail,
@@ -9,10 +15,11 @@ import {
   parseQuestions,
   relativeToCwd,
 } from '../provider.ts';
-import type { AgentEffort, AgentModelOption } from '../types.ts';
+import type { AgentEffort, AgentModelOption, AgentPermissionMode } from '../types.ts';
 import type {
   ClaudeCanUseTool,
   ClaudeContentBlock,
+  ClaudePermissionMode,
   ClaudeSdkMessage,
   ClaudeSdkModule,
 } from './sdk-types.ts';
@@ -30,6 +37,31 @@ const CLAUDE_MODELS: AgentModelOption[] = [
 ];
 
 const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
+
+const CLAUDE_PERMISSION_MODES: Record<AgentPermissionMode, ClaudePermissionMode> = {
+  supervised: 'default',
+  acceptEdits: 'acceptEdits',
+  auto: 'auto',
+  fullAccess: 'bypassPermissions',
+};
+
+// The first SDK, and the CLI it bundles, that accept the `auto` permission mode.
+const AUTO_MODE_SDK = '0.2.91';
+const AUTO_MODE_CLI = '2.1.91';
+
+export function claudePermissionMode(
+  mode: AgentPermissionMode,
+  autoSupported: boolean,
+): ClaudePermissionMode {
+  if (mode === 'auto' && !autoSupported) return 'default';
+  return CLAUDE_PERMISSION_MODES[mode];
+}
+
+async function supportsAutoMode(cwd: string, localCli: string | null): Promise<boolean> {
+  const sdk = resolveAgentPackage(cwd, CLAUDE_SDK_PACKAGE);
+  if (!versionAtLeast(sdk?.version, AUTO_MODE_SDK)) return false;
+  return !localCli || versionAtLeast(await commandVersion(localCli), AUTO_MODE_CLI);
+}
 
 function claudeEffort(effort: AgentEffort | null) {
   return effort && effort !== 'minimal' ? effort : undefined;
@@ -181,7 +213,7 @@ export function createClaudeProvider(): AgentProvider {
       return CLAUDE_MODELS;
     },
     async run(opts: ProviderRunOptions): Promise<void> {
-      const sdk = await importWorkspacePackage<ClaudeSdkModule>(opts.cwd, CLAUDE_SDK_PACKAGE);
+      const sdk = await importAgentPackage<ClaudeSdkModule>(opts.cwd, CLAUDE_SDK_PACKAGE);
       if (!sdk || typeof sdk.query !== 'function') throw new ProviderUnavailableError(this);
 
       const mapper = createClaudeMapper(opts.emit, opts.cwd);
@@ -199,7 +231,11 @@ export function createClaudeProvider(): AgentProvider {
           return { behavior: 'allow', updatedInput: { ...input, answers } };
         }
         const target = input.file_path ?? input.notebook_path;
-        if (EDIT_TOOLS.has(toolName) && isInsideRoots(opts.cwd, target, opts.writableRoots)) {
+        if (
+          opts.permissionMode !== 'supervised' &&
+          EDIT_TOOLS.has(toolName) &&
+          isInsideRoots(opts.cwd, target, opts.writableRoots)
+        ) {
           return { behavior: 'allow', updatedInput: input };
         }
         const { title, detail } = describeClaudeTool(toolName, input, opts.cwd);
@@ -213,13 +249,18 @@ export function createClaudeProvider(): AgentProvider {
       };
 
       const localCli = findSpawnableCli('claude');
+      const autoSupported =
+        opts.permissionMode === 'auto' && (await supportsAutoMode(opts.cwd, localCli));
       const effort = claudeEffort(opts.effort);
       let stderr = '';
       const stream = sdk.query({
         prompt: opts.prompt,
         options: {
           cwd: opts.cwd,
-          permissionMode: 'default',
+          permissionMode: claudePermissionMode(opts.permissionMode, autoSupported),
+          ...(opts.permissionMode === 'fullAccess'
+            ? { allowDangerouslySkipPermissions: true }
+            : {}),
           settingSources: ['user', 'project', 'local'],
           systemPrompt: { type: 'preset', preset: 'claude_code', append: opts.systemPromptAppend },
           includePartialMessages: true,

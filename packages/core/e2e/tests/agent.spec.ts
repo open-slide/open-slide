@@ -234,7 +234,7 @@ test.describe('agent panel', () => {
       'Reading the cover first.\n\nBolded the **cover** title.',
     );
 
-    await dock.getByText('Make the cover bolder').hover();
+    await dock.getByRole('list').getByText('Make the cover bolder').hover();
     await dock.getByRole('button', { name: 'Edit', exact: true }).click();
     const editor = dock.getByRole('textbox', { name: 'Edit', exact: true });
     await expect(editor).toBeFocused();
@@ -243,12 +243,16 @@ test.describe('agent panel', () => {
     await expect(editor).toHaveCount(0);
     await expect(dock).toBeVisible();
 
-    await dock.getByText('Make the cover bolder').hover();
+    await dock.getByRole('list').getByText('Make the cover bolder').hover();
     await dock.getByRole('button', { name: 'Edit', exact: true }).click();
     await editor.fill('Make the cover title red');
     await editor.press('Enter');
     await expect.poll(() => sent.length).toBe(1);
-    expect(sent[0]).toMatchObject({ text: 'Make the cover title red', edit: 'u-1' });
+    expect(sent[0]).toMatchObject({
+      text: 'Make the cover title red',
+      edit: 'u-1',
+      permissionMode: 'auto',
+    });
   });
 
   test('opening the panel on another deck starts a new conversation', async ({ page }) => {
@@ -281,7 +285,8 @@ test.describe('agent panel', () => {
 
     await openSlide(page, 'alpha');
     const dock = page.locator('[data-agent-dock]');
-    await expect(dock.getByText('Tighten the alpha cover')).toBeVisible();
+    await expect(dock.getByRole('list').getByText('Tighten the alpha cover')).toBeVisible();
+    await expect(dock.getByRole('heading', { name: 'Tighten the alpha cover' })).toBeVisible();
 
     await openSlide(page, 'steps');
     await expect(dock.getByPlaceholder(/Ask Claude Code/)).toBeVisible();
@@ -290,7 +295,7 @@ test.describe('agent panel', () => {
     await dock.getByRole('button', { name: 'History', exact: true }).click();
     await dock.getByRole('button', { name: /Tighten the alpha cover/ }).click();
     await expect(page).toHaveURL(/\/s\/alpha$/);
-    await expect(dock.getByText('Tighten the alpha cover')).toBeVisible();
+    await expect(dock.getByRole('list').getByText('Tighten the alpha cover')).toBeVisible();
   });
 
   test('New deck opens a blank deck with the agent dock asking for a brief', async ({
@@ -329,15 +334,29 @@ test.describe('agent panel', () => {
       'true',
     );
     await menu.getByRole('button', { name: 'Sonnet', exact: true }).click();
-    await menu.getByRole('button', { name: 'High', exact: true }).click();
-    await expect(menu.getByRole('button', { name: 'High', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    const reasoning = menu.getByRole('slider', { name: 'Reasoning' });
+    await expect(reasoning).toHaveAttribute('aria-valuetext', 'Auto');
+    const track = await reasoning.boundingBox();
+    if (!track) throw new Error('reasoning slider has no box');
+    await page.mouse.move(track.x + 8, track.y + track.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(track.x + track.width + 40, track.y + track.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await expect(reasoning).toHaveAttribute('aria-valuetext', 'Max');
+    await reasoning.press('ArrowLeft');
+    await reasoning.press('ArrowLeft');
+    await expect(reasoning).toHaveAttribute('aria-valuetext', 'High');
     await menu.getByRole('tab', { name: 'Codex' }).click();
     await expect(menu.getByRole('button', { name: 'Connect' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dock.getByRole('button', { name: 'Sonnet High' })).toBeVisible();
+
+    await dock.getByRole('button', { name: 'Permissions: Auto' }).click();
+    await page.getByRole('menuitemradio', { name: /^Full access/ }).click();
+    await expect(dock.getByRole('button', { name: 'Permissions: Full access' })).toBeVisible();
+    expect(
+      await page.evaluate(() => localStorage.getItem('open-slide:agent-permission-mode')),
+    ).toBe('fullAccess');
 
     expect((await request.delete(`/__slides/${slideId}`)).status()).toBe(200);
   });

@@ -62,8 +62,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { setDockOpen, useAgentActivity, useAgentDock } from '@/lib/agent/use-agent';
+import {
+  setDockOpen,
+  useAgentActivity,
+  useAgentDock,
+  useSessionHandoff,
+} from '@/lib/agent/use-agent';
+import { openHomeInHost } from '@/lib/desktop';
 import { useFolders } from '@/lib/folders';
 import {
   hasModifier,
@@ -73,7 +78,6 @@ import {
   isTypingTarget,
 } from '@/lib/keys';
 import { readLastHomeLocation } from '@/lib/last-home-location';
-import { useAgentSocketConnected } from '@/lib/use-agent-socket';
 import { useClickPageNavigation } from '@/lib/use-click-page-navigation';
 import { useDocumentTitle } from '@/lib/use-document-title';
 import { useIsMobile } from '@/lib/use-is-mobile';
@@ -87,7 +91,14 @@ import { PdfProgressToast, PptxProgressToast } from '../components/export-progre
 import { NotesDrawer } from '../components/notes-drawer';
 import { OverviewGrid } from '../components/overview-grid';
 import { openPresenterWindow, Player } from '../components/player';
+import {
+  afterPaint,
+  CURTAIN_FADE_MS,
+  PresentCurtain,
+  whenFullscreenSettled,
+} from '../components/present/curtain';
 import { SlideCanvas } from '../components/slide-canvas';
+import { SlideErrorBanner, SlideErrorScreen } from '../components/slide-error';
 import { isDeckWarmed, markDeckWarmed, SlidePreloadLayer } from '../components/slide-preload-layer';
 import { SlideTransitionLayer } from '../components/slide-transition-layer';
 import { type ThumbnailActions, ThumbnailRail } from '../components/thumbnail-rail';
@@ -98,14 +109,21 @@ import {
   exportSlideAsPptx,
   type PptxExportProgress,
 } from '../lib/export-pptx';
-import { remapNotesSessionCacheAfterReorder } from '../lib/inspector/use-notes';
+import { changeNotesPages } from '../lib/inspector/use-notes';
 import type { SlideModule } from '../lib/sdk';
+import { getPageError, usePageErrorsVersion } from '../lib/slide-errors';
 import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion';
 import { useSlideModule } from '../lib/use-slide-module';
 
 const { showSlideUi, showSlideBrowser, allowHtmlDownload } = config.build;
 
 const noop = () => {};
+
+type PagePlan = {
+  order: number[];
+  request: string;
+  init: RequestInit;
+};
 
 export function Slide() {
   const { slideId = '' } = useParams();
@@ -114,6 +132,7 @@ export function Slide() {
   // react-router records its entry index in history.state; going back is only
   // safe when we actually pushed an entry, otherwise land on the last home view.
   const goBack = useCallback(() => {
+    if (openHomeInHost()) return;
     const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
     if (idx > 0) {
       navigate(-1);
@@ -141,6 +160,7 @@ export function Slide() {
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const { open: agentOpen, toggle: toggleAgent } = useAgentDock();
+  useSessionHandoff(slideId);
   useLayoutEffect(() => {
     if (agentOpen) setDesignOpen(false);
   }, [agentOpen]);
@@ -166,14 +186,70 @@ export function Slide() {
   const narrowToolbar = useMediaQuery('(max-width: 639.98px)');
   const prefersReducedMotion = usePrefersReducedMotion();
 
-  const modulePages = useMemo(() => slide?.default ?? [], [slide]);
-  const [pages, setPages] = useState<typeof modulePages>(modulePages);
+  // 'entering' darkens the editor before the Player mounts; 'leaving' keeps
+  // the editor dark after the Player unmounts, then fades it back in.
+  const [curtain, setCurtain] = useState<'entering' | 'leaving' | null>(null);
+  const curtainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (curtainTimerRef.current) clearTimeout(curtainTimerRef.current);
+    },
+    [],
+  );
+  const present = useCallback(
+    (mode: 'window' | 'fullscreen') => {
+      if (prefersReducedMotion) {
+        setPlayMode(mode);
+        return;
+      }
+      if (curtainTimerRef.current) return;
+      setCurtain('entering');
+      // Fullscreen is requested when the Player mounts; the delay stays well
+      // inside the browser's transient user-activation window.
+      curtainTimerRef.current = setTimeout(() => {
+        curtainTimerRef.current = null;
+        setCurtain(null);
+        setPlayMode(mode);
+      }, CURTAIN_FADE_MS);
+    },
+    [prefersReducedMotion],
+  );
+  const exitPresent = useCallback(() => {
+    setPlayMode(null);
+    if (!prefersReducedMotion) setCurtain('leaving');
+  }, [prefersReducedMotion]);
   useEffect(() => {
-    setPages(modulePages);
+    if (curtain !== 'leaving' || playMode) return;
+    let cancelPaint = () => {};
+    const reveal = () => {
+      cancelPaint = afterPaint(() => setCurtain(null));
+    };
+    if (!document.fullscreenElement) {
+      reveal();
+      return () => cancelPaint();
+    }
+    const cancelWait = whenFullscreenSettled(reveal);
+    return () => {
+      cancelWait();
+      cancelPaint();
+    };
+  }, [curtain, playMode]);
+
+  const routedRef = useRef(slideId);
+  routedRef.current = slideId;
+  const modulePages = useMemo(() => slide?.default ?? [], [slide]);
+  // Tagged with its deck: right after a route change the old deck's module is
+  // still loaded under the new slideId.
+  const [deck, setDeck] = useState({ slideId, pages: modulePages });
+  useEffect(() => {
+    setDeck({ slideId: routedRef.current, pages: modulePages });
   }, [modulePages]);
+  const pages = deck.pages;
   const pageCount = pages.length;
   const rawIndex = Number(searchParams.get('p') ?? '1') - 1;
   const index = Number.isFinite(rawIndex) ? Math.max(0, Math.min(pageCount - 1, rawIndex)) : 0;
+  usePageErrorsVersion();
+  const stageError = error ?? getPageError(pages[index], index) ?? null;
   const view = searchParams.get('view') === 'assets' ? 'assets' : 'slides';
 
   useEffect(() => {
@@ -195,19 +271,23 @@ export function Slide() {
     [navigate],
   );
 
-  const goTo = useCallback(
+  const showPage = useCallback(
     (i: number) => {
-      const clamped = Math.max(0, Math.min(pageCount - 1, i));
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          next.set('p', String(clamped + 1));
+          next.set('p', String(i + 1));
           return next;
         },
         { replace: true },
       );
     },
-    [pageCount, setSearchParams],
+    [setSearchParams],
+  );
+
+  const goTo = useCallback(
+    (i: number) => showPage(Math.max(0, Math.min(pageCount - 1, i))),
+    [pageCount, showPage],
   );
 
   // While an agent writes this deck page by page, jump to each page as it
@@ -220,104 +300,114 @@ export function Slide() {
     seenPageCount.current = pageCount;
   }, [agentWriting, pageCount, goTo]);
 
+  const deckRef = useRef(deck);
+  deckRef.current = deck;
+  const indexRef = useRef(index);
+  indexRef.current = index;
+
+  // Notes can be mid-save when a page op is asked for, so the op is planned from
+  // the pages and position current once those writes settle, and dropped if the
+  // route has moved to another deck by then.
+  const changePages = useCallback(
+    (plan: (order: number[]) => PagePlan | null) =>
+      changeNotesPages(slideId, () => {
+        const { slideId: owner, pages: before } = deckRef.current;
+        if (routedRef.current !== slideId || owner !== slideId) return null;
+        const at = indexRef.current;
+        const next = plan(before.map((_, i) => i));
+        if (!next) return null;
+        const moved = next.order.map((i) => before[i]);
+        const position = next.order.indexOf(at);
+        const nextIndex = position < 0 ? Math.min(at, next.order.length - 1) : position;
+        return {
+          order: next.order,
+          apply: async () => {
+            setDeck({ slideId, pages: moved });
+            if (nextIndex !== at) showPage(nextIndex);
+            const res = await fetch(next.request, next.init);
+            const body = (await res.json().catch(() => ({ error: res.statusText }))) as {
+              error?: string;
+              layout?: string;
+            };
+            if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+            return body.layout;
+          },
+          revert: () => {
+            setDeck((current) => (current.pages === moved ? { slideId, pages: before } : current));
+            if (nextIndex !== at && routedRef.current === slideId) showPage(at);
+          },
+        };
+      }),
+    [slideId, showPage],
+  );
+
   const reorderPage = useCallback(
     async (from: number, to: number) => {
       if (from === to) return;
-      const before = pages;
-      const nextPages = [...before];
-      const [moved] = nextPages.splice(from, 1);
-      nextPages.splice(to, 0, moved);
-      setPages(nextPages);
-
-      const order = before.map((_, i) => i);
-      const [movedIdx] = order.splice(from, 1);
-      order.splice(to, 0, movedIdx);
-
-      remapNotesSessionCacheAfterReorder(slideId, order);
-
-      // Keep the user looking at the same page they were on before the drag.
-      let nextIndex = index;
-      if (index === from) nextIndex = to;
-      else if (from < index && to >= index) nextIndex = index - 1;
-      else if (from > index && to <= index) nextIndex = index + 1;
-      if (nextIndex !== index) goTo(nextIndex);
-
       try {
-        const res = await fetch(`/__slides/${encodeURIComponent(slideId)}/reorder`, {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ order }),
+        await changePages((order) => {
+          if (from < 0 || to < 0 || from >= order.length || to >= order.length) return null;
+          const [moved] = order.splice(from, 1);
+          order.splice(to, 0, moved);
+          return {
+            order,
+            request: `/__slides/${encodeURIComponent(slideId)}/reorder`,
+            init: {
+              method: 'PUT',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ order }),
+            },
+          };
         });
-        if (!res.ok) {
-          const detail = await res.json().catch(() => ({ error: res.statusText }));
-          throw new Error(detail.error ?? `HTTP ${res.status}`);
-        }
       } catch (err) {
-        setPages(before);
-        const inverse = order.map((_, i) => order.indexOf(i));
-        remapNotesSessionCacheAfterReorder(slideId, inverse);
         toast.error(`Reorder failed: ${String((err as Error).message ?? err)}`);
       }
     },
-    [pages, index, slideId, goTo],
+    [slideId, changePages],
   );
 
   const duplicatePage = useCallback(
     async (i: number) => {
-      const before = pages;
-      if (i < 0 || i >= before.length) return;
-      const nextPages = [...before];
-      nextPages.splice(i + 1, 0, before[i]);
-      setPages(nextPages);
-      if (index > i) goTo(index + 1);
-
       try {
-        const res = await fetch(`/__slides/${encodeURIComponent(slideId)}/pages/${i}/duplicate`, {
-          method: 'POST',
+        const changed = await changePages((order) => {
+          if (i < 0 || i >= order.length) return null;
+          order.splice(i + 1, 0, i);
+          return {
+            order,
+            request: `/__slides/${encodeURIComponent(slideId)}/pages/${i}/duplicate`,
+            init: { method: 'POST' },
+          };
         });
-        if (!res.ok) {
-          const detail = await res.json().catch(() => ({ error: res.statusText }));
-          throw new Error(detail.error ?? `HTTP ${res.status}`);
-        }
-        toast.success(format(t.thumbnailRail.toastDuplicated, { n: i + 1 }));
+        if (changed) toast.success(format(t.thumbnailRail.toastDuplicated, { n: i + 1 }));
       } catch (err) {
-        setPages(before);
         toast.error(
           `${t.thumbnailRail.toastDuplicateFailed}: ${String((err as Error).message ?? err)}`,
         );
       }
     },
-    [pages, index, slideId, goTo, t.thumbnailRail],
+    [slideId, changePages, t.thumbnailRail],
   );
 
   const deletePage = useCallback(
     async (i: number) => {
-      const before = pages;
-      if (i < 0 || i >= before.length || before.length <= 1) return;
-      const nextPages = before.slice(0, i).concat(before.slice(i + 1));
-      setPages(nextPages);
-      if (index >= i && index > 0) {
-        const target = index === i ? Math.min(index, nextPages.length - 1) : index - 1;
-        goTo(target);
-      }
-
       try {
-        const res = await fetch(`/__slides/${encodeURIComponent(slideId)}/pages/${i}`, {
-          method: 'DELETE',
+        const changed = await changePages((order) => {
+          if (i < 0 || i >= order.length || order.length <= 1) return null;
+          order.splice(i, 1);
+          return {
+            order,
+            request: `/__slides/${encodeURIComponent(slideId)}/pages/${i}`,
+            init: { method: 'DELETE' },
+          };
         });
-        if (!res.ok) {
-          const detail = await res.json().catch(() => ({ error: res.statusText }));
-          throw new Error(detail.error ?? `HTTP ${res.status}`);
-        }
-        toast.success(format(t.thumbnailRail.toastDeleted, { n: i + 1 }));
+        if (changed) toast.success(format(t.thumbnailRail.toastDeleted, { n: i + 1 }));
       } catch (err) {
-        setPages(before);
         toast.error(
           `${t.thumbnailRail.toastDeleteFailed}: ${String((err as Error).message ?? err)}`,
         );
       }
     },
-    [pages, index, slideId, goTo, t.thumbnailRail],
+    [slideId, changePages, t.thumbnailRail],
   );
 
   const thumbnailActions = useMemo<ThumbnailActions | undefined>(
@@ -335,7 +425,7 @@ export function Slide() {
     // When showSlideUi is false the read-only <Player> is rendered and owns
     // keyboard navigation (including step-aware advance/retreat). Attaching this
     // page-nav handler too would race it and skip <Steps> reveals, so bail out.
-    if (playMode || !showSlideUi) return;
+    if (playMode || curtain || !showSlideUi) return;
     const onKey = (e: KeyboardEvent) => {
       if (
         isTypingTarget(e.target) ||
@@ -368,12 +458,12 @@ export function Slide() {
         return;
       }
       if (e.key === 'f' || e.key === 'F') {
-        setPlayMode('fullscreen');
+        present('fullscreen');
       } else if (e.key === 'Enter') {
-        setPlayMode('window');
+        present('window');
       } else if (e.key === 'p' || e.key === 'P') {
         if (slideId) openPresenterWindow(slideId);
-        setPlayMode('window');
+        present('window');
       } else if (import.meta.env.DEV && (e.key === 'd' || e.key === 'D')) {
         setDesignOpen((v) => !v);
       } else if (import.meta.env.DEV && (e.key === 'a' || e.key === 'A')) {
@@ -382,9 +472,9 @@ export function Slide() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [index, goTo, playMode, slideId, overviewOpen, toggleAgent]);
+  }, [index, goTo, playMode, curtain, slideId, overviewOpen, toggleAgent, present]);
 
-  if (error) {
+  if (error && !slide) {
     return (
       <div className="mx-auto max-w-3xl px-8 py-16 text-muted-foreground">
         {showSlideBrowser && (
@@ -392,13 +482,7 @@ export function Slide() {
             ← {t.common.home}
           </Link>
         )}
-        <span className="mt-6 block eyebrow text-destructive/80">{t.common.loadFailed}</span>
-        <h2 className="mt-2 font-heading text-xl font-semibold tracking-tight text-foreground">
-          {t.common.failedToLoadSlide}
-        </h2>
-        <pre className="mt-4 overflow-auto rounded-[6px] border border-border bg-card p-4 text-[11.5px] leading-relaxed whitespace-pre-wrap shadow-edge">
-          {error}
-        </pre>
+        <SlideErrorScreen info={error} slideId={slideId} className="mt-6" />
       </div>
     );
   }
@@ -423,8 +507,9 @@ export function Slide() {
           transition={presented.slide.transition}
           index={presented.index}
           onIndexChange={presentReady ? goTo : noop}
-          onExit={() => setPlayMode(null)}
+          onExit={exitPresent}
           controls
+          curtain={!prefersReducedMotion}
           slideId={presented.slideId}
           onSwitchSlide={switchPresentedSlide}
           fullscreen={playMode === 'fullscreen'}
@@ -689,7 +774,6 @@ export function Slide() {
                   </TabsList>
                 </Tabs>
               )}
-              {import.meta.env.DEV && <AgentConnectedBadge />}
             </div>
 
             <div className="col-span-3 row-start-2 flex min-w-0 justify-center sm:col-span-1 sm:col-start-2 sm:row-start-1">
@@ -801,7 +885,7 @@ export function Slide() {
                     size="sm"
                     variant="brand"
                     aria-label={t.slide.present}
-                    onClick={() => setPlayMode(isMobile ? 'window' : 'fullscreen')}
+                    onClick={() => present(isMobile ? 'window' : 'fullscreen')}
                     className="rounded-r-none px-2.5 lg:px-3"
                   >
                     <Play className="size-3.5 fill-current" />
@@ -821,12 +905,12 @@ export function Slide() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="min-w-[200px]">
                       <DropdownMenuGroup>
-                        <DropdownMenuItem onClick={() => setPlayMode('window')}>
+                        <DropdownMenuItem onClick={() => present('window')}>
                           <Play />
                           {t.slide.presentInWindow}
                           <DropdownMenuShortcut>↵</DropdownMenuShortcut>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setPlayMode('fullscreen')}>
+                        <DropdownMenuItem onClick={() => present('fullscreen')}>
                           <Maximize />
                           {t.slide.presentFullscreen}
                           <DropdownMenuShortcut>F</DropdownMenuShortcut>
@@ -834,7 +918,7 @@ export function Slide() {
                         <DropdownMenuItem
                           onClick={() => {
                             if (slideId) openPresenterWindow(slideId);
-                            setPlayMode('window');
+                            present('window');
                           }}
                         >
                           <MonitorSpeaker />
@@ -856,6 +940,14 @@ export function Slide() {
           ) : (
             <DesignProvider slideId={slideId}>
               <div className="relative flex min-h-0 flex-1 flex-col">
+                {stageError && (
+                  <SlideErrorBanner
+                    info={stageError}
+                    slideId={slideId}
+                    pageNumber={index + 1}
+                    stale={stageError === error}
+                  />
+                )}
                 <div className="flex min-h-0 flex-1 flex-col md:flex-row">
                   <ResizableRail
                     pages={pages}
@@ -915,6 +1007,14 @@ export function Slide() {
                     designOpen={designOpen}
                     onCloseDesign={() => setDesignOpen(false)}
                     agentOpen={agentOpen}
+                    page={{
+                      index,
+                      total: pageCount,
+                      component: pages[index],
+                      transition: pages[index]?.transition ?? slide.transition,
+                      inheritedTransition: !pages[index]?.transition && Boolean(slide.transition),
+                      themed: Boolean(slide.design),
+                    }}
                     agent={
                       import.meta.env.DEV && (
                         <SlideAgentDock
@@ -957,11 +1057,11 @@ export function Slide() {
               currentIndex={index}
               exporting={exporting}
               handlers={{
-                onPresentWindow: () => setPlayMode('window'),
-                onPresentFullscreen: () => setPlayMode('fullscreen'),
+                onPresentWindow: () => present('window'),
+                onPresentFullscreen: () => present('fullscreen'),
                 onPresenterView: () => {
                   if (slideId) openPresenterWindow(slideId);
-                  setPlayMode('window');
+                  present('window');
                 },
                 onCopyLink: copyLink,
                 onOverview: () => setOverviewOpen(true),
@@ -976,6 +1076,7 @@ export function Slide() {
             />
           )}
         </div>
+        <PresentCurtain opaque={curtain !== null} className="fixed z-[1000]" />
       </InspectorProvider>
     </HistoryProvider>
   );
@@ -1093,47 +1194,6 @@ function SlideAgentDock({
     [slideId, slideTitle, pageNumber, totalPages, comments.length, selected],
   );
   return <AgentPanel context={context} onClose={() => setDockOpen(false)} />;
-}
-
-function AgentConnectedBadge() {
-  const t = useLocale();
-  const connected = useAgentSocketConnected();
-  return (
-    <TooltipProvider delay={200}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              aria-label={connected ? t.slide.agentConnected : t.slide.agentDisconnected}
-              className="ml-1 flex shrink-0 cursor-help items-center gap-1.5 rounded-[3px] border border-hairline bg-card px-1.5 py-0.5 text-[10.5px] text-foreground/85 outline-none transition-colors duration-150 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring/30"
-            >
-              <span aria-hidden className="relative flex size-1.5 items-center justify-center">
-                {connected ? (
-                  <>
-                    <span className="absolute inline-flex size-full rounded-full bg-emerald-500 opacity-60 motion-safe:animate-ping" />
-                    <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
-                  </>
-                ) : (
-                  <span className="relative inline-flex size-1.5 rounded-full bg-rose-500" />
-                )}
-              </span>
-              <span className="hidden xl:inline">
-                {connected ? t.slide.agentConnected : t.slide.agentDisconnected}
-              </span>
-            </button>
-          }
-        />
-        <TooltipContent
-          side="bottom"
-          align="start"
-          className="w-max max-w-[min(520px,calc(100vw-2rem))] text-center leading-relaxed"
-        >
-          {connected ? t.slide.agentConnectedTooltip : t.slide.agentDisconnectedTooltip}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
 }
 
 function SelectionReporter() {

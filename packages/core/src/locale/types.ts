@@ -1,4 +1,4 @@
-import type { AgentEffort } from '../agent/types.ts';
+import type { AgentEffort, AgentPermissionMode } from '../agent/types.ts';
 
 export type Plural = { one: string; other: string };
 
@@ -17,7 +17,6 @@ export type Locale = {
     close: string;
     loading: string;
     loadFailed: string;
-    failedToLoadSlide: string;
     home: string;
     add: string;
     done: string;
@@ -30,6 +29,21 @@ export type Locale = {
   notFound: {
     eyebrow: string;
     title: string;
+  };
+
+  slideError: {
+    compileTitle: string;
+    moduleTitle: string;
+    notFoundTitle: string;
+    /** {n} = page number */
+    renderTitle: string;
+    pageCrashed: string;
+    staleNotice: string;
+    fixHint: string;
+    details: string;
+    copyPrompt: string;
+    copied: string;
+    copyFailed: string;
   };
 
   home: {
@@ -105,10 +119,6 @@ export type Locale = {
     resizeSidePanel: string;
     home: string;
     backToHome: string;
-    agentConnected: string;
-    agentConnectedTooltip: string;
-    agentDisconnected: string;
-    agentDisconnectedTooltip: string;
     download: string;
     copyLink: string;
     moreActions: string;
@@ -182,6 +192,7 @@ export type Locale = {
     helpAria: string;
     exitAria: string;
     elapsedTime: string;
+    lastSlideHint: string;
     helpEyebrow: string;
     helpTitle: string;
     shortcutNext: string;
@@ -208,7 +219,6 @@ export type Locale = {
     previewMode: string;
     closeFormatPanel: string;
     editText: string;
-    emptySelectionTitle: string;
     emptySelectionHint: string;
     textSelectionHint: string;
     elementText: string;
@@ -218,6 +228,17 @@ export type Locale = {
     rotateHandle: string;
     resizeHandle: string;
     arrangeSection: string;
+    pageLabel: string;
+    pageBackground: string;
+    pageBackgroundTheme: string;
+    pageBackgroundShared: string;
+    pageBackgroundComplex: string;
+    pageTransition: string;
+    pageTransitionInherited: string;
+    pageSteps: string;
+    pageStepsCount: Plural;
+    pageNone: string;
+    transitionKinds: Record<'fade' | 'slide' | 'zoom' | 'wipe' | 'morph' | 'custom', string>;
     selectionCount: string;
     positionLabel: string;
     positionX: string;
@@ -487,6 +508,7 @@ export type Locale = {
     /** template: "Processing page {current} of {total}" */
     processing: string;
     printing: string;
+    saving: string;
     done: string;
   };
 
@@ -581,9 +603,6 @@ export type Locale = {
 
   agent: {
     title: string;
-    beta: string;
-    betaTitle: string;
-    betaHint: string;
     open: string;
     openTitle: string;
     close: string;
@@ -630,12 +649,11 @@ export type Locale = {
     deny: string;
     allowed: string;
     denied: string;
-    autoApprove: string;
-    autoApproveHint: string;
-    resultDone: string;
-    resultStopped: string;
+    permissionMode: string;
+    permissionModes: Record<AgentPermissionMode, string>;
+    permissionHints: Record<AgentPermissionMode, string>;
+    permissionHintsCodex: Record<AgentPermissionMode, string>;
     /** template: "{seconds}s" */
-    resultSeconds: string;
     errorEyebrow: string;
     statusLoading: string;
     disabled: string;
@@ -678,6 +696,8 @@ export type Locale = {
     modelDefault: string;
     reasoning: string;
     effortAuto: string;
+    effortFaster: string;
+    effortSmarter: string;
     efforts: Record<AgentEffort, string>;
     /** template: "{provider} is editing" */
     presenceEditing: string;

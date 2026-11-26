@@ -28,7 +28,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        'fixed inset-0 z-50 bg-foreground/35 backdrop-blur-[2px] transition-opacity data-starting-style:opacity-0 data-ending-style:opacity-0',
+        'fixed inset-0 z-50 bg-black/20 backdrop-blur-[3px] dark:bg-black/45 transition-opacity data-starting-style:opacity-0 data-ending-style:opacity-0',
         className,
       )}
       {...props}
@@ -52,10 +52,8 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          // Crisp paper card with hairline edge + soft drop. No oversized
-          // shadcn-glow ring; sits cleanly on the dimmed canvas.
           'fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-5',
-          'rounded-[10px] border border-border bg-card p-6 text-card-foreground',
+          'rounded-[10px] border border-border bg-material p-6 text-card-foreground backdrop-blur-2xl backdrop-saturate-150',
           'shadow-overlay outline-none',
           'transition-[transform,scale,opacity] duration-200',
           'data-starting-style:scale-95 data-starting-style:opacity-0 data-ending-style:scale-95 data-ending-style:opacity-0',

@@ -1,35 +1,28 @@
 import {
-  Check,
-  ChevronDown,
   ChevronLeft,
   History,
   MessageSquare,
+  MousePointer2,
   Palette,
   Pencil,
   Plus,
   Presentation,
-  Settings2,
   X,
 } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   autoConnect,
   clearNewDeck,
   consumeRequest,
   createSession,
   deleteSession,
-  readyProviders,
-  resolveModelChoice,
+  openSessionInHost,
   respond,
   sendMessage,
   setActiveSession,
-  setAutoApprove,
-  setModelChoice,
   stopSession,
   useAgentSession,
   useAgentSessions,
@@ -40,17 +33,12 @@ import {
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn } from '@/lib/utils';
 import { applyCommentsPrompt } from '../../../agent/prompt';
-import type {
-  AgentEffort,
-  AgentModelOption,
-  AgentProviderId,
-  AgentTurnContext,
-  RespondPayload,
-} from '../../../agent/types';
+import type { AgentTurnContext, RespondPayload } from '../../../agent/types';
 import { Composer, ContextChip } from './composer';
 import { ConnectView } from './connect-view';
 import { HistoryView } from './history-view';
-import { ProviderLogo } from './provider-logo';
+import { ModelMenu } from './model-menu';
+import { PermissionMenu } from './permission-menu';
 import { Transcript } from './transcript';
 
 const CREATE_THEME_PROMPT =
@@ -67,7 +55,7 @@ export function AgentPanel({
   const { status, loading, connected, provider, model, effort, modelChoices } = useAgentStatus();
   const { sessions, loaded: sessionsLoaded, activeId } = useAgentSessions();
   const session = useAgentSession(activeId);
-  const { request, autoApprove, newDeck } = useAgentState();
+  const { request, permissionMode, newDeck, handoffs } = useAgentState();
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
@@ -97,6 +85,12 @@ export function AgentPanel({
     if (active?.slideId && active.slideId !== slideId) setActiveSession(null);
   }, [slideId, sessionsLoaded, activeId, sessions]);
   const isNewDeck = Boolean(context.slideId) && newDeck === context.slideId;
+
+  // A handoff from another tab can arrive while history shows, naming the active session.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: every handoff shows the chat again
+  useEffect(() => {
+    if (activeId) setView('chat');
+  }, [activeId, handoffs]);
 
   const ensureSession = useCallback(
     async (fresh: boolean) => {
@@ -186,18 +180,19 @@ export function AgentPanel({
 
   const chips: ReactNode = context.slideId ? (
     <>
-      <ContextChip title={context.slideId}>
+      <ContextChip icon={<Presentation />} title={context.slideId}>
         {context.slideTitle ?? context.slideId}
         {context.pageNumber ? ` · ${format(t.agent.contextPage, { n: context.pageNumber })}` : ''}
       </ContextChip>
       {context.selection && (
-        <ContextChip title={context.selection.text || undefined}>
+        <ContextChip icon={<MousePointer2 />} title={context.selection.text || undefined}>
           {`<${context.selection.tagName}>`} {t.agent.contextSelection}
         </ContextChip>
       )}
       {pendingComments > 0 && (
         <ContextChip
           tone="brand"
+          icon={<MessageSquare />}
           title={t.agent.quickApplyHint}
           onClick={
             running
@@ -234,17 +229,10 @@ export function AgentPanel({
               {t.agent.sessions}
             </Button>
           ) : (
-            <ModelMenu
-              status={status}
-              providerId={provider?.id ?? null}
-              model={model}
-              effort={effort}
-              modelChoices={modelChoices}
-              autoApprove={autoApprove}
-              onManage={() => setManage(true)}
-            />
+            <h2 className="truncate px-2 text-[12.5px] font-medium">
+              {session?.title || t.agent.title}
+            </h2>
           )}
-          <BetaBadge />
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {connected && !showConnect && (
@@ -300,9 +288,11 @@ export function AgentPanel({
           activeId={activeId}
           slideId={context.slideId ?? null}
           onSelect={(s) => {
-            setActiveSession(s.id);
             setView('chat');
-            if (s.slideId && s.slideId !== context.slideId) navigate(`/s/${s.slideId}`);
+            const deck = s.slideId && s.slideId !== context.slideId ? s.slideId : null;
+            if (deck && openSessionInHost(deck, s.id)) return;
+            setActiveSession(s.id);
+            if (deck) navigate(`/s/${deck}`);
           }}
           onDelete={async (id) => {
             try {
@@ -345,210 +335,25 @@ export function AgentPanel({
                 ? t.agent.newDeckPlaceholder
                 : format(t.agent.composerPlaceholder, { provider: providerName })
             }
-            chips={chips}
+            context={chips}
+            controls={
+              <>
+                <ModelMenu
+                  status={status}
+                  providerId={provider?.id ?? null}
+                  model={model}
+                  effort={effort}
+                  modelChoices={modelChoices}
+                  onManage={() => setManage(true)}
+                />
+                <PermissionMenu mode={permissionMode} providerId={provider?.id ?? null} />
+              </>
+            }
             textareaRef={textareaRef}
           />
         </>
       )}
     </div>
-  );
-}
-
-function modelLabel(model: AgentModelOption, t: ReturnType<typeof useLocale>): string {
-  return model.id ? model.label : t.agent.modelDefault;
-}
-
-function ModelMenu({
-  status,
-  providerId,
-  model,
-  effort,
-  modelChoices,
-  autoApprove,
-  onManage,
-}: {
-  status: ReturnType<typeof useAgentStatus>['status'];
-  providerId: AgentProviderId | null;
-  model: AgentModelOption | null;
-  effort: AgentEffort | null;
-  modelChoices: ReturnType<typeof useAgentStatus>['modelChoices'];
-  autoApprove: boolean;
-  onManage: () => void;
-}) {
-  const t = useLocale();
-  const [open, setOpen] = useState(false);
-  const providers = status?.enabled ? status.providers : [];
-  const [tab, setTab] = useState<AgentProviderId | null>(providerId);
-  const shownId = tab ?? providerId ?? providers[0]?.id ?? null;
-  const shown = providers.find((p) => p.id === shownId) ?? null;
-  const choice = shown?.ready ? resolveModelChoice(shown.models, modelChoices[shown.id]) : null;
-  const selectedModel = shown?.id === providerId ? (model ?? choice?.model) : choice?.model;
-  const selectedEffort = shown?.id === providerId ? effort : (choice?.effort ?? null);
-
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) setTab(providerId);
-      }}
-    >
-      <PopoverTrigger
-        type="button"
-        className="flex h-7 min-w-0 items-center gap-1.5 rounded-[5px] px-2 text-[12.5px] font-medium outline-none transition-colors duration-100 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30 aria-expanded:bg-muted"
-      >
-        {providerId ? (
-          <ProviderLogo provider={providerId} className="size-3.5 shrink-0" />
-        ) : (
-          <span aria-hidden className="size-1.5 rounded-full bg-muted-foreground/50" />
-        )}
-        <span className="truncate">{model ? modelLabel(model, t) : t.agent.title}</span>
-        {effort && (
-          <span className="shrink-0 font-normal text-muted-foreground">
-            {t.agent.efforts[effort]}
-          </span>
-        )}
-        <ChevronDown className="size-3 text-muted-foreground" aria-hidden />
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-[272px] p-1.5" data-agent-model-menu>
-        {providers.length > 1 && (
-          <div role="tablist" className="mb-1.5 flex gap-0.5 rounded-[6px] bg-muted p-0.5">
-            {providers.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                role="tab"
-                aria-selected={p.id === shownId}
-                onClick={() => setTab(p.id)}
-                className={cn(
-                  'flex h-7 flex-1 items-center justify-center gap-1.5 rounded-[5px] text-[12px] font-medium text-muted-foreground outline-none transition-colors duration-100 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30',
-                  p.id === shownId && 'bg-background text-foreground shadow-edge',
-                )}
-              >
-                <ProviderLogo provider={p.id} className="size-3.5 shrink-0" />
-                {p.name}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {shown && !shown.ready ? (
-          <div className="flex flex-col items-start gap-2 px-2 py-2.5">
-            <p className="text-[12px] leading-relaxed text-muted-foreground">
-              {shown.cliFound
-                ? format(t.agent.connectInstallHint, {
-                    pkg: shown.sdkPackage,
-                    pm: status?.packageManager ?? 'npm',
-                  })
-                : format(t.agent.cliHint, { name: shown.name })}
-            </p>
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() => {
-                setOpen(false);
-                onManage();
-              }}
-            >
-              {t.agent.connect}
-            </Button>
-          </div>
-        ) : shown ? (
-          <div className="flex flex-col gap-px">
-            {shown.models.map((m) => {
-              const checked = m.id === selectedModel?.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  aria-pressed={checked}
-                  onClick={() =>
-                    setModelChoice(shown.id, {
-                      model: m.id,
-                      effort: modelChoices[shown.id]?.effort ?? null,
-                    })
-                  }
-                  className={cn(
-                    'flex h-7 items-center justify-between gap-2 rounded-[5px] px-2 text-left text-[12.5px] outline-none transition-colors duration-100 hover:bg-muted focus-visible:bg-muted',
-                    checked && 'font-medium',
-                  )}
-                >
-                  <span className="truncate">{modelLabel(m, t)}</span>
-                  {checked && <Check className="size-3.5 shrink-0" aria-hidden />}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-
-        {shown?.ready && selectedModel && selectedModel.efforts.length > 0 && (
-          <div className="mt-1.5 border-t border-hairline px-1 pt-2 pb-1">
-            <div className="mb-1.5 px-1 text-[11px] font-medium text-muted-foreground">
-              {t.agent.reasoning}
-            </div>
-            <div className="flex gap-0.5 rounded-[6px] bg-muted p-0.5">
-              {([null, ...selectedModel.efforts] as (AgentEffort | null)[]).map((e) => {
-                const checked = e === selectedEffort;
-                return (
-                  <button
-                    key={e ?? 'auto'}
-                    type="button"
-                    aria-pressed={checked}
-                    onClick={() => setModelChoice(shown.id, { model: selectedModel.id, effort: e })}
-                    className={cn(
-                      'h-6 min-w-0 flex-1 truncate rounded-[4px] px-1 text-[11.5px] text-muted-foreground outline-none transition-colors duration-100 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30',
-                      checked && 'bg-background font-medium text-foreground shadow-edge',
-                    )}
-                  >
-                    {e ? t.agent.efforts[e] : t.agent.effortAuto}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <div className="mt-1.5 flex flex-col gap-px border-t border-hairline pt-1.5">
-          {readyProviders(status).length > 0 && (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={autoApprove}
-              title={t.agent.autoApproveHint}
-              onClick={() => setAutoApprove(!autoApprove)}
-              className="flex h-7 items-center justify-between gap-2 rounded-[5px] px-2 text-[12.5px] outline-none transition-colors duration-100 hover:bg-muted focus-visible:bg-muted"
-            >
-              {t.agent.autoApprove}
-              <span
-                aria-hidden
-                className={cn(
-                  'relative h-4 w-7 shrink-0 rounded-full transition-colors duration-150',
-                  autoApprove ? 'bg-foreground' : 'bg-foreground/15',
-                )}
-              >
-                <span
-                  className={cn(
-                    'absolute top-0.5 left-0.5 size-3 rounded-full bg-background shadow-sm transition-transform duration-150',
-                    autoApprove && 'translate-x-3',
-                  )}
-                />
-              </span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false);
-              onManage();
-            }}
-            className="flex h-7 items-center gap-2 rounded-[5px] px-2 text-[12.5px] text-muted-foreground outline-none transition-colors duration-100 hover:bg-muted hover:text-foreground focus-visible:bg-muted"
-          >
-            <Settings2 className="size-3.5" />
-            {t.agent.manageConnections}
-          </button>
-        </div>
-      </PopoverContent>
-    </Popover>
   );
 }
 
@@ -661,32 +466,5 @@ function QuickAction({
         <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{hint}</span>
       </span>
     </button>
-  );
-}
-
-function BetaBadge() {
-  const t = useLocale();
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            className="ml-1 shrink-0 cursor-default rounded-[3px] border border-border px-1 py-px font-medium text-[9px] text-muted-foreground uppercase leading-none tracking-wider outline-none focus-visible:ring-1 focus-visible:ring-brand"
-          >
-            {t.agent.beta}
-          </button>
-        }
-      />
-      <TooltipContent
-        side="bottom"
-        align="start"
-        sideOffset={6}
-        className="w-64 px-3 py-2.5 text-left text-pretty"
-      >
-        <p className="font-medium text-[12px]">{t.agent.betaTitle}</p>
-        <p className="mt-1 text-[11.5px] text-background/70 leading-relaxed">{t.agent.betaHint}</p>
-      </TooltipContent>
-    </Tooltip>
   );
 }

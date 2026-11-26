@@ -1,10 +1,12 @@
-import { type ReactNode, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useState } from 'react';
 import { AGENT_DOCK_W } from '@/components/agent/agent-dock';
 import { InspectorPanel } from '@/components/inspector/inspector-panel';
 import { useInspector } from '@/components/inspector/inspector-provider';
+import type { PageInfo } from '@/components/inspector/page-panel';
 import { useDesignPanelState } from '@/components/style-panel/design-provider';
 import { DesignPanel } from '@/components/style-panel/style-panel';
 import { useLocale } from '@/lib/use-locale';
+import { cn } from '@/lib/utils';
 import { PANEL_TRANSITION_MS, PANEL_W, usePanelMount } from './panel-shell';
 import { ResizeHandle, useStoredWidth } from './resize-handle';
 
@@ -22,11 +24,13 @@ export function EditorSidebar({
   onCloseDesign,
   agentOpen = false,
   agent,
+  page,
 }: {
   designOpen: boolean;
   onCloseDesign: () => void;
   agentOpen?: boolean;
   agent?: ReactNode;
+  page?: PageInfo;
 }) {
   const t = useLocale();
   const { active, panelOpen } = useInspector();
@@ -64,7 +68,9 @@ export function EditorSidebar({
   const [agentMounted, setAgentMounted] = useState(false);
   if (isAgent && !agentMounted) setAgentMounted(true);
   const open = mode !== null;
-  const { mounted, animVisible } = usePanelMount(open);
+  const { mounted, animVisible } = usePanelMount(open, { animateInitial: false });
+  const [firstRender, setFirstRender] = useState(true);
+  useEffect(() => setFirstRender(false), []);
 
   if (!mounted) return null;
 
@@ -97,23 +103,52 @@ export function EditorSidebar({
         />
       )}
       {agentMounted && (
-        <div
-          className="sidebar-swap h-full shrink-0"
+        <SwapPane
+          animate={!firstRender}
+          className="h-full shrink-0"
           style={{ width: agentWidth }}
           hidden={!isAgent}
         >
           {agent}
-        </div>
+        </SwapPane>
       )}
       {!isAgent && (
-        <div className="sidebar-swap flex h-full shrink-0" style={{ width: editorWidth }}>
+        <SwapPane
+          animate={!firstRender}
+          className="flex h-full shrink-0"
+          style={{ width: editorWidth }}
+        >
           {lastEditor === 'design' ? (
             <DesignPanel onClose={onCloseDesign} />
           ) : (
-            <InspectorPanel preferredTab={preferredTab} onTabChange={setPreferredTab} />
+            <InspectorPanel preferredTab={preferredTab} onTabChange={setPreferredTab} page={page} />
           )}
-        </div>
+        </SwapPane>
       )}
+    </div>
+  );
+}
+
+// Fixed at mount, since toggling the fade on a showing pane would replay it; a
+// hidden pane can pick it up, as it only plays once shown again.
+function SwapPane({
+  animate,
+  hidden = false,
+  className,
+  style,
+  children,
+}: {
+  animate: boolean;
+  hidden?: boolean;
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
+  const [fade, setFade] = useState(animate);
+  if (hidden && !fade) setFade(true);
+  return (
+    <div className={cn(fade && 'sidebar-swap', className)} style={style} hidden={hidden}>
+      {children}
     </div>
   );
 }

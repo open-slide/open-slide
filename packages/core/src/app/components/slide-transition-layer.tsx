@@ -14,6 +14,7 @@ import {
   type SlideTransition,
   type TransitionPhase,
 } from '../lib/transition';
+import { SafePage } from './slide-error';
 
 type Props = {
   pages: Page[];
@@ -803,7 +804,7 @@ export function SlideTransitionLayer({
               entryDirection={outgoingEntryDirection}
               controllerRef={activeControllerRef}
             >
-              <OutgoingPage />
+              <SafePage page={OutgoingPage} />
             </StepHost>
           </SlidePageProvider>
         </div>
@@ -817,7 +818,7 @@ export function SlideTransitionLayer({
               controllerRef={activeControllerRef}
               onAggregateChange={onStepAggregateChange}
             >
-              <CurrentPage />
+              <SafePage page={CurrentPage} />
             </StepHost>
           </SlidePageProvider>
         </div>

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ViteDevServer } from 'vite';
 import { validateMutationRequest } from '../../http/request-guard.ts';
+import { isSupervised, RESTART_EXIT_CODE } from '../../supervision.ts';
 import { json } from './context.ts';
 
 // GET /__server-status → { executionId, canRestart }
@@ -10,14 +11,7 @@ import { json } from './context.ts';
 //   Exits with RESTART_EXIT_CODE so the CLI supervisor respawns the server
 //   against the currently installed @open-slide/core.
 
-export const RESTART_EXIT_CODE = 52;
-export const DEV_SUPERVISED_ENV = 'OPEN_SLIDE_DEV_SUPERVISED';
-
 const executionId = randomUUID();
-
-function isSupervised(): boolean {
-  return process.env[DEV_SUPERVISED_ENV] === '1';
-}
 
 export function registerRestartRoutes(server: ViteDevServer): void {
   server.middlewares.use('/__server-status', (req, res, next) => {

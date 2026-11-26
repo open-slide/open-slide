@@ -59,12 +59,24 @@ function getSnapshot(): Locale {
   return current;
 }
 
+function apply(next: Locale): void {
+  if (next === current) return;
+  current = next;
+  for (const listener of listeners) listener();
+}
+
 export function setLocale(id: LocaleId): void {
-  current = LOCALES[id];
   try {
     localStorage.setItem(STORAGE_KEY, id);
   } catch {}
-  for (const listener of listeners) listener();
+  apply(LOCALES[id]);
+}
+
+// Desktop tabs are separate pages on one origin; a pick in one reaches the others through storage.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY || e.key === null) apply(readStored());
+  });
 }
 
 export function useLocaleValue(): Locale {

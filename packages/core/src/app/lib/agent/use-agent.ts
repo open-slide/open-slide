@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { toast } from 'sonner';
+import { desktopHost, openDeckInHost } from '@/lib/desktop';
 import { useLocale } from '@/lib/use-locale';
 import {
+  AGENT_EVENT,
   type AgentEffort,
   type AgentItem,
   type AgentModelOption,
+  type AgentPermissionMode,
   type AgentProviderId,
   type AgentSession,
   type AgentSessionSummary,
+  type AgentSnapshot,
   type AgentStatus,
   type AgentStreamEvent,
   type AgentTurnContext,
   isAgentEffort,
+  isAgentPermissionMode,
   isAgentProviderId,
   type RespondPayload,
 } from '../../../agent/types';
@@ -29,20 +34,27 @@ type State = {
   activeId: string | null;
   provider: AgentProviderId;
   modelChoices: Partial<Record<AgentProviderId, ModelChoice>>;
-  autoApprove: boolean;
+  permissionMode: AgentPermissionMode;
   dockOpen: boolean;
   request: AgentRequest | null;
   installing: AgentProviderId | null;
   connectErrors: Partial<Record<AgentProviderId, string>>;
   newDeck: string | null;
+  handoff: Handoff | null;
+  // Bumped per handoff taken, so one naming the already active session still registers.
+  handoffs: number;
 };
+
+type Handoff = { slideId: string; sessionId: string };
 
 const ACTIVE_KEY = 'open-slide:agent-session';
 const PROVIDER_KEY = 'open-slide:agent-provider';
 const MODEL_KEY = 'open-slide:agent-model';
-const AUTO_APPROVE_KEY = 'open-slide:agent-auto-approve';
+const PERMISSION_KEY = 'open-slide:agent-permission-mode';
 const DOCK_KEY = 'open-slide:agent-dock';
 const NEW_DECK_KEY = 'open-slide:agent-new-deck';
+const HANDOFF_KEY = 'open-slide:agent-handoff';
+const HANDOFF_TTL_MS = 30_000;
 
 function readStorage(key: string): string | null {
   try {
@@ -77,6 +89,18 @@ function readModelChoices(): Partial<Record<AgentProviderId, ModelChoice>> {
   return choices;
 }
 
+function parseHandoff(raw: string | null): Handoff | null {
+  if (!raw) return null;
+  try {
+    const { slideId, sessionId, at } = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof slideId !== 'string' || typeof sessionId !== 'string') return null;
+    if (typeof at !== 'number' || Date.now() - at > HANDOFF_TTL_MS) return null;
+    return { slideId, sessionId };
+  } catch {
+    return null;
+  }
+}
+
 const available = import.meta.env.DEV && typeof window !== 'undefined';
 
 let state: State = {
@@ -91,12 +115,14 @@ let state: State = {
     return isAgentProviderId(stored) ? stored : 'claude';
   })(),
   modelChoices: readModelChoices(),
-  autoApprove: readStorage(AUTO_APPROVE_KEY) === '1',
+  permissionMode: readPermissionMode(),
   dockOpen: readStorage(DOCK_KEY) === '1',
   request: null,
   installing: null,
   connectErrors: {},
   newDeck: readStorage(NEW_DECK_KEY),
+  handoff: parseHandoff(readStorage(HANDOFF_KEY)),
+  handoffs: 0,
 };
 
 const listeners = new Set<() => void>();
@@ -122,28 +148,27 @@ export function useAgentState(): State {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-let stream: EventSource | null = null;
-let streamOpened = false;
+let streaming = false;
+
+// Anything streamed while the socket was down is gone, so reload what is on
+// screen once it reconnects.
+function resync() {
+  void refreshStatus();
+  if (state.sessionsLoaded) void loadSessions();
+  for (const id of Object.keys(state.full)) void loadSession(id);
+}
 
 function syncStream(enabled: boolean) {
-  if (!enabled) {
-    stream?.close();
-    stream = null;
-    return;
+  const hot = import.meta.hot;
+  if (!hot || enabled === streaming) return;
+  streaming = enabled;
+  if (enabled) {
+    hot.on(AGENT_EVENT, applyEvent);
+    hot.on('vite:ws:connect', resync);
+  } else {
+    hot.off(AGENT_EVENT, applyEvent);
+    hot.off('vite:ws:connect', resync);
   }
-  if (stream) return;
-  stream = new EventSource('/__agent/events');
-  stream.onmessage = (message) => applyEvent(JSON.parse(message.data) as AgentStreamEvent);
-  stream.onopen = () => {
-    // Anything streamed while disconnected is gone, so reload what is on screen.
-    if (!streamOpened) {
-      streamOpened = true;
-      return;
-    }
-    void refreshStatus();
-    if (state.sessionsLoaded) void loadSessions();
-    for (const id of Object.keys(state.full)) void loadSession(id);
-  };
 }
 
 function upsertSummary(list: AgentSessionSummary[], summary: AgentSessionSummary) {
@@ -153,7 +178,36 @@ function upsertSummary(list: AgentSessionSummary[], summary: AgentSessionSummary
   );
 }
 
+// Events that arrive while each snapshot request is in flight.
+const recovering = new Set<AgentStreamEvent[]>();
+
 function applyEvent(event: AgentStreamEvent) {
+  for (const missed of recovering) missed.push(event);
+  reduceEvent(event);
+}
+
+// A snapshot can land after newer events; replaying the ones it lacks keeps them.
+async function loadSnapshot<T>(
+  path: string,
+  apply: (snapshot: T) => void,
+  affects: (event: AgentStreamEvent) => boolean,
+): Promise<T> {
+  const missed: AgentStreamEvent[] = [];
+  recovering.add(missed);
+  try {
+    const { rev, ...rest } = await request<AgentSnapshot<T>>(path);
+    const snapshot = rest as unknown as T;
+    apply(snapshot);
+    for (const event of missed) {
+      if ((event.rev ?? 0) > rev && affects(event)) reduceEvent(event);
+    }
+    return snapshot;
+  } finally {
+    recovering.delete(missed);
+  }
+}
+
+function reduceEvent(event: AgentStreamEvent) {
   switch (event.type) {
     case 'session':
       setState((prev) => {
@@ -262,13 +316,15 @@ export async function refreshStatus(): Promise<void> {
 async function loadSessions(): Promise<void> {
   if (!available) return;
   try {
-    const { sessions } = await request<{ sessions: AgentSessionSummary[] }>('/__agent/sessions');
-    setState((prev) => ({
-      sessions,
-      sessionsLoaded: true,
-      activeId:
-        prev.activeId && !sessions.some((s) => s.id === prev.activeId) ? null : prev.activeId,
-    }));
+    await loadSnapshot<{ sessions: AgentSessionSummary[] }>(
+      '/__agent/sessions',
+      ({ sessions }) => setState({ sessions, sessionsLoaded: true }),
+      (event) => event.type === 'session' || event.type === 'session-removed',
+    );
+    // Only after the replay, which restores sessions created while the request was out.
+    setState((prev) =>
+      prev.activeId && !prev.sessions.some((s) => s.id === prev.activeId) ? { activeId: null } : {},
+    );
   } catch {
     setState({ sessionsLoaded: true });
   }
@@ -277,9 +333,14 @@ async function loadSessions(): Promise<void> {
 async function loadSession(id: string): Promise<AgentSession | null> {
   if (!available) return null;
   try {
-    const session = await request<AgentSession>(`/__agent/sessions/${encodeURIComponent(id)}`);
-    setState((prev) => ({ full: { ...prev.full, [id]: session } }));
-    return session;
+    return await loadSnapshot<AgentSession>(
+      `/__agent/sessions/${encodeURIComponent(id)}`,
+      (session) => setState((prev) => ({ full: { ...prev.full, [id]: session } })),
+      (event) =>
+        event.type === 'session'
+          ? event.session.id === id
+          : event.type !== 'slide-renamed' && event.sessionId === id,
+    );
   } catch {
     setState((prev) => {
       const { [id]: _gone, ...full } = prev.full;
@@ -312,7 +373,7 @@ function turnSettings(id: string) {
   const status = state.status?.providers.find((p) => p.id === provider);
   const choice = status ? resolveModelChoice(status.models, state.modelChoices[provider]) : null;
   return {
-    autoApprove: state.autoApprove,
+    permissionMode: state.permissionMode,
     model: choice?.model.id || null,
     effort: choice?.effort ?? null,
   };
@@ -390,6 +451,32 @@ export function setActiveSession(id: string | null): void {
   setState({ activeId: id });
 }
 
+if (available) {
+  window.addEventListener('storage', (e) => {
+    if (e.key === HANDOFF_KEY) setState({ handoff: parseHandoff(e.newValue) });
+  });
+}
+
+// Each desktop tab is a separate page on one origin, so a session picked for
+// another deck goes through storage, reaching that deck's tab whether it is
+// already open or yet to load.
+export function openSessionInHost(slideId: string, sessionId: string): boolean {
+  if (!desktopHost) return false;
+  writeStorage(HANDOFF_KEY, JSON.stringify({ slideId, sessionId, at: Date.now() }));
+  return openDeckInHost(slideId);
+}
+
+export function useSessionHandoff(slideId: string): void {
+  const { handoff } = useAgentState();
+  useEffect(() => {
+    if (handoff?.slideId !== slideId) return;
+    writeStorage(HANDOFF_KEY, null);
+    setState((prev) => ({ handoff: null, handoffs: prev.handoffs + 1 }));
+    setActiveSession(handoff.sessionId);
+    setDockOpen(true);
+  }, [handoff, slideId]);
+}
+
 export function setModelChoice(provider: AgentProviderId, choice: ModelChoice): void {
   const modelChoices = { ...state.modelChoices, [provider]: choice };
   writeStorage(MODEL_KEY, JSON.stringify(modelChoices));
@@ -407,9 +494,14 @@ export function resolveModelChoice(
   return { model, effort };
 }
 
-export function setAutoApprove(value: boolean): void {
-  writeStorage(AUTO_APPROVE_KEY, value ? '1' : null);
-  setState({ autoApprove: value });
+function readPermissionMode(): AgentPermissionMode {
+  const stored = readStorage(PERMISSION_KEY);
+  return isAgentPermissionMode(stored) ? stored : 'auto';
+}
+
+export function setPermissionMode(mode: AgentPermissionMode): void {
+  writeStorage(PERMISSION_KEY, mode);
+  setState({ permissionMode: mode });
 }
 
 export function setDockOpen(open: boolean): void {
@@ -432,7 +524,9 @@ function startBlankDeck(): Promise<void> {
     writeStorage(NEW_DECK_KEY, slideId);
     setActiveSession(null);
     setDockOpen(true);
-    window.location.assign(`${basePath()}/s/${encodeURIComponent(slideId)}`);
+    if (!openDeckInHost(slideId)) {
+      window.location.assign(`${basePath()}/s/${encodeURIComponent(slideId)}`);
+    }
   })().finally(() => {
     creatingDeck = null;
   });

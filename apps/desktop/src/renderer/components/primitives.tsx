@@ -1,0 +1,201 @@
+import { useEffect, useRef } from 'react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { cn } from '@/lib/utils';
+
+const TRACK = 'relative h-px w-56 overflow-hidden bg-hairline';
+const BAR = 'absolute inset-y-[-0.5px] left-0 bg-foreground';
+
+export function LineLoader({ className }: { className?: string }) {
+  return (
+    <div className={cn(TRACK, className)}>
+      <span aria-hidden className={cn('line-loader-bar w-1/4', BAR)} />
+    </div>
+  );
+}
+
+export function LoadingLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <LineLoader className="w-24" />
+      <span className="eyebrow">{children}</span>
+    </div>
+  );
+}
+
+export function ProgressLine({
+  value,
+  label,
+  className,
+}: {
+  value: number;
+  label: string;
+  className?: string;
+}) {
+  const clamped = Math.min(1, Math.max(0, value));
+  return (
+    <div
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(clamped * 100)}
+      className={cn(TRACK, className)}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          BAR,
+          'w-full origin-left transition-transform duration-150 ease-out motion-reduce:transition-none',
+        )}
+        style={{ transform: `scaleX(${clamped})` }}
+      />
+    </div>
+  );
+}
+
+export function LogView({ text, className }: { text: string; className?: string }) {
+  const ref = useRef<HTMLPreElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: follow the tail whenever text grows
+  useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [text]);
+  return (
+    <pre
+      ref={ref}
+      className={cn(
+        'selectable max-h-56 min-h-16 overflow-auto rounded-[6px] border border-hairline bg-muted/50 p-2.5',
+        'font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all text-muted-foreground',
+        className,
+      )}
+    >
+      {text || ' '}
+    </pre>
+  );
+}
+
+export function SettingsGroup({
+  title,
+  description,
+  children,
+}: {
+  title?: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-2.5">
+      {title && (
+        <header>
+          <h3 className="text-[13px] font-semibold tracking-tight">{title}</h3>
+          {description && (
+            <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+              {description}
+            </p>
+          )}
+        </header>
+      )}
+      <div className="flex flex-col divide-y divide-hairline rounded-[10px] border border-border bg-card shadow-edge">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+export function SettingRow({
+  label,
+  description,
+  children,
+}: {
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-14 items-center gap-4 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium">{label}</div>
+        {description && (
+          <div className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+            {description}
+          </div>
+        )}
+      </div>
+      {children && <div className="flex shrink-0 items-center gap-1.5">{children}</div>}
+    </div>
+  );
+}
+
+export function StatusDot({ tone }: { tone: 'ok' | 'busy' | 'warn' | 'off' }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'inline-block size-1.5 shrink-0 rounded-full',
+        tone === 'ok' && 'bg-emerald-500',
+        tone === 'busy' && 'animate-pulse bg-amber-500 motion-reduce:animate-none',
+        tone === 'warn' && 'bg-destructive',
+        tone === 'off' && 'bg-muted-foreground/40',
+      )}
+    />
+  );
+}
+
+export function ErrorNote({ children, className }: { children: string; className?: string }) {
+  return (
+    <p
+      className={cn(
+        'rounded-[8px] border border-destructive/25 bg-destructive/5 px-3 py-2 text-[12.5px] leading-relaxed text-destructive',
+        className,
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+export function CenteredScreen({
+  className,
+  children,
+}: {
+  className: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex h-full items-center justify-center overflow-y-auto px-6 pb-10">
+      <div className={cn('rise-in flex w-full flex-col', className)}>{children}</div>
+    </div>
+  );
+}
+
+export function Segmented<T extends string>({
+  value,
+  options,
+  labels,
+  mono = false,
+  disabled,
+  onChange,
+}: {
+  value: T | null;
+  options: readonly T[];
+  labels?: Record<T, string>;
+  mono?: boolean;
+  disabled?: boolean;
+  onChange: (value: T | null) => void;
+}) {
+  return (
+    <ToggleGroup
+      variant="outline"
+      size="sm"
+      disabled={disabled}
+      value={value ? [value] : []}
+      onValueChange={(next: string[]) => onChange((next[0] as T | undefined) ?? null)}
+    >
+      {options.map((option) => (
+        <ToggleGroupItem key={option} value={option} className={cn(mono && 'font-mono')}>
+          {labels?.[option] ?? option}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  );
+}

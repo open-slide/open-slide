@@ -2,18 +2,25 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { AGENT_MODULES_ENV } from '../supervision.ts';
 
 const IS_WINDOWS = process.platform === 'win32';
 const VERSION_TIMEOUT_MS = 5000;
 
-export function findOnPath(command: string, env: NodeJS.ProcessEnv = process.env): string | null {
+export function findOnPath(
+  command: string,
+  env: NodeJS.ProcessEnv = process.env,
+  accept: (candidate: string) => boolean = () => true,
+): string | null {
   const dirs = (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean);
   const exts = IS_WINDOWS ? (env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';') : [''];
   for (const dir of dirs) {
     for (const ext of exts) {
       const candidate = path.join(dir, command + ext.toLowerCase());
       try {
-        if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate;
+        if (statSync(candidate, { throwIfNoEntry: false })?.isFile() && accept(candidate)) {
+          return candidate;
+        }
       } catch {}
     }
   }
@@ -23,9 +30,8 @@ export function findOnPath(command: string, env: NodeJS.ProcessEnv = process.env
 // The SDKs spawn the CLI without a shell, which cannot run a Windows .cmd shim,
 // so only a real executable is worth overriding their bundled default with.
 export function findSpawnableCli(command: string, env: NodeJS.ProcessEnv = process.env) {
-  const found = findOnPath(command, env);
-  if (!found || !IS_WINDOWS) return found;
-  return found.toLowerCase().endsWith('.exe') ? found : null;
+  if (!IS_WINDOWS) return findOnPath(command, env);
+  return findOnPath(command, env, (candidate) => candidate.toLowerCase().endsWith('.exe'));
 }
 
 const versionCache = new Map<string, Promise<string | null>>();
@@ -96,6 +102,19 @@ export function parseVersion(output: string): string | null {
   return m ? m[1] : null;
 }
 
+export function versionAtLeast(version: string | null | undefined, floor: string): boolean {
+  if (!version) return false;
+  const parts = (v: string) => v.split(/[-+]/)[0].split('.').map(Number);
+  const have = parts(version);
+  const need = parts(floor);
+  for (let i = 0; i < need.length; i++) {
+    const a = have[i] ?? 0;
+    if (Number.isNaN(a)) return false;
+    if (a !== need[i]) return a > need[i];
+  }
+  return true;
+}
+
 type PackageJson = {
   version?: string;
   main?: string;
@@ -149,27 +168,42 @@ function pickCondition(target: unknown): string | null {
 export function resolveWorkspacePackage(userCwd: string, name: string): ResolvedPackage | null {
   let dir = path.resolve(userCwd);
   while (true) {
-    const pkgJsonPath = path.join(dir, 'node_modules', name, 'package.json');
-    if (existsSync(pkgJsonPath)) {
-      let pkg: PackageJson;
-      try {
-        pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as PackageJson;
-      } catch {
-        return null;
-      }
-      const entry = entryFromPackageJson(pkg);
-      if (!entry) return null;
-      const pkgDir = path.dirname(pkgJsonPath);
-      return { dir: pkgDir, version: pkg.version ?? '0.0.0', entry: path.resolve(pkgDir, entry) };
-    }
+    const pkgDir = path.join(dir, 'node_modules', name);
+    if (existsSync(path.join(pkgDir, 'package.json'))) return readPackageAt(pkgDir);
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
   }
 }
 
-export async function importWorkspacePackage<T>(userCwd: string, name: string): Promise<T | null> {
-  const resolved = resolveWorkspacePackage(userCwd, name);
+function readPackageAt(pkgDir: string): ResolvedPackage | null {
+  let pkg: PackageJson;
+  try {
+    pkg = JSON.parse(readFileSync(path.join(pkgDir, 'package.json'), 'utf8')) as PackageJson;
+  } catch {
+    return null;
+  }
+  const entry = entryFromPackageJson(pkg);
+  if (!entry) return null;
+  return { dir: pkgDir, version: pkg.version ?? '0.0.0', entry: path.resolve(pkgDir, entry) };
+}
+
+export function resolveAgentPackage(
+  userCwd: string,
+  name: string,
+  env: NodeJS.ProcessEnv = process.env,
+): ResolvedPackage | null {
+  const own = resolveWorkspacePackage(userCwd, name);
+  if (own) return own;
+  for (const dir of (env[AGENT_MODULES_ENV] ?? '').split(path.delimiter).filter(Boolean)) {
+    const pkgDir = path.join(dir, name);
+    if (existsSync(path.join(pkgDir, 'package.json'))) return readPackageAt(pkgDir);
+  }
+  return null;
+}
+
+export async function importAgentPackage<T>(userCwd: string, name: string): Promise<T | null> {
+  const resolved = resolveAgentPackage(userCwd, name);
   if (!resolved) return null;
   return (await import(pathToFileURL(resolved.entry).href)) as T;
 }

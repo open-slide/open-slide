@@ -247,15 +247,28 @@ describe('createAgentRunner', () => {
     expect(questions[0]).toMatchObject({ status: 'cancelled' });
   });
 
-  it('auto-approves permissions when asked to', async () => {
+  it('runs in auto permission mode unless told otherwise', async () => {
+    const captured: ProviderRunOptions[] = [];
+    const { store, runner } = setup(async (opts) => {
+      captured.push(opts);
+    });
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'go' });
+    await settle();
+    await runner.send(session.id, { text: 'again', permissionMode: 'supervised' });
+    await settle();
+    expect(captured.map((o) => o.permissionMode)).toEqual(['auto', 'supervised']);
+  });
+
+  it('leaves permission requests to the user, even in full access', async () => {
     const { store, runner } = setup(async (opts) => {
       await opts.requestPermission({ tool: 'Bash', title: 'Run', detail: 'ls' });
     });
     const session = store.create('claude', null);
-    await runner.send(session.id, { text: 'go', autoApprove: true });
+    await runner.send(session.id, { text: 'go', permissionMode: 'fullAccess' });
     await settle();
     expect(sessionOf(store, session.id).items.find((i) => i.kind === 'permission')).toMatchObject({
-      status: 'allowed',
+      status: 'pending',
     });
   });
 
@@ -285,6 +298,45 @@ describe('createAgentRunner', () => {
     expect(items.find((i) => i.kind === 'error')).toBeUndefined();
     expect(items.at(-1)).toMatchObject({ kind: 'result', aborted: true });
     expect(runner.stop(session.id)).toBe(false);
+  });
+
+  it('stopAll waits for stopped turns to end and their turn-end work to finish', async () => {
+    let releaseProvider = () => {};
+    let releaseTurnEnd = () => {};
+    const { store, runner } = setup(
+      async (opts) => {
+        await new Promise<void>((resolve) =>
+          opts.signal.addEventListener('abort', () => resolve()),
+        );
+        await new Promise<void>((resolve) => {
+          releaseProvider = resolve;
+        });
+      },
+      () =>
+        new Promise<void>((resolve) => {
+          releaseTurnEnd = resolve;
+        }),
+    );
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'go' });
+    await settle();
+
+    let stopped = false;
+    const stopping = runner.stopAll().then(() => {
+      stopped = true;
+    });
+    await settle();
+    expect(stopped).toBe(false);
+    expect(sessionOf(store, session.id).status).toBe('running');
+
+    releaseProvider();
+    await settle();
+    expect(sessionOf(store, session.id).items.at(-1)).toMatchObject({ aborted: true });
+    expect(stopped).toBe(false);
+
+    releaseTurnEnd();
+    await stopping;
+    expect(stopped).toBe(true);
   });
 
   it('surfaces provider failures as error items', async () => {

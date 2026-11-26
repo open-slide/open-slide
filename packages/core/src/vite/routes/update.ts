@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ViteDevServer } from 'vite';
 import { validateMutationRequest } from '../../http/request-guard.ts';
+import { isManagedCore } from '../../supervision.ts';
 import { type ApiContext, json } from './context.ts';
 
 // GET /__update-check  → { current, latest, outdated }
@@ -181,7 +182,7 @@ async function updatePackage(ctx: ApiContext): Promise<UpdateResult> {
 export function registerUpdateRoutes(server: ViteDevServer, ctx: ApiContext): void {
   server.middlewares.use('/__update-check', async (req, res, next) => {
     if ((req.method ?? 'GET') !== 'GET') return next();
-    const latest = await fetchLatest(Date.now());
+    const latest = isManagedCore() ? null : await fetchLatest(Date.now());
     const result: CheckResult = {
       current: ctx.coreVersion,
       latest,
@@ -196,6 +197,9 @@ export function registerUpdateRoutes(server: ViteDevServer, ctx: ApiContext): vo
 
     const guard = validateMutationRequest(req);
     if (!guard.ok) return json(res, guard.status, { error: guard.error });
+    if (isManagedCore()) {
+      return json(res, 409, { error: 'open-slide is updated by the app that runs it.' });
+    }
 
     try {
       updateInFlight ??= updatePackage(ctx).finally(() => {

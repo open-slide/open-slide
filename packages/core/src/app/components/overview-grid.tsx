@@ -10,6 +10,7 @@ import type { Page } from '../lib/sdk';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../lib/sdk';
 import type { SlideTransition } from '../lib/transition';
 import { SlideCanvas } from './slide-canvas';
+import { SafePage } from './slide-error';
 
 const THUMB_W = 320;
 const THUMB_H = (THUMB_W * CANVAS_HEIGHT) / CANVAS_WIDTH;
@@ -112,7 +113,7 @@ export function OverviewGrid({
       aria-modal="true"
       aria-label={t.present.overviewDialogAria}
       className={cn(
-        'absolute inset-0 z-50 flex flex-col backdrop-blur-sm',
+        'absolute inset-0 z-50 flex flex-col backdrop-blur-2xl backdrop-saturate-150',
         'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150',
         styles.surface,
       )}
@@ -244,7 +245,7 @@ function OverviewThumb({
           design={design}
         >
           <SlidePageProvider index={index} total={total}>
-            <PageComp />
+            <SafePage page={PageComp} />
           </SlidePageProvider>
         </SlideCanvas>
         {isCurrent && (
@@ -335,7 +336,7 @@ type OverviewStyles = {
 };
 
 const presentStyles = {
-  surface: 'bg-black/95',
+  surface: 'bg-black/80',
   eyebrow: 'text-white/55',
   thumbFocused: 'bg-white/10',
   thumbHover: 'hover:bg-white/5',
@@ -349,7 +350,7 @@ const presentStyles = {
 } as const;
 
 const editorStyles = {
-  surface: 'bg-background/95',
+  surface: 'bg-background/80',
   eyebrow: 'text-muted-foreground',
   thumbFocused: 'bg-muted',
   thumbHover: 'hover:bg-muted/60',

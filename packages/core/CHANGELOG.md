@@ -1,5 +1,55 @@
 # @open-slide/core
 
+## 2.4.0
+
+### Minor Changes
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Support the open-slide desktop app: open decks in its tabs, let its native window material show through the chrome, use the agent SDKs it bundles, and save or discard unsaved edits before it closes a tab.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Show the current page's background, transition, and step count in the Format panel when nothing is selected, with the background editable when the page sets it.
+
+### Patch Changes
+
+- [#648](https://github.com/open-slide/open-slide/pull/648) [`eb44cec`](https://github.com/open-slide/open-slide/commit/eb44cecc9fc1b067d2079111f1e7f0a7e07f5ee1) Thanks [@1weiho](https://github.com/1weiho)! - Move the agent model picker into the composer with a reasoning slider, add Supervised, Auto-accept edits, Auto and Full access permission modes with Auto as the default, and show the chat title in the agent panel header.
+
+- [#649](https://github.com/open-slide/open-slide/pull/649) [`7a68a29`](https://github.com/open-slide/open-slide/commit/7a68a2992dbd0fbe1e8271d3197c5bd562548f4f) Thanks [@1weiho](https://github.com/1weiho)! - Remove the Beta badge from the agent panel header.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Stream agent progress over the HMR socket so many open tabs no longer stall the app, finish saving agent conversations before the dev server exits, and find agent CLIs behind Windows command shims.
+
+- [#647](https://github.com/open-slide/open-slide/pull/647) [`d3cb4c9`](https://github.com/open-slide/open-slide/commit/d3cb4c993b43c93dd0b45ddaf8e3973fbc403984) Thanks [@1weiho](https://github.com/1weiho)! - Polish agent reply typography with faded scroll edges, and render nested lists, list start numbers, and `---` rules in agent replies and speaker notes.
+
+- [#627](https://github.com/open-slide/open-slide/pull/627) [`ceba46b`](https://github.com/open-slide/open-slide/commit/ceba46b553200371b23ac68f72ffdca8b6e6120f) Thanks [@1weiho](https://github.com/1weiho)! - Press Delete or Backspace in the visual editor to remove the selected elements; the removal is undoable and written on save.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Keep theme edits and their undo history when a save fails, keep design edits made while a save is in flight, and stop retried style saves from overwriting newer values.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Drop the `shadcn` CLI from runtime dependencies, cutting about 70 MB from installs.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Read oklch and other non-RGB colors in the Format panel.
+
+- [#632](https://github.com/open-slide/open-slide/pull/632) [`769699b`](https://github.com/open-slide/open-slide/commit/769699b5892867531b0c7e2fdbf5dd41fd8f3a98) Thanks [@1weiho](https://github.com/1weiho)! - Keep the settings a host app passes to the dev server in one module.
+
+- [#646](https://github.com/open-slide/open-slide/pull/646) [`7593419`](https://github.com/open-slide/open-slide/commit/759341983e6a824c0fda84a291d0ed4c724a61c2) Thanks [@1weiho](https://github.com/1weiho)! - Keep the language in sync across open tabs, so switching it on Home updates every deck tab in the desktop app.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Restyle menus with a frosted surface, a soft hover instead of an inverted fill, and a checkmark for the current language and theme.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Remove the "Agent connected" badge from the slide header, show the side panel without its open animation on first load, and make the sidebar's app title unselectable.
+
+- [#604](https://github.com/open-slide/open-slide/pull/604) [`0596aed`](https://github.com/open-slide/open-slide/commit/0596aed32c84bd794a76d125111c85b816786fc1) Thanks [@1weiho](https://github.com/1weiho)! - Keep speaker notes still being typed when you leave a slide or deck, and keep them on the right page when pages are reordered, duplicated, or deleted mid-save.
+
+- [#634](https://github.com/open-slide/open-slide/pull/634) [`69e72aa`](https://github.com/open-slide/open-slide/commit/69e72aaea5bdc12526c74f927eacac697e629d91) Thanks [@1weiho](https://github.com/1weiho)! - Give menus, popovers, dialogs, toasts and floating chrome a translucent, blurred material.
+
+## 2.3.2
+
+### Patch Changes
+
+- [#609](https://github.com/open-slide/open-slide/pull/609) [`034b070`](https://github.com/open-slide/open-slide/commit/034b07032f81ec6e9692f2463cdcb88b77a5d893) Thanks [@huntie](https://github.com/huntie)! - Keep slide text left-aligned in the overview grid and every other thumbnail instead of inheriting the host's alignment.
+
+- [#588](https://github.com/open-slide/open-slide/pull/588) [`d12e3e1`](https://github.com/open-slide/open-slide/commit/d12e3e1d8b208d326f3fce370e42bede3fb96b74) Thanks [@1weiho](https://github.com/1weiho)! - Show New deck before an agent is connected, so first-time users can create a deck and install an agent from the panel.
+
+- [#599](https://github.com/open-slide/open-slide/pull/599) [`2f7edd0`](https://github.com/open-slide/open-slide/commit/2f7edd01405e3da1d63d603ce4efe09568da3e97) Thanks [@Ruxiu0409](https://github.com/Ruxiu0409)! - Keep slide text left-aligned in the mobile thumbnail strip instead of inheriting the button's centered alignment.
+
+- [#589](https://github.com/open-slide/open-slide/pull/589) [`557b56e`](https://github.com/open-slide/open-slide/commit/557b56e277277ff16860eb7398fffae962866f0c) Thanks [@1weiho](https://github.com/1weiho)! - Fade to black when entering and leaving present mode, and nudge the slide with a hint when stepping past the last slide.
+
 ## 2.3.1
 
 ### Patch Changes

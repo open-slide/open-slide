@@ -7,9 +7,9 @@ const render = (text: string) => renderToStaticMarkup(<NoteMarkdown text={text} 
 describe('NoteMarkdown', () => {
   it('renders inline markdown as semantic elements', () => {
     const html = render('a **bold** and *soft* `cmd`');
-    expect(html).toContain('<strong class="font-semibold">bold</strong>');
+    expect(html).toContain('<strong>bold</strong>');
     expect(html).toContain('<em>soft</em>');
-    expect(html).toContain('>cmd</code>');
+    expect(html).toContain('<code>cmd</code>');
   });
 
   it('renders headings demoted to h4–h6', () => {
@@ -21,8 +21,12 @@ describe('NoteMarkdown', () => {
   });
 
   it('renders lists with the right element', () => {
-    expect(render('- a\n- b')).toMatch(/<ul[^>]*>.*<li>a<\/li><li>b<\/li>.*<\/ul>/);
-    expect(render('1. a\n2. b')).toMatch(/<ol[^>]*>.*<li>a<\/li><li>b<\/li>.*<\/ol>/);
+    expect(render('- a\n- b')).toContain('<ul><li>a</li><li>b</li></ul>');
+    expect(render('1. a\n2. b')).toContain('<ol><li>a</li><li>b</li></ol>');
+  });
+
+  it('renders nested lists inside their parent item and keeps the start number', () => {
+    expect(render('2. A\n   - a1')).toContain('<ol start="2"><li>A<ul><li>a1</li></ul></li></ol>');
   });
 
   it('joins paragraph lines with <br/> and splits paragraphs', () => {
@@ -36,7 +40,9 @@ describe('NoteMarkdown', () => {
     expect(html).not.toContain('<em>');
   });
 
-  it('preserves whitespace via a pre-wrap wrapper', () => {
-    expect(render('x')).toContain('whitespace-pre-wrap');
+  it('wraps output in the md container with any extra class', () => {
+    expect(renderToStaticMarkup(<NoteMarkdown text="x" className="extra" />)).toBe(
+      '<div class="md extra"><p>x</p></div>',
+    );
   });
 });

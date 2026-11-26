@@ -38,6 +38,7 @@ import { ProviderLogo } from '../components/agent/provider-logo';
 import { FolderIconChip, SLIDE_DND_MIME, SystemViewIcon } from '../components/sidebar/folder-item';
 import { ALL_SLIDES_ID, DRAFT_ID } from '../components/sidebar/sidebar';
 import { SlideCanvas } from '../components/slide-canvas';
+import { SafePage } from '../components/slide-error';
 import { SlidePageProvider } from '../lib/page-context';
 import type { Folder, SlideModule } from '../lib/sdk';
 import { loadSlide, slideCreatedAt, slideIds } from '../lib/slides';
@@ -323,10 +324,12 @@ function SortControl({ value, onChange }: { value: SortKey; onChange: (next: Sor
   );
 }
 
+// Offered even before an agent is connected: the new deck opens the agent
+// panel, which walks first-time users through installing one.
 function useCreateDeckWithAgent() {
-  const { provider } = useAgentStatus();
+  const { enabled, provider } = useAgentStatus();
   const start = useCreateDeck();
-  if (!provider) return null;
+  if (!enabled) return null;
   return { provider, start };
 }
 
@@ -339,7 +342,11 @@ function NewDeckButton() {
       size="sm"
       className="h-8 shrink-0"
       onClick={agent.start}
-      title={format(t.agent.createDeckWith, { provider: agent.provider.name })}
+      title={
+        agent.provider
+          ? format(t.agent.createDeckWith, { provider: agent.provider.name })
+          : t.agent.createDeck
+      }
     >
       <Plus />
       {t.agent.createDeck}
@@ -404,8 +411,10 @@ function EmptyState({ isDraft, folderName }: { isDraft: boolean; folderName?: st
             </p>
             {agent ? (
               <Button size="sm" className="mt-4" onClick={agent.start}>
-                <ProviderLogo provider={agent.provider.id} />
-                {format(t.agent.createDeckWith, { provider: agent.provider.name })}
+                {agent.provider ? <ProviderLogo provider={agent.provider.id} /> : <Plus />}
+                {agent.provider
+                  ? format(t.agent.createDeckWith, { provider: agent.provider.name })
+                  : t.agent.createDeck}
               </Button>
             ) : (
               <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
@@ -548,7 +557,7 @@ function SlideCard({
               <div className="h-full w-full">
                 <SlideCanvas flat freezeMotion design={slide?.design}>
                   <SlidePageProvider index={0} total={slide?.default.length ?? 1}>
-                    <FirstPage />
+                    <SafePage page={FirstPage} />
                   </SlidePageProvider>
                 </SlideCanvas>
               </div>
@@ -584,7 +593,7 @@ function SlideCard({
                   <button
                     type="button"
                     onClick={(e) => e.stopPropagation()}
-                    className="flex size-7 items-center justify-center rounded-[5px] bg-card/90 text-foreground shadow-edge ring-1 ring-border opacity-0 outline-none backdrop-blur hover:bg-card group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-ring/40 aria-expanded:opacity-100 motion-safe:transition-opacity motion-safe:duration-150"
+                    className="flex size-7 items-center justify-center rounded-[5px] bg-material text-foreground shadow-edge ring-1 ring-border opacity-0 outline-none backdrop-blur-xl backdrop-saturate-150 hover:bg-card group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-ring/40 aria-expanded:opacity-100 motion-safe:transition-opacity motion-safe:duration-150"
                     aria-label={tCard.home.slideActions}
                   >
                     <MoreHorizontal className="size-3.5" />

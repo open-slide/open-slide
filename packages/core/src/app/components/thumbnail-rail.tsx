@@ -2,9 +2,11 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
+  type UniqueIdentifier,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -37,6 +39,7 @@ import {
 } from '@/components/ui/context-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { haptic } from '@/lib/desktop';
 import { format, plural, useLocale } from '@/lib/use-locale';
 import { cn, pad2 } from '@/lib/utils';
 import type { DesignSystem } from '../lib/design';
@@ -46,6 +49,7 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../lib/sdk';
 import type { SlideTransition } from '../lib/transition';
 import { prefersReducedMotion } from '../lib/use-prefers-reduced-motion';
 import { SlideCanvas } from './slide-canvas';
+import { SafePage } from './slide-error';
 import {
   getCenteredThumbnailScrollTop,
   getThumbnailOffscreenDirection,
@@ -326,39 +330,42 @@ export function ThumbnailRail({
     );
   }
 
-  const list = (
-    <aside className="flex flex-col gap-2 px-3 pb-3">
-      <div className="-mx-3 sticky top-0 z-10 bg-sidebar px-4 pt-3 pb-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="eyebrow">{t.thumbnailRail.pages}</span>
-          <div className="flex items-center gap-1.5">
-            <span className="folio">{pad2(pages.length)}</span>
-            {onOverview && (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      onClick={onOverview}
-                      aria-label={t.thumbnailRail.overviewAria}
-                      className={cn(
-                        'flex size-5 items-center justify-center rounded-[3px] text-muted-foreground/70 outline-none',
-                        'motion-safe:transition-colors hover:bg-muted hover:text-foreground',
-                        'focus-visible:ring-1 focus-visible:ring-brand',
-                      )}
-                    >
-                      <Grid2x2 className="size-3.5" strokeWidth={1.75} />
-                    </button>
-                  }
-                />
-                <TooltipContent side="bottom" sideOffset={6}>
-                  {t.thumbnailRail.overviewAria}
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
+  const header = (
+    <div className="shrink-0 px-4 pt-3 pb-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="eyebrow">{t.thumbnailRail.pages}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="folio">{pad2(pages.length)}</span>
+          {onOverview && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={onOverview}
+                    aria-label={t.thumbnailRail.overviewAria}
+                    className={cn(
+                      'flex size-5 items-center justify-center rounded-[3px] text-muted-foreground/70 outline-none',
+                      'motion-safe:transition-colors hover:bg-muted hover:text-foreground',
+                      'focus-visible:ring-1 focus-visible:ring-brand',
+                    )}
+                  >
+                    <Grid2x2 className="size-3.5" strokeWidth={1.75} />
+                  </button>
+                }
+              />
+              <TooltipContent side="bottom" sideOffset={6}>
+                {t.thumbnailRail.overviewAria}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
+    </div>
+  );
+
+  const list = (
+    <aside className="px-3 pb-3">
       <VirtualThumbList
         pages={pages}
         current={current}
@@ -382,22 +389,25 @@ export function ThumbnailRail({
 
   return (
     <TooltipProvider delay={200}>
-      <div className="relative h-full">
-        <ScrollArea className="h-full bg-sidebar [&_[data-slot=scroll-area-scrollbar]]:z-20">
-          {scrollAreaContents}
-        </ScrollArea>
-        {currentPosition && (
-          <CurrentThumbnailButton
-            direction={currentPosition}
-            label={format(
-              currentPosition === 'above'
-                ? t.thumbnailRail.scrollUpToCurrentPage
-                : t.thumbnailRail.scrollDownToCurrentPage,
-              { n: current + 1 },
-            )}
-            onActivate={scrollToCurrent}
-          />
-        )}
+      <div className="flex h-full flex-col bg-sidebar">
+        {header}
+        <div className="relative min-h-0 flex-1">
+          <ScrollArea className="h-full [&_[data-slot=scroll-area-scrollbar]]:z-20">
+            {scrollAreaContents}
+          </ScrollArea>
+          {currentPosition && (
+            <CurrentThumbnailButton
+              direction={currentPosition}
+              label={format(
+                currentPosition === 'above'
+                  ? t.thumbnailRail.scrollUpToCurrentPage
+                  : t.thumbnailRail.scrollDownToCurrentPage,
+                { n: current + 1 },
+              )}
+              onActivate={scrollToCurrent}
+            />
+          )}
+        </div>
       </div>
     </TooltipProvider>
   );
@@ -441,9 +451,9 @@ function CurrentThumbnailButton({
               onActivate(true);
             }}
             className={cn(
-              'pointer-events-auto absolute left-1/2 z-30 -translate-x-1/2 bg-card/95 shadow-floating backdrop-blur-sm',
+              'pointer-events-auto absolute left-1/2 z-30 -translate-x-1/2 bg-material shadow-floating backdrop-blur-xl backdrop-saturate-150',
               'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-150',
-              direction === 'above' ? 'top-10' : 'bottom-3',
+              direction === 'above' ? 'top-3' : 'bottom-3',
             )}
           >
             <Icon className="size-3.5" strokeWidth={1.75} aria-hidden />
@@ -568,7 +578,7 @@ function HorizontalVirtualThumbList({
         aria-label={format(t.thumbnailRail.goToPageAria, { n: i + 1 })}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'group/thumb relative flex shrink-0 flex-col items-center gap-1.5 rounded-[6px] outline-none motion-safe:transition-[scale] motion-safe:duration-100 active:scale-[0.985]',
+          'group/thumb relative flex shrink-0 flex-col items-center gap-1.5 rounded-[6px] text-left outline-none motion-safe:transition-[scale] motion-safe:duration-100 active:scale-[0.985]',
           'focus-visible:ring-1 focus-visible:ring-brand focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar',
         )}
       >
@@ -591,7 +601,7 @@ function HorizontalVirtualThumbList({
         >
           <SlideCanvas scale={scale} center={false} flat freezeMotion design={design}>
             <SlidePageProvider index={i} total={pages.length}>
-              <PageComp />
+              <SafePage page={PageComp} />
             </SlidePageProvider>
           </SlideCanvas>
         </div>
@@ -871,7 +881,7 @@ function ThumbContents({
       >
         <SlideCanvas scale={scale} center={false} flat freezeMotion design={design}>
           <SlidePageProvider index={index} total={total}>
-            <PageComp />
+            <SafePage page={PageComp} />
           </SlidePageProvider>
         </SlideCanvas>
       </div>
@@ -960,9 +970,18 @@ function SortableRail({
 
   const items = pages.map((_, i) => i + 1);
 
+  const overId = useRef<UniqueIdentifier | null>(null);
+
   const handleDragStart = (event: DragStartEvent) => {
+    overId.current = event.active.id;
     const i = (event.active.id as number) - 1;
     if (i >= 0) onSelect(i);
+  };
+
+  const handleDragOver = ({ over }: DragOverEvent) => {
+    if (!over || over.id === overId.current) return;
+    overId.current = over.id;
+    haptic('levelChange');
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -979,6 +998,7 @@ function SortableRail({
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={items} strategy={verticalListSortingStrategy}>

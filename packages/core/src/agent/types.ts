@@ -6,6 +6,14 @@ export const AGENT_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'
 
 export type AgentEffort = (typeof AGENT_EFFORTS)[number];
 
+export const AGENT_PERMISSION_MODES = ['supervised', 'acceptEdits', 'auto', 'fullAccess'] as const;
+
+export type AgentPermissionMode = (typeof AGENT_PERMISSION_MODES)[number];
+
+export function isAgentPermissionMode(value: unknown): value is AgentPermissionMode {
+  return typeof value === 'string' && (AGENT_PERMISSION_MODES as readonly string[]).includes(value);
+}
+
 export function isAgentProviderId(value: unknown): value is AgentProviderId {
   return typeof value === 'string' && (AGENT_PROVIDER_IDS as readonly string[]).includes(value);
 }
@@ -131,13 +139,20 @@ export type RespondPayload =
   | { allow: boolean }
   | { cancel: true };
 
-export type AgentStreamEvent =
+export const AGENT_EVENT = 'open-slide:agent';
+
+// `rev` numbers store events; a snapshot carries the rev it was taken at, so a
+// client can tell which events it already includes.
+export type AgentStreamEvent = (
   | { type: 'session'; session: AgentSessionSummary }
   | { type: 'session-removed'; sessionId: string }
   | { type: 'item'; sessionId: string; item: AgentItem }
   | { type: 'delta'; sessionId: string; itemId: string; text: string }
   | { type: 'truncate'; sessionId: string; itemId: string }
-  | { type: 'slide-renamed'; from: string; to: string };
+  | { type: 'slide-renamed'; from: string; to: string }
+) & { rev?: number };
+
+export type AgentSnapshot<T> = T & { rev: number };
 
 export function sessionSummary(session: AgentSession): AgentSessionSummary {
   const {

@@ -1,0 +1,29 @@
+appId: dev.open-slide.desktop
+productName: open-slide
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - "!dist/**/*.map"
+  - package.json
+  # The agents' native CLIs are a few hundred MB each; src/main/agent-cli.ts downloads them.
+  - "!**/node_modules/@anthropic-ai/claude-agent-sdk-*/**"
+  - "!**/node_modules/@openai/codex-{darwin,linux,win32}-*/**"
+  - "!**/node_modules/**/*.d.{ts,mts,cts}"
+# Other processes (dev server, SDKs, init) load these as plain files, and neither they nor
+# dlopen can read inside app.asar.
+asarUnpack:
+  - node_modules/**
+  - dist/native/**
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  target: [dmg, zip]
+win:
+  target: [nsis]
+  icon: build/icon.png
+linux:
+  target: [AppImage]
+  icon: build/icon.png
+  category: Office

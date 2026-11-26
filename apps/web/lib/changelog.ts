@@ -51,7 +51,7 @@ export const eras: Era[] = [
     label: 'v2',
     title: 'open-slide 2',
     blurb: 'React 19, an editor that edits, and an agent that lives next to your slides.',
-    span: 'Sep – Oct 2026',
+    span: 'Sep – Nov 2026',
     releases: [
       {
         line: '2.3',
@@ -79,7 +79,13 @@ export const eras: Era[] = [
             date: '2026-10-23',
             note: 'The agent modules now ship with the package, so `open-slide dev` no longer fails to resolve `agent/types`.',
           },
+          {
+            version: '2.3.2',
+            date: '2026-11-09',
+            note: 'A fade to black in and out of present mode, a nudge past the last slide, New deck available before an agent is connected, and slide text that stays left-aligned in every thumbnail.',
+          },
         ],
+        contributors: ['huntie', 'Ruxiu0409'],
       },
       {
         line: '2.2',

@@ -1,5 +1,5 @@
 import { type PackageManager, runCommand } from '../vite/routes/update.ts';
-import { commandVersion, findOnPath, resolveWorkspacePackage } from './detect.ts';
+import { commandVersion, findOnPath, resolveAgentPackage } from './detect.ts';
 import type { AgentProvider } from './provider.ts';
 import type { AgentProviderId, AgentProviderStatus, AgentStatus } from './types.ts';
 
@@ -9,7 +9,7 @@ async function providerStatus(
   userCwd: string,
   provider: AgentProvider,
 ): Promise<AgentProviderStatus> {
-  const sdk = resolveWorkspacePackage(userCwd, provider.sdkPackage);
+  const sdk = resolveAgentPackage(userCwd, provider.sdkPackage);
   const cliPath = findOnPath(provider.cliCommand);
   const [cliVersion, models] = await Promise.all([
     cliPath ? commandVersion(cliPath) : null,

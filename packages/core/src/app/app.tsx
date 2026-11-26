@@ -2,6 +2,7 @@ import config from 'virtual:open-slide/config';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
+import { DesktopBridge } from './lib/desktop';
 import { useLocale } from './lib/use-locale';
 import { AssetsPage } from './routes/assets';
 import { Home } from './routes/home';
@@ -33,6 +34,7 @@ export function App() {
         </Routes>
       </TooltipProvider>
       <Toaster />
+      <DesktopBridge />
     </BrowserRouter>
   );
 }
