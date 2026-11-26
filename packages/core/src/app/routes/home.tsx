@@ -38,6 +38,7 @@ import { ProviderLogo } from '../components/agent/provider-logo';
 import { FolderIconChip, SLIDE_DND_MIME, SystemViewIcon } from '../components/sidebar/folder-item';
 import { ALL_SLIDES_ID, DRAFT_ID } from '../components/sidebar/sidebar';
 import { SlideCanvas } from '../components/slide-canvas';
+import { SafePage } from '../components/slide-error';
 import { SlidePageProvider } from '../lib/page-context';
 import type { Folder, SlideModule } from '../lib/sdk';
 import { loadSlide, slideCreatedAt, slideIds } from '../lib/slides';
@@ -556,7 +557,7 @@ function SlideCard({
               <div className="h-full w-full">
                 <SlideCanvas flat freezeMotion design={slide?.design}>
                   <SlidePageProvider index={0} total={slide?.default.length ?? 1}>
-                    <FirstPage />
+                    <SafePage page={FirstPage} />
                   </SlidePageProvider>
                 </SlideCanvas>
               </div>

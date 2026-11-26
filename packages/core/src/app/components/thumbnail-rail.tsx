@@ -49,6 +49,7 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../lib/sdk';
 import type { SlideTransition } from '../lib/transition';
 import { prefersReducedMotion } from '../lib/use-prefers-reduced-motion';
 import { SlideCanvas } from './slide-canvas';
+import { SafePage } from './slide-error';
 import {
   getCenteredThumbnailScrollTop,
   getThumbnailOffscreenDirection,
@@ -600,7 +601,7 @@ function HorizontalVirtualThumbList({
         >
           <SlideCanvas scale={scale} center={false} flat freezeMotion design={design}>
             <SlidePageProvider index={i} total={pages.length}>
-              <PageComp />
+              <SafePage page={PageComp} />
             </SlidePageProvider>
           </SlideCanvas>
         </div>
@@ -880,7 +881,7 @@ function ThumbContents({
       >
         <SlideCanvas scale={scale} center={false} flat freezeMotion design={design}>
           <SlidePageProvider index={index} total={total}>
-            <PageComp />
+            <SafePage page={PageComp} />
           </SlidePageProvider>
         </SlideCanvas>
       </div>

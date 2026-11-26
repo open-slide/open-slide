@@ -4,6 +4,7 @@ import { format, useLocale } from '@/lib/use-locale';
 import { SlidePageProvider } from '../../lib/page-context';
 import { loadThemeDemo, type Theme, type ThemeDemoModule, themes } from '../../lib/themes';
 import { SlideCanvas } from '../slide-canvas';
+import { SafePage } from '../slide-error';
 
 export function ThemesGallery({ onOpen }: { onOpen: (id: string) => void }) {
   const t = useLocale();
@@ -85,7 +86,7 @@ function ThemePreview({ theme }: { theme: Theme }) {
     <div className="h-full w-full">
       <SlideCanvas flat freezeMotion design={demo.design}>
         <SlidePageProvider index={0} total={demo.default.length}>
-          <FirstPage />
+          <SafePage page={FirstPage} />
         </SlidePageProvider>
       </SlideCanvas>
     </div>

@@ -103,7 +103,9 @@ test.describe('slide viewer', () => {
 
   test('unknown slide ids show the load-failed state', async ({ page }) => {
     await page.goto('/s/does-not-exist');
-    await expect(page.getByText('Failed to load slide')).toBeVisible();
+    const screen = page.locator('[data-osd-slide-error="missing"]');
+    await expect(screen.getByRole('heading', { name: 'Slide not found' })).toBeVisible();
+    await expect(screen.getByRole('button', { name: 'Copy fix prompt' })).toHaveCount(0);
   });
 
   test('back button returns to the home browser', async ({ page }) => {

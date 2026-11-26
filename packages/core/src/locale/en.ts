@@ -15,7 +15,6 @@ export const en: Locale = {
     close: 'Close',
     loading: 'Loading',
     loadFailed: 'Load failed',
-    failedToLoadSlide: 'Failed to load slide',
     home: 'Home',
     add: 'Add',
     done: 'Done',
@@ -28,6 +27,20 @@ export const en: Locale = {
   notFound: {
     eyebrow: '404 · not found',
     title: 'Page not found',
+  },
+
+  slideError: {
+    compileTitle: "This slide doesn't compile",
+    moduleTitle: 'This slide threw while loading',
+    notFoundTitle: 'Slide not found',
+    renderTitle: 'Page {n} failed to render',
+    pageCrashed: 'Page failed to render',
+    staleNotice: 'Showing the last working version until the error is fixed.',
+    fixHint: 'Fix the error and save — the slide reloads on its own.',
+    details: 'Details',
+    copyPrompt: 'Copy fix prompt',
+    copied: 'Copied',
+    copyFailed: "Couldn't copy to clipboard",
   },
 
   home: {

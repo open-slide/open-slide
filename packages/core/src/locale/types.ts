@@ -17,7 +17,6 @@ export type Locale = {
     close: string;
     loading: string;
     loadFailed: string;
-    failedToLoadSlide: string;
     home: string;
     add: string;
     done: string;
@@ -30,6 +29,21 @@ export type Locale = {
   notFound: {
     eyebrow: string;
     title: string;
+  };
+
+  slideError: {
+    compileTitle: string;
+    moduleTitle: string;
+    notFoundTitle: string;
+    /** {n} = page number */
+    renderTitle: string;
+    pageCrashed: string;
+    staleNotice: string;
+    fixHint: string;
+    details: string;
+    copyPrompt: string;
+    copied: string;
+    copyFailed: string;
   };
 
   home: {
