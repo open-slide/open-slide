@@ -11,7 +11,26 @@ If you're authoring slides inside a scaffolded project, you don't need this file
 - **Ask a question or share what you're building** in [GitHub Discussions](https://github.com/open-slide/open-slide/discussions).
 - **Send a pull request** — see below.
 
-For non-trivial changes, please open an issue or discussion first so we can align on direction before you invest the time.
+## What we accept
+
+Review time is the scarcest resource on this project, so we're picky about what we take in.
+
+**Open a PR directly for:**
+
+- Bug fixes, including crashes, regressions, and real performance problems.
+- Small, focused polish: typos, docs fixes, missing translations, an obviously wrong style.
+- Tests for behavior that already exists.
+
+**Open an issue or discussion first, and wait for a maintainer to agree, before working on:**
+
+- New features or new public API in `@open-slide/core` or `@open-slide/cli`.
+- UI redesigns or changes to how an existing workflow behaves.
+- New dependencies.
+- Refactors, renames, or moves that don't fix a bug.
+
+A PR in the second group without a linked, agreed-upon issue will most likely be closed, however good the code is. Link the issue or discussion where a maintainer said yes.
+
+**One problem per PR.** Include everything that fix needs — code, tests, docs, changeset — and nothing else. Drive-by cleanups and a second fix belong in their own PRs. If a PR grows past `size:L` (see [PR size labels](#pr-size-labels)), consider whether it can be split.
 
 ## Repo layout
 
@@ -66,7 +85,7 @@ pnpm cli <script>
 
 ## Pull request workflow
 
-1. **Fork & branch.** Branch off `main`. Keep branches focused — one logical change per PR.
+1. **Fork & branch.** Branch off `main`. Keep branches focused — [one problem per PR](#what-we-accept).
 2. **Make your change.** Match the surrounding style. Don't reformat unrelated code.
 3. **Run the checks before pushing:**
    ```bash
@@ -93,8 +112,31 @@ pnpm cli <script>
    > Bad: `This change introduces a new loading indicator because the previous spinner felt heavy…`
 
    Don't bump versions or edit `CHANGELOG.md` by hand — `changeset version` owns that.
-5. **Open the PR.** Describe the problem, the change, and how you tested it. Link related issues. Screenshots or short clips help for UI changes.
+5. **Open the PR.** Use a [conventional commit](https://www.conventionalcommits.org/) title, such as `fix(core): keep speaker notes when duplicating a slide`. Fill in the PR template: the problem, the change, the linked issue, and how you verified it.
 6. **Address review feedback** by pushing follow-up commits. We'll squash on merge.
+
+### Show that it works
+
+Every PR needs a **Verification** section that says what you did and what you saw. "CI passes" or "tests pass" on its own isn't verification — CI already tells us that.
+
+- **Bug fixes:** how to reproduce the bug, and what happens before and after your change. A test that fails without the fix is the best evidence.
+- **UI changes:** before and after screenshots. Add a short clip when the change is about motion, timing, or interaction.
+- **Runtime changes:** what you exercised in `apps/demo` (which deck, which mode — editor, present, inspector).
+- **Anything you couldn't check:** say so, e.g. "not tested on Windows".
+
+Upload screenshots and clips to the PR description. Don't commit them to the repo.
+
+### PR size labels
+
+A bot labels every PR from `size:XS` to `size:XL` by changed lines. Tests, lockfiles, changesets, and generated files don't count, so adding tests never makes a PR look bigger. The label is a hint for reviewers, not a gate — but smaller PRs get reviewed sooner.
+
+| Label | Changed lines |
+| --- | --- |
+| `size:XS` | 0–9 |
+| `size:S` | 10–49 |
+| `size:M` | 50–199 |
+| `size:L` | 200–499 |
+| `size:XL` | 500+ |
 
 ## Style & conventions
 

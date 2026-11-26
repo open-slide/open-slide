@@ -1,0 +1,98 @@
+name: PR Size
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-size-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      # pull_request_target runs with a write token, so this job only reads the PR's file list
+      # through the API. Never check out or run code from the PR here.
+      - name: Sync size label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const SIZES = [
+              { name: "size:XS", max: 9, color: "0e8a16" },
+              { name: "size:S", max: 49, color: "5ebd3e" },
+              { name: "size:M", max: 199, color: "fbca04" },
+              { name: "size:L", max: 499, color: "fe7d37" },
+              { name: "size:XL", max: Infinity, color: "d93f0b" },
+            ];
+            const GENERATED = [
+              /(^|\/)pnpm-lock\.yaml$/,
+              /(^|\/)CHANGELOG\.md$/,
+              /^\.changeset\//,
+              /^packages\/core\/src\/app\/components\/ui\//,
+              /\.snap$/,
+            ];
+            const TESTS = [/\.(test|spec)\.[cm]?[jt]sx?$/, /(^|\/)(__tests__|e2e)\//];
+            const matches = (patterns, f) => patterns.some((re) => re.test(f.filename));
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: issue_number,
+              per_page: 100,
+            });
+            const lines = (list) => list.reduce((sum, f) => sum + f.additions + f.deletions, 0);
+            const authored = files.filter((f) => !matches(GENERATED, f));
+            const source = authored.filter((f) => !matches(TESTS, f));
+            // Tests are free next to source changes, but a tests-only PR still needs a real size.
+            const changed = source.length > 0 ? lines(source) : lines(authored);
+            const size = SIZES.find((s) => changed <= s.max);
+
+            for (const s of SIZES) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: s.name });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                const range = Number.isFinite(s.max) ? `up to ${s.max}` : "500+";
+                await github.rest.issues
+                  .createLabel({
+                    owner,
+                    repo,
+                    name: s.name,
+                    color: s.color,
+                    description: `${range} changed lines, excluding tests, lockfiles, and generated files.`,
+                  })
+                  .catch((e) => {
+                    if (e.status !== 422) throw e;
+                  });
+              }
+            }
+
+            const { data: current } = await github.rest.issues.listLabelsOnIssue({
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            for (const label of current) {
+              if (label.name === size.name || !SIZES.some((s) => s.name === label.name)) continue;
+              await github.rest.issues
+                .removeLabel({ owner, repo, issue_number, name: label.name })
+                .catch((e) => {
+                  if (e.status !== 404) throw e;
+                });
+            }
+            if (!current.some((label) => label.name === size.name)) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [size.name] });
+            }
+
+            core.info(`#${issue_number}: ${changed} counted lines across ${files.length} files -> ${size.name}`);
