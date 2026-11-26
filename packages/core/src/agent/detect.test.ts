@@ -10,6 +10,7 @@ import {
   parseVersion,
   resolveAgentPackage,
   resolveWorkspacePackage,
+  versionAtLeast,
 } from './detect.ts';
 
 let dir: string;
@@ -20,6 +21,21 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
+});
+
+describe('versionAtLeast', () => {
+  it('compares numeric parts rather than strings', () => {
+    expect(versionAtLeast('0.2.91', '0.2.91')).toBe(true);
+    expect(versionAtLeast('0.2.100', '0.2.91')).toBe(true);
+    expect(versionAtLeast('0.3.0', '0.2.91')).toBe(true);
+    expect(versionAtLeast('0.2.90', '0.2.91')).toBe(false);
+    expect(versionAtLeast('2.1.91-beta.1', '2.1.91')).toBe(true);
+  });
+
+  it('treats a missing or unreadable version as too old', () => {
+    expect(versionAtLeast(null, '0.2.91')).toBe(false);
+    expect(versionAtLeast('next', '0.2.91')).toBe(false);
+  });
 });
 
 describe('parseVersion', () => {

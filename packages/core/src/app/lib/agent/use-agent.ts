@@ -7,6 +7,7 @@ import {
   type AgentEffort,
   type AgentItem,
   type AgentModelOption,
+  type AgentPermissionMode,
   type AgentProviderId,
   type AgentSession,
   type AgentSessionSummary,
@@ -15,6 +16,7 @@ import {
   type AgentStreamEvent,
   type AgentTurnContext,
   isAgentEffort,
+  isAgentPermissionMode,
   isAgentProviderId,
   type RespondPayload,
 } from '../../../agent/types';
@@ -32,7 +34,7 @@ type State = {
   activeId: string | null;
   provider: AgentProviderId;
   modelChoices: Partial<Record<AgentProviderId, ModelChoice>>;
-  autoApprove: boolean;
+  permissionMode: AgentPermissionMode;
   dockOpen: boolean;
   request: AgentRequest | null;
   installing: AgentProviderId | null;
@@ -48,7 +50,7 @@ type Handoff = { slideId: string; sessionId: string };
 const ACTIVE_KEY = 'open-slide:agent-session';
 const PROVIDER_KEY = 'open-slide:agent-provider';
 const MODEL_KEY = 'open-slide:agent-model';
-const AUTO_APPROVE_KEY = 'open-slide:agent-auto-approve';
+const PERMISSION_KEY = 'open-slide:agent-permission-mode';
 const DOCK_KEY = 'open-slide:agent-dock';
 const NEW_DECK_KEY = 'open-slide:agent-new-deck';
 const HANDOFF_KEY = 'open-slide:agent-handoff';
@@ -113,7 +115,7 @@ let state: State = {
     return isAgentProviderId(stored) ? stored : 'claude';
   })(),
   modelChoices: readModelChoices(),
-  autoApprove: readStorage(AUTO_APPROVE_KEY) === '1',
+  permissionMode: readPermissionMode(),
   dockOpen: readStorage(DOCK_KEY) === '1',
   request: null,
   installing: null,
@@ -371,7 +373,7 @@ function turnSettings(id: string) {
   const status = state.status?.providers.find((p) => p.id === provider);
   const choice = status ? resolveModelChoice(status.models, state.modelChoices[provider]) : null;
   return {
-    autoApprove: state.autoApprove,
+    permissionMode: state.permissionMode,
     model: choice?.model.id || null,
     effort: choice?.effort ?? null,
   };
@@ -492,9 +494,14 @@ export function resolveModelChoice(
   return { model, effort };
 }
 
-export function setAutoApprove(value: boolean): void {
-  writeStorage(AUTO_APPROVE_KEY, value ? '1' : null);
-  setState({ autoApprove: value });
+function readPermissionMode(): AgentPermissionMode {
+  const stored = readStorage(PERMISSION_KEY);
+  return isAgentPermissionMode(stored) ? stored : 'auto';
+}
+
+export function setPermissionMode(mode: AgentPermissionMode): void {
+  writeStorage(PERMISSION_KEY, mode);
+  setState({ permissionMode: mode });
 }
 
 export function setDockOpen(open: boolean): void {

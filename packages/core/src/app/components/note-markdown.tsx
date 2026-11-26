@@ -1,7 +1,6 @@
 import { Fragment, type ReactNode, useMemo } from 'react';
 import { type NoteBlock, type NoteInline, parseNoteMarkdown } from '@/lib/note-markdown';
-
-const CODE_CLASS = 'rounded-[3px] bg-foreground/12 px-[0.3em] py-[0.1em] font-mono text-[0.9em]';
+import { cn } from '@/lib/utils';
 
 function renderInline(nodes: NoteInline[]): ReactNode {
   return nodes.map((node, i) => {
@@ -12,9 +11,7 @@ function renderInline(nodes: NoteInline[]): ReactNode {
       case 'strong':
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: static parse output, never reordered
-          <strong key={i} className="font-semibold">
-            {renderInline(node.children)}
-          </strong>
+          <strong key={i}>{renderInline(node.children)}</strong>
         );
       case 'em':
         return (
@@ -24,9 +21,7 @@ function renderInline(nodes: NoteInline[]): ReactNode {
       case 'code':
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: static parse output, never reordered
-          <code key={i} className={CODE_CLASS}>
-            {node.text}
-          </code>
+          <code key={i}>{node.text}</code>
         );
       default:
         return node satisfies never;
@@ -34,7 +29,9 @@ function renderInline(nodes: NoteInline[]): ReactNode {
   });
 }
 
-const HEADING_SIZES = { 1: 'text-[1.25em]', 2: 'text-[1.12em]', 3: 'text-[1.05em]' } as const;
+function renderBlocks(blocks: NoteBlock[]): ReactNode {
+  return blocks.map(renderBlock);
+}
 
 function renderBlock(block: NoteBlock, key: number): ReactNode {
   switch (block.type) {
@@ -42,26 +39,24 @@ function renderBlock(block: NoteBlock, key: number): ReactNode {
       // h4–h6 so note headings stay below the app's own UI headings in the
       // presenter window's document outline.
       const Tag = `h${block.level + 3}` as 'h4' | 'h5' | 'h6';
-      return (
-        <Tag key={key} className={`font-semibold ${HEADING_SIZES[block.level]}`}>
-          {renderInline(block.children)}
-        </Tag>
-      );
+      return <Tag key={key}>{renderInline(block.children)}</Tag>;
     }
     case 'list': {
       const Tag = block.ordered ? 'ol' : 'ul';
       return (
-        <Tag
-          key={key}
-          className={`space-y-[0.2em] pl-[1.4em] ${block.ordered ? 'list-decimal' : 'list-disc'}`}
-        >
+        <Tag key={key} start={block.ordered && block.start !== 1 ? block.start : undefined}>
           {block.items.map((item, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: static parse output, never reordered
-            <li key={i}>{renderInline(item)}</li>
+            <li key={i}>
+              {renderInline(item.content)}
+              {renderBlocks(item.children)}
+            </li>
           ))}
         </Tag>
       );
     }
+    case 'rule':
+      return <hr key={key} />;
     case 'paragraph':
       return (
         <p key={key}>
@@ -79,7 +74,7 @@ function renderBlock(block: NoteBlock, key: number): ReactNode {
   }
 }
 
-export function NoteMarkdown({ text }: { text: string }) {
+export function NoteMarkdown({ text, className }: { text: string; className?: string }) {
   const blocks = useMemo(() => parseNoteMarkdown(text), [text]);
-  return <div className="space-y-[0.65em] whitespace-pre-wrap">{blocks.map(renderBlock)}</div>;
+  return <div className={cn('md', className)}>{renderBlocks(blocks)}</div>;
 }

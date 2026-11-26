@@ -563,10 +563,6 @@ export const es: Locale = {
   },
   agent: {
     title: 'Agente',
-    beta: 'Beta',
-    betaTitle: 'Versión preliminar',
-    betaHint:
-      'Las respuestas, ediciones y acciones pueden fallar o hacer algo inesperado de vez en cuando.',
     open: 'Agente',
     openTitle: 'Abrir el panel del agente',
     close: 'Cerrar el panel del agente',
@@ -609,12 +605,25 @@ export const es: Locale = {
     deny: 'Denegar',
     allowed: 'Permitido',
     denied: 'Denegado',
-    autoApprove: 'Aprobar automáticamente',
-    autoApproveHint:
-      'Ejecuta comandos sin preguntar. Las ediciones dentro del workspace siempre se permiten.',
-    resultDone: 'Listo',
-    resultStopped: 'Detenido',
-    resultSeconds: '{seconds}s',
+    permissionMode: 'Permisos',
+    permissionModes: {
+      supervised: 'Supervisado',
+      acceptEdits: 'Aceptar ediciones',
+      auto: 'Automático',
+      fullAccess: 'Acceso total',
+    },
+    permissionHints: {
+      supervised: 'Pregunta antes de ejecutar comandos y cambiar archivos.',
+      acceptEdits: 'Aprueba las ediciones automáticamente; otras acciones pueden preguntar.',
+      auto: 'Una revisión automática aprueba las acciones habituales y pregunta por el resto.',
+      fullAccess: 'Ejecuta comandos y ediciones sin preguntar.',
+    },
+    permissionHintsCodex: {
+      supervised: 'Codex no puede preguntar durante un turno, así que solo lee y sugiere cambios.',
+      acceptEdits: 'Edita y ejecuta comandos dentro del sandbox del espacio de trabajo.',
+      auto: 'Edita y ejecuta comandos dentro del sandbox del espacio de trabajo.',
+      fullAccess: 'Ejecuta comandos y ediciones sin sandbox.',
+    },
     errorEyebrow: 'Error',
     statusLoading: 'Comprobando agentes',
     disabled: 'El panel del agente está desactivado en open-slide.config.ts.',
@@ -656,6 +665,8 @@ export const es: Locale = {
     modelDefault: 'Predeterminado',
     reasoning: 'Razonamiento',
     effortAuto: 'Auto',
+    effortFaster: 'Más rápido',
+    effortSmarter: 'Más listo',
     efforts: {
       minimal: 'Mínimo',
       low: 'Bajo',

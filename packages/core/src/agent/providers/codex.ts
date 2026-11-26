@@ -11,8 +11,22 @@ import {
   ProviderUnavailableError,
 } from '../provider.ts';
 import { newId } from '../store.ts';
-import { type AgentModelOption, isAgentEffort } from '../types.ts';
-import type { CodexItem, CodexSdkModule, CodexThreadEvent } from './sdk-types.ts';
+import { type AgentModelOption, type AgentPermissionMode, isAgentEffort } from '../types.ts';
+import type {
+  CodexItem,
+  CodexSdkModule,
+  CodexThreadEvent,
+  CodexThreadOptions,
+} from './sdk-types.ts';
+
+// `codex exec` has no channel to ask for approval mid-turn, so each mode is a
+// sandbox: supervised keeps Codex read-only and leaves the edits to the user.
+const CODEX_SANDBOXES: Record<AgentPermissionMode, CodexThreadOptions['sandboxMode']> = {
+  supervised: 'read-only',
+  acceptEdits: 'workspace-write',
+  auto: 'workspace-write',
+  fullAccess: 'danger-full-access',
+};
 
 const CODEX_SDK_PACKAGE = '@openai/codex-sdk';
 
@@ -188,7 +202,7 @@ export function createCodexProvider(): AgentProvider {
       const threadOptions = {
         workingDirectory: opts.cwd,
         skipGitRepoCheck: true,
-        sandboxMode: 'workspace-write' as const,
+        sandboxMode: CODEX_SANDBOXES[opts.permissionMode],
         approvalPolicy: 'never' as const,
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.effort ? { modelReasoningEffort: opts.effort } : {}),

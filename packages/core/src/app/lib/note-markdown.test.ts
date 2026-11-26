@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { type NoteInline, parseInline, parseNoteMarkdown } from './note-markdown.ts';
+import {
+  type NoteBlock,
+  type NoteInline,
+  parseInline,
+  parseNoteMarkdown,
+} from './note-markdown.ts';
 
 const text = (t: string): NoteInline => ({ type: 'text', text: t });
+const item = (content: NoteInline[], children: NoteBlock[] = []) => ({ content, children });
 
 describe('parseInline', () => {
   it('returns plain text untouched', () => {
@@ -90,7 +96,8 @@ describe('parseNoteMarkdown', () => {
       {
         type: 'list',
         ordered: false,
-        items: [[text('a')], [{ type: 'strong', children: [text('b')] }]],
+        start: 1,
+        items: [item([text('a')]), item([{ type: 'strong', children: [text('b')] }])],
       },
       { type: 'paragraph', lines: [[text('tail')]] },
     ]);
@@ -98,14 +105,71 @@ describe('parseNoteMarkdown', () => {
 
   it('parses ordered lists with dot or paren markers', () => {
     expect(parseNoteMarkdown('1. a\n2) b')).toEqual([
-      { type: 'list', ordered: true, items: [[text('a')], [text('b')]] },
+      { type: 'list', ordered: true, start: 1, items: [item([text('a')]), item([text('b')])] },
+    ]);
+  });
+
+  it('nests indented items under their parent so numbering continues', () => {
+    expect(parseNoteMarkdown('1. **A**\n  - a1\n  - a2\n2. B\n   - b1')).toEqual([
+      {
+        type: 'list',
+        ordered: true,
+        start: 1,
+        items: [
+          item(
+            [{ type: 'strong', children: [text('A')] }],
+            [
+              {
+                type: 'list',
+                ordered: false,
+                start: 1,
+                items: [item([text('a1')]), item([text('a2')])],
+              },
+            ],
+          ),
+          item(
+            [text('B')],
+            [{ type: 'list', ordered: false, start: 1, items: [item([text('b1')])] }],
+          ),
+        ],
+      },
+    ]);
+  });
+
+  it('keeps a list together across blank lines between items', () => {
+    expect(parseNoteMarkdown('1. a\n\n2. b\n\n   more\n\nafter')).toEqual([
+      {
+        type: 'list',
+        ordered: true,
+        start: 1,
+        items: [
+          item([text('a')]),
+          item([text('b')], [{ type: 'paragraph', lines: [[text('more')]] }]),
+        ],
+      },
+      { type: 'paragraph', lines: [[text('after')]] },
+    ]);
+  });
+
+  it('records the starting number of an ordered list', () => {
+    expect(parseNoteMarkdown('3. c\n4. d')).toEqual([
+      { type: 'list', ordered: true, start: 3, items: [item([text('c')]), item([text('d')])] },
+    ]);
+  });
+
+  it('parses thematic breaks', () => {
+    expect(parseNoteMarkdown('a\n---\nb\n\n* * *')).toEqual([
+      { type: 'paragraph', lines: [[text('a')]] },
+      { type: 'rule' },
+      { type: 'paragraph', lines: [[text('b')]] },
+      { type: 'rule' },
     ]);
   });
 
   it('keeps unordered and ordered runs as separate lists', () => {
     expect(parseNoteMarkdown('- a\n1. b')).toEqual([
-      { type: 'list', ordered: false, items: [[text('a')]] },
-      { type: 'list', ordered: true, items: [[text('b')]] },
+      { type: 'list', ordered: false, start: 1, items: [item([text('a')])] },
+      { type: 'list', ordered: true, start: 1, items: [item([text('b')])] },
     ]);
   });
 

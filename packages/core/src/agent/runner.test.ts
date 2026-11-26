@@ -247,15 +247,28 @@ describe('createAgentRunner', () => {
     expect(questions[0]).toMatchObject({ status: 'cancelled' });
   });
 
-  it('auto-approves permissions when asked to', async () => {
+  it('runs in auto permission mode unless told otherwise', async () => {
+    const captured: ProviderRunOptions[] = [];
+    const { store, runner } = setup(async (opts) => {
+      captured.push(opts);
+    });
+    const session = store.create('claude', null);
+    await runner.send(session.id, { text: 'go' });
+    await settle();
+    await runner.send(session.id, { text: 'again', permissionMode: 'supervised' });
+    await settle();
+    expect(captured.map((o) => o.permissionMode)).toEqual(['auto', 'supervised']);
+  });
+
+  it('leaves permission requests to the user, even in full access', async () => {
     const { store, runner } = setup(async (opts) => {
       await opts.requestPermission({ tool: 'Bash', title: 'Run', detail: 'ls' });
     });
     const session = store.create('claude', null);
-    await runner.send(session.id, { text: 'go', autoApprove: true });
+    await runner.send(session.id, { text: 'go', permissionMode: 'fullAccess' });
     await settle();
     expect(sessionOf(store, session.id).items.find((i) => i.kind === 'permission')).toMatchObject({
-      status: 'allowed',
+      status: 'pending',
     });
   });
 
