@@ -76,6 +76,8 @@ export type RunStyle = {
   baselineShift: 'super' | 'sub' | null;
   shadow: TextShadow | null;
   outline: { width: number; color: Rgba } | null;
+  /** Target of the enclosing `<a href>`, emitted as a run-level click hyperlink. */
+  link?: string | null;
 };
 
 export type Run = { text: string; style: RunStyle };
