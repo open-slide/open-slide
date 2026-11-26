@@ -147,7 +147,7 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
         type="button"
         aria-label="Settings"
         title="Settings"
-        onClick={() => desktop.window.openSettings()}
+        onClick={() => desktop.settings.open()}
         className="no-drag flex size-7 shrink-0 items-center justify-center rounded-[7px] text-foreground/60 outline-none transition-[background-color,color,scale] duration-100 hover:bg-foreground/[0.06] hover:text-foreground active:scale-95 focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         <Settings className="size-4" />

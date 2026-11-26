@@ -13,7 +13,8 @@ import {
   LoadingLabel,
   LogView,
   ProgressLine,
-  SectionCard,
+  SettingRow,
+  SettingsGroup,
   StatusDot,
 } from './primitives';
 
@@ -81,15 +82,13 @@ export function AgentsSection() {
     useAgents();
 
   return (
-    <>
-      <p className="text-[13px] leading-relaxed text-muted-foreground">
-        The agent panel inside each deck drives Claude Code or Codex. If the agent isn't installed
-        on this computer yet, signing in downloads it once — there is nothing else to set up.
-      </p>
+    <div className="flex flex-col gap-3">
       {agents === null ? (
-        <SectionCard>
-          <LoadingLabel>Checking agents</LoadingLabel>
-        </SectionCard>
+        <SettingsGroup>
+          <div className="px-4 py-4">
+            <LoadingLabel>Checking agents</LoadingLabel>
+          </div>
+        </SettingsGroup>
       ) : (
         agents.map((agent) => (
           <AgentCard
@@ -105,8 +104,8 @@ export function AgentsSection() {
       )}
       <Button
         size="sm"
-        variant="outline"
-        className="self-start"
+        variant="ghost"
+        className="mt-1 self-start"
         disabled={refreshing}
         onClick={() => void refresh()}
       >
@@ -116,7 +115,7 @@ export function AgentsSection() {
         />
         Check again
       </Button>
-    </>
+    </div>
   );
 }
 
@@ -147,41 +146,45 @@ function AgentCard({
   const available = status !== 'unavailable';
 
   return (
-    <SectionCard>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="flex items-center gap-2 font-heading text-[14px] font-semibold tracking-tight">
+    <SettingsGroup>
+      <SettingRow
+        label={
+          <span className="flex items-center gap-2">
             <ProviderLogo provider={agent.id} className="size-4 shrink-0" />
             {agent.name}
-          </h3>
-          <p className="mt-1 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+          </span>
+        }
+        description={
+          <span className="flex items-center gap-1.5">
             <StatusDot tone={agentStatusTone(status)} />
             {STATUS_LABELS[status]}
             {status === 'signed-in' && agent.account && (
               <span className="selectable truncate text-foreground/80">· {agent.account}</span>
             )}
-          </p>
-        </div>
+          </span>
+        }
+      >
         {available && (
-          <div className="shrink-0">
-            <LoginButton
-              agent={agent}
-              running={login.running}
-              signInVariant="default"
-              onSignIn={onSignIn}
-              onSignOut={onSignOut}
-            />
-          </div>
+          <LoginButton
+            agent={agent}
+            running={login.running}
+            signInVariant="default"
+            onSignIn={onSignIn}
+            onSignOut={onSignOut}
+          />
         )}
-      </div>
+      </SettingRow>
 
-      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12px]">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 px-4 py-3 text-[12px]">
         <dt className="text-muted-foreground">SDK</dt>
-        <dd className="font-mono text-[11.5px]">
+        <dd className="text-right font-mono text-[11.5px]">
           {agent.sdkVersion ? `${agent.sdkVersion} · bundled` : 'missing from this build'}
         </dd>
         <dt className="text-muted-foreground">CLI</dt>
-        <dd className="min-w-0 truncate font-mono text-[11.5px]" title={agent.cliPath ?? undefined}>
+        <dd
+          className="min-w-0 truncate text-right font-mono text-[11.5px]"
+          title={agent.cliPath ?? undefined}
+        >
           {agent.cliPath
             ? `${agent.cliVersion ?? 'unknown version'} · ${
                 agent.cliSource === 'path' ? tildify(agent.cliPath) : 'downloaded'
@@ -193,13 +196,13 @@ function AgentCard({
       </dl>
 
       {signOutError && (
-        <p className="selectable mt-3 text-[12.5px] text-destructive">
+        <p className="selectable px-4 py-3 text-[12.5px] text-destructive">
           Couldn’t sign out: {signOutError}
         </p>
       )}
 
       {(login.running || login.output || login.error) && (
-        <div className="mt-4 flex flex-col gap-2.5 border-t border-hairline pt-4">
+        <div className="flex flex-col gap-2.5 px-4 py-3">
           {login.download && <DownloadStatus name={agent.name} download={login.download} />}
           {login.running && !login.download && (
             <BrowserHint
@@ -219,7 +222,7 @@ function AgentCard({
           )}
         </div>
       )}
-    </SectionCard>
+    </SettingsGroup>
   );
 }
 

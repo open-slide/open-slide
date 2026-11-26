@@ -1,8 +1,15 @@
-export function rovingIndex(key: string, index: number, count: number): number | null {
+export function rovingIndex(
+  key: string,
+  index: number,
+  count: number,
+  orientation: 'horizontal' | 'vertical' = 'horizontal',
+): number | null {
+  const [next, previous] =
+    orientation === 'vertical' ? ['ArrowDown', 'ArrowUp'] : ['ArrowRight', 'ArrowLeft'];
   switch (key) {
-    case 'ArrowRight':
+    case next:
       return (index + 1) % count;
-    case 'ArrowLeft':
+    case previous:
       return (index - 1 + count) % count;
     case 'Home':
       return 0;

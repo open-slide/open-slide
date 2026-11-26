@@ -8,7 +8,13 @@ import {
   WebContentsView,
 } from 'electron';
 import { deckIdFromPath, isHomePath } from '../../../../packages/core/src/app/lib/desktop-routes';
-import { SPARE_PATH, type SwitcherTab, TAB_STRIP_HEIGHT, type TabInfo } from '../shared/types';
+import {
+  type Backdrop,
+  SPARE_PATH,
+  type SwitcherTab,
+  TAB_STRIP_HEIGHT,
+  type TabInfo,
+} from '../shared/types';
 import { DeckCovers } from './covers';
 import { showContextMenu } from './menu';
 import type { DeckSession } from './settings';
@@ -341,6 +347,18 @@ export class TabManager {
 
   activeContents(): WebContents | null {
     return this.active()?.view?.webContents ?? null;
+  }
+
+  async snapshot(): Promise<Backdrop | null> {
+    const tab = this.fullscreenTab ?? this.active();
+    const view = tab?.view;
+    if (!view?.getVisible()) return null;
+    const image = await view.webContents.capturePage().catch(() => null);
+    if (!image || image.isEmpty()) return null;
+    return {
+      src: image.toDataURL(),
+      top: view.getBounds().y,
+    };
   }
 
   pickSwitch(id: unknown) {
