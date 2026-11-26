@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ProviderEvent } from '../provider.ts';
+import type { AgentProvider, ProviderEvent } from '../provider.ts';
+import { createAgentRunner } from '../runner.ts';
+import { createSessionStore } from '../store.ts';
 import { createCodexMapper, parseCodexModelsCache } from './codex.ts';
 import type { CodexThreadEvent } from './sdk-types.ts';
 
@@ -7,6 +9,14 @@ function collect() {
   const events: ProviderEvent[] = [];
   const mapper = createCodexMapper((e) => events.push(e));
   return { events, mapper };
+}
+
+function startIds(events: ProviderEvent[]): string[] {
+  return events.flatMap((e) => (e.type === 'text-start' || e.type === 'tool-start' ? [e.id] : []));
+}
+
+async function settle() {
+  await new Promise((r) => setTimeout(r, 0));
 }
 
 describe('createCodexMapper', () => {
@@ -47,22 +57,30 @@ describe('createCodexMapper', () => {
     ];
     for (const e of stream) mapper.handle(e);
 
+    const ids = startIds(events);
     expect(events).toEqual([
       { type: 'session-id', id: 'th-1' },
-      { type: 'tool-start', id: 'c1', name: 'command', title: 'Run command', detail: 'ls slides' },
-      { type: 'tool-end', id: 'c1', ok: true },
       {
         type: 'tool-start',
-        id: 'f1',
+        id: ids[0],
+        name: 'command',
+        title: 'Run command',
+        detail: 'ls slides',
+      },
+      { type: 'tool-end', id: ids[0], ok: true },
+      {
+        type: 'tool-start',
+        id: ids[1],
         name: 'file_change',
         title: 'Edit',
         detail: 'slides/deck/index.tsx',
       },
-      { type: 'tool-end', id: 'f1', ok: true },
-      { type: 'text-start', id: 'm1' },
-      { type: 'text-end', id: 'm1', text: 'Updated the deck.' },
+      { type: 'tool-end', id: ids[1], ok: true },
+      { type: 'text-start', id: ids[2] },
+      { type: 'text-end', id: ids[2], text: 'Updated the deck.' },
       { type: 'result', durationMs: null, costUsd: null },
     ]);
+    expect(new Set(ids).size).toBe(3);
     expect(mapper.resultSeen).toBe(true);
   });
 
@@ -96,9 +114,10 @@ describe('createCodexMapper questions', () => {
         text: `A few questions first.\n<open-slide-questions>\n${block}\n</open-slide-questions>`,
       },
     });
+    const [id] = startIds(events);
     expect(events).toEqual([
-      { type: 'text-start', id: 'm1' },
-      { type: 'text-end', id: 'm1', text: 'A few questions first.' },
+      { type: 'text-start', id },
+      { type: 'text-end', id, text: 'A few questions first.' },
       {
         type: 'questions',
         questions: [
@@ -120,10 +139,95 @@ describe('createCodexMapper questions', () => {
     const { events, mapper } = collect();
     const text = '<open-slide-questions>not json</open-slide-questions>';
     mapper.handle({ type: 'item.completed', item: { type: 'agent_message', id: 'm1', text } });
+    const [id] = startIds(events);
     expect(events).toEqual([
-      { type: 'text-start', id: 'm1' },
-      { type: 'text-end', id: 'm1', text },
+      { type: 'text-start', id },
+      { type: 'text-end', id, text },
     ]);
+  });
+});
+
+describe('createCodexMapper item ids', () => {
+  const turn = (text: string): CodexThreadEvent[] => [
+    {
+      type: 'item.started',
+      item: { type: 'command_execution', id: 'item_0', command: 'ls', status: 'in_progress' },
+    },
+    {
+      type: 'item.completed',
+      item: {
+        type: 'command_execution',
+        id: 'item_0',
+        command: 'ls',
+        status: 'completed',
+        exit_code: 0,
+      },
+    },
+    { type: 'item.completed', item: { type: 'agent_message', id: 'item_1', text } },
+    { type: 'turn.completed', usage: {} },
+  ];
+
+  it('keeps one id per item within a turn and never repeats it in a later turn', () => {
+    const first = collect();
+    for (const e of turn('reply 1')) first.mapper.handle(e);
+    const second = collect();
+    for (const e of turn('reply 2')) second.mapper.handle(e);
+
+    const [toolStart, toolEnd, textStart, textEnd] = first.events;
+    expect(toolStart).toMatchObject({ type: 'tool-start' });
+    expect(toolEnd).toMatchObject({ type: 'tool-end', id: (toolStart as { id: string }).id });
+    expect(textStart).toMatchObject({ type: 'text-start' });
+    expect(textEnd).toMatchObject({ type: 'text-end', id: (textStart as { id: string }).id });
+
+    const ids = [...startIds(first.events), ...startIds(second.events)];
+    expect(ids).toHaveLength(4);
+    expect(new Set(ids).size).toBe(4);
+  });
+
+  it("keeps each turn's reply and tool when Codex reuses item ids across turns", async () => {
+    const store = createSessionStore({ file: null });
+    const replies = ['reply 1', 'reply 2'];
+    const provider: AgentProvider = {
+      id: 'codex',
+      name: 'Codex',
+      sdkPackage: 'fake',
+      cliCommand: 'fake',
+      askInstruction: '',
+      canRewind: false,
+      models: async () => [],
+      run: async (opts) => {
+        const mapper = createCodexMapper(opts.emit);
+        for (const e of turn(replies.shift() ?? '')) mapper.handle(e);
+      },
+    };
+    const runner = createAgentRunner({
+      userCwd: '/ws',
+      writableRoots: ['/ws/slides'],
+      store,
+      providers: { claude: provider, codex: provider },
+    });
+    const session = store.create('codex', null);
+    await runner.send(session.id, { text: 'first' });
+    await settle();
+    await runner.send(session.id, { text: 'second' });
+    await settle();
+
+    const items = store.get(session.id)?.items ?? [];
+    expect(items.map((i) => i.kind)).toEqual([
+      'user',
+      'tool',
+      'assistant',
+      'result',
+      'user',
+      'tool',
+      'assistant',
+      'result',
+    ]);
+    const assistants = items.filter((i) => i.kind === 'assistant');
+    expect(assistants.map((i) => i.text)).toEqual(['reply 1', 'reply 2']);
+    expect(assistants.map((i) => i.streaming)).toEqual([false, false]);
+    expect(items.filter((i) => i.kind === 'tool').map((i) => i.status)).toEqual(['done', 'done']);
+    expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
   });
 });
 
