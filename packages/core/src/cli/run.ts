@@ -3,6 +3,8 @@ import * as readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import { Command, Option } from 'commander';
+import { EXPORT_FORMATS } from '../app/lib/cli-export.ts';
+import type { ExportOptions } from './export.ts';
 import { assertViteResolvesToCore } from './preflight.ts';
 import { detectSkillsDrift, syncSkills } from './sync.ts';
 import { glyph, readVersion } from './ui.ts';
@@ -113,6 +115,23 @@ export async function run(argv: string[]): Promise<void> {
       await assertViteResolvesToCore();
       const { build } = await import('./build.ts');
       await build(flags);
+    });
+
+  program
+    .command('export')
+    .description('Export a deck to HTML, PDF, or PowerPoint')
+    .requiredOption('--slide <id>', 'deck directory name')
+    .addOption(
+      new Option('--format <format>', 'export format')
+        .choices(EXPORT_FORMATS)
+        .makeOptionMandatory(),
+    )
+    .option('--out-dir <dir>', 'output directory (defaults to the current directory)')
+    .action(async (flags: ExportOptions) => {
+      await assertViteResolvesToCore();
+      const { exportDeck } = await import('./export.ts');
+      const output = await exportDeck(flags);
+      console.log(output);
     });
 
   program

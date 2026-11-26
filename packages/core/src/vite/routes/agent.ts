@@ -183,7 +183,9 @@ class ClosingError extends Error {}
 export function registerAgentRoutes(server: ViteDevServer, ctx: ApiContext): () => Promise<void> {
   const providers = createProviders();
   const store = createSessionStore({
-    file: path.join(ctx.userCwd, 'node_modules', '.open-slide', 'agent-sessions.json'),
+    file: ctx.agentEnabled
+      ? path.join(ctx.userCwd, 'node_modules', '.open-slide', 'agent-sessions.json')
+      : null,
   });
   const broadcast = createAgentBroadcast(server.ws, ctx.agentEnabled);
   let closed: Promise<void> | null = null;

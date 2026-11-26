@@ -1,0 +1,41 @@
+---
+title: open-slide export
+description: Export a deck from the terminal.
+---
+
+Run these commands from your open-slide workspace:
+
+```bash
+npm install -D playwright
+npx playwright install chromium
+npx open-slide export --slide my-deck --format html --out-dir exports
+```
+
+Use the deck directory name, such as `my-deck` for `slides/my-deck/index.tsx`.
+The command starts a local server and uses headless Chromium to render the deck.
+On Linux CI runners that need Chromium system libraries, use
+`npx playwright install --with-deps chromium` during setup.
+
+| Format | Output |
+| --- | --- |
+| `html` | A `<deck-id>/` folder with `index.html` and `assets/` |
+| `pdf` | PDF with one page per slide |
+| `pptx` | Editable PowerPoint file |
+| `pptx-images` | PowerPoint file with one rendered image per slide |
+
+The default output directory is the current directory. A successful export prints
+the absolute path to the file. For HTML, this path ends in `<deck-id>/index.html`.
+
+Open `index.html` to view the deck. To move or publish it, copy the whole deck
+folder. Packaged assets use relative paths, so the folder can be served under a
+nested URL without setting a base URL. If `assets/` is empty, `index.html` is
+the only file to publish. External URLs can still require network access.
+
+Exporting HTML again replaces the previous export and removes stale assets. If the
+deck folder contains other files, choose a different output directory.
+
+Both PowerPoint formats use the filename `<deck-id>.pptx`. Use separate output
+directories to keep both copies. PDF and PowerPoint exports replace an existing
+file with the same name.
+
+For a deployable site with the slide player, see [open-slide build](/docs/cli/build).

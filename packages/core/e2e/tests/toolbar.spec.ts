@@ -1,7 +1,23 @@
+import { readFile } from 'node:fs/promises';
 import { expect, type Page, test } from '@playwright/test';
+import { strFromU8, unzipSync } from 'fflate';
 import { deleteSlide, duplicateSlide, editorCanvas, openSlide } from './helpers.ts';
 
 const longTitle = 'Yiwei Ho — Introduction to building thoughtful presentations and creative tools';
+
+test('downloads an HTML export with the deck name from the toolbar', async ({ page }) => {
+  await openSlide(page, 'alpha');
+  await page.getByRole('button', { name: 'Download', exact: true }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('menuitem', { name: 'Export as HTML', exact: true }).click();
+  const file = await download;
+  const name = file.suggestedFilename();
+  expect(name).toMatch(/^alpha\.(html|zip)$/);
+  const bytes = await readFile(await file.path());
+  const html =
+    name === 'alpha.zip' ? strFromU8(unzipSync(bytes)['alpha.html']) : bytes.toString('utf8');
+  expect(html).toContain('Alpha page three');
+});
 
 async function expectToolbarToFit(page: Page) {
   await expect

@@ -104,6 +104,7 @@ export async function exportSlideAsPdf(
   slide: SlideModule,
   slideId: string,
   onProgress?: (progress: PdfExportProgress) => void,
+  savePdf?: (filename: string) => Promise<boolean>,
 ): Promise<void> {
   const pages = slide.default ?? [];
   if (pages.length === 0) return;
@@ -180,9 +181,11 @@ export async function exportSlideAsPdf(
     neutralizeGradientBackgrounds(root);
     await sleep(100); // flush layout
 
-    if (desktopHost?.printToPdf) {
+    const filename = `${document.title}.pdf`;
+    const printToPdf = savePdf ?? desktopHost?.printToPdf?.bind(desktopHost);
+    if (printToPdf) {
       onProgress?.({ phase: 'saving', current: total, total, percent: 99 });
-      finished = await desktopHost.printToPdf(`${document.title}.pdf`);
+      finished = await printToPdf(filename);
     } else {
       onProgress?.({ phase: 'printing', current: total, total, percent: 99 });
       const printDone = waitForAfterPrint();

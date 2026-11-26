@@ -14,7 +14,7 @@ Most users get this installed automatically by running `npx @open-slide/cli init
 
 - **Runtime** — home page, slide viewer, thumbnail rail, keyboard navigation, and fullscreen presenter mode. Every slide renders into a fixed **1920×1080** canvas; the framework scales it.
 - **Vite plugin** — discovers `slides/<id>/index.{tsx,jsx,ts,js}`, exposes them via virtual modules, and reloads when slides are added or removed.
-- **CLI** — `open-slide dev | build | preview` so workspaces never need to touch Vite, React, or tsconfig directly.
+- **CLI** — `open-slide dev | build | preview | export` so workspaces never need to touch Vite, React, or tsconfig directly.
 
 ## CLI
 
@@ -24,7 +24,10 @@ Once installed, the `open-slide` bin is available in the workspace:
 | --- | --- |
 | `open-slide dev` | Start the dev server. Flags: `-p, --port <port>`, `--host [host]`, `--open`. |
 | `open-slide build` | Build a static site. Flags: `--out-dir <dir>` (defaults to `dist`). |
+| `open-slide export` | Export one deck as HTML, PDF, editable PPTX, or image PPTX. Flags: `--slide <id>`, `--format <format>`, `--out-dir <dir>`. |
 | `open-slide preview` | Preview the production build. Flags: `-p, --port <port>`, `--host [host]`, `--open`. |
+
+The export command uses headless Chromium. HTML exports write `<deck-id>/index.html` and `<deck-id>/assets/` under the output directory. See the [export CLI docs](https://open-slide.dev/docs/cli/export) for setup and format names.
 
 ## Config
 
