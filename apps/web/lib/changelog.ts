@@ -54,6 +54,34 @@ export const eras: Era[] = [
     span: 'Sep – Nov 2026',
     releases: [
       {
+        line: '2.4',
+        version: '2.4.0',
+        date: '2026-11-25',
+        kind: 'feature',
+        title: 'Choose how far the agent can go',
+        summary:
+          'The agent composer now holds the model picker, a reasoning slider, and four permission modes, from Supervised through Auto-accept edits and Auto to Full access, with Auto as the default. With nothing selected, the Format panel shows the current page’s background, transition, and step count, and lets you change the background when the page sets one.',
+        highlights: [
+          'Press Delete or Backspace in the visual editor to remove the selected elements. The removal is undoable and written on save.',
+          'Menus, popovers, dialogs, and toasts sit on a translucent, frosted material, with a checkmark beside the current language and theme.',
+          'Installs are about 70 MB smaller now that the `shadcn` CLI is no longer a runtime dependency.',
+          'Agent progress streams over the HMR socket, so many open tabs no longer stall the app, and conversations finish saving before the dev server exits.',
+          'Agent replies and speaker notes render nested lists, list start numbers, and `---` rules.',
+          'Speaker notes still being typed, theme edits after a failed save, and design edits made mid-save are no longer lost.',
+          'The Format panel reads oklch and other non-RGB colours.',
+          'Ready for the upcoming desktop app: decks open in its tabs, its window material shows through the chrome, and the language stays in sync across tabs.',
+        ],
+        docs: { label: 'Agent panel docs', href: '/docs/core-feature/agent' },
+        patches: [
+          {
+            version: '2.4.1',
+            date: '2026-11-26',
+            note: 'A broken slide shows its error, file location, and a “Copy fix prompt” button instead of a blank page, the Enter that confirms an IME candidate no longer sends an agent message in Safari, Codex follow-ups land below your latest message, PPTX exports keep inline links clickable and match the preview’s bullet spacing, and the Windows CLI no longer prints a deprecation warning.',
+          },
+        ],
+        contributors: ['maxmilian', 'jowitte', 'umeGe', 'SusieeTheLinuxUser'],
+      },
+      {
         line: '2.3',
         version: '2.3.0',
         date: '2026-10-23',
