@@ -10,6 +10,7 @@ const fixture = vi.hoisted(() => ({
 vi.mock('electron', () => ({
   app: {
     isPackaged: true,
+    getVersion: () => 'test',
     getLocale: () => 'en-US',
     getPath: () => '/nowhere',
     getAppPath: () => '/Applications/Open Slide.app/Contents/Resources/app.asar',

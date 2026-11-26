@@ -8,6 +8,7 @@ import {
   shell,
   type WebContents,
 } from 'electron';
+import type { UpdateStatus } from '../shared/types';
 import { isMac } from './platform';
 
 export type MenuActions = {
@@ -25,9 +26,20 @@ export type MenuActions = {
   openRecent: (root: string) => void;
   clearRecent: () => void;
   replayIntro: () => void;
+  checkForUpdates: () => void;
+  installUpdate: () => void;
 };
 
-export function installMenu(actions: MenuActions, recent: string[]) {
+function updateItem(actions: MenuActions, update: UpdateStatus): MenuItemConstructorOptions {
+  if (update.state === 'ready') return { label: 'Restart to Update', click: actions.installUpdate };
+  return {
+    label: 'Check for Updates…',
+    enabled: update.state !== 'unsupported',
+    click: actions.checkForUpdates,
+  };
+}
+
+export function installMenu(actions: MenuActions, recent: string[], update: UpdateStatus) {
   const tabItems: MenuItemConstructorOptions[] = Array.from({ length: 9 }, (_, i) => ({
     label: i === 8 ? 'Last Tab' : `Tab ${i + 1}`,
     accelerator: `CmdOrCtrl+${i + 1}`,
@@ -42,6 +54,7 @@ export function installMenu(actions: MenuActions, recent: string[]) {
             role: 'appMenu' as const,
             submenu: [
               { role: 'about' as const },
+              updateItem(actions, update),
               { type: 'separator' as const },
               { label: 'Settings…', accelerator: 'Cmd+,', click: actions.openSettings },
               { type: 'separator' as const },
@@ -135,7 +148,13 @@ export function installMenu(actions: MenuActions, recent: string[]) {
     {
       role: 'help',
       submenu: [
-        ...(isMac ? [] : [{ role: 'about' as const }, { type: 'separator' as const }]),
+        ...(isMac
+          ? []
+          : [
+              { role: 'about' as const },
+              updateItem(actions, update),
+              { type: 'separator' as const },
+            ]),
         { label: 'Welcome to open-slide', click: actions.replayIntro },
         { type: 'separator' },
         {

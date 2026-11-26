@@ -1,5 +1,6 @@
 appId: dev.open-slide.desktop
 productName: open-slide
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 directories:
   output: release
   buildResources: build
@@ -16,6 +17,11 @@ files:
 asarUnpack:
   - node_modules/**
   - dist/native/**
+# scripts/release.mjs points the feed's files at each version's own release.
+publish:
+  provider: generic
+  url: https://github.com/open-slide/open-slide/releases/download/desktop-latest
+  useMultipleRangeRequest: false
 mac:
   category: public.app-category.productivity
   icon: build/icon.icns

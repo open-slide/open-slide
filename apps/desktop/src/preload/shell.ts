@@ -63,6 +63,10 @@ const api: ShellApi = {
     restart: () => ipcRenderer.send('server:restart'),
     log: () => ipcRenderer.invoke('server:log'),
   },
+  updates: {
+    check: () => ipcRenderer.send('update:check'),
+    install: () => ipcRenderer.send('update:install'),
+  },
   agents: {
     list: () => ipcRenderer.invoke('agents:list'),
     login: (id) => ipcRenderer.invoke('agents:login', id),
