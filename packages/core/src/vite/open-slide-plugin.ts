@@ -2,7 +2,13 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import fg from 'fast-glob';
-import { loadConfigFromFile, normalizePath, type Plugin, type ViteDevServer } from 'vite';
+import {
+  loadConfigFromFile,
+  type ModuleNode,
+  normalizePath,
+  type Plugin,
+  type ViteDevServer,
+} from 'vite';
 import type { OpenSlideConfig } from '../config.ts';
 import { SLIDE_ID_RE } from '../editing/slide-ops.ts';
 import { foldersManifestPath, readManifest } from '../files/folders.ts';
@@ -174,13 +180,52 @@ export function openSlidePlugin(opts: OpenSlidePluginOptions): Plugin {
   const manifestPath = foldersManifestPath(slidesRoot);
 
   let isDev = false;
-  const slideIdForEntry = (p: string): string | null => {
-    const rel = path.relative(slidesRoot, p);
+  const SLIDE_FILE_RE = /\.(tsx?|jsx?|mjs|cjs|css|json|svg|png|jpe?g|webp|gif|avif)$/i;
+  const ENTRY_EXTS = ['tsx', 'jsx', 'ts', 'js'];
+  const relativeSlideParts = (p: string): string[] | null => {
+    const rel = path.relative(slidesRoot, path.resolve(p));
     if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
     const parts = rel.split(path.sep);
-    if (parts.length !== 2) return null;
-    if (!/^index\.(tsx|jsx|ts|js)$/.test(parts[1])) return null;
-    return parts[0];
+    if (parts.length < 2 || !SLIDE_ID_RE.test(parts[0])) return null;
+    if (parts.slice(1).some((seg) => seg.startsWith('.') || seg === 'node_modules')) {
+      return null;
+    }
+    return parts;
+  };
+  const slideIdForEntry = (p: string): string | null => {
+    const parts = relativeSlideParts(p);
+    if (parts?.length !== 2) return null;
+    return /^index\.(tsx|jsx|ts|js)$/.test(parts[1]) ? parts[0] : null;
+  };
+  const slideIdForFile = (p: string): string | null => {
+    const parts = relativeSlideParts(p);
+    return parts ? parts[0] : null;
+  };
+  const invalidateSlideChain = (
+    server: ViteDevServer,
+    slideId: string,
+    file: string,
+    initialModules: ModuleNode[],
+    timestamp: number,
+  ) => {
+    const seen = new Set<ModuleNode>();
+    const invalidateUp = (mod: ModuleNode) => {
+      if (seen.has(mod)) return;
+      seen.add(mod);
+      // Hard-invalidate with isHmr=true and walk importers manually so entries
+      // with `import.meta.hot.accept(...)` still re-transform with fresh `?t=` URLs.
+      server.moduleGraph.invalidateModule(mod, new Set(), timestamp, true, false);
+      for (const importer of mod.importers) invalidateUp(importer);
+    };
+    const seeds = new Set<ModuleNode>(initialModules);
+    const normalized = normalizePath(path.resolve(file));
+    for (const m of server.moduleGraph.getModulesByFile(normalized) ?? []) seeds.add(m);
+    for (const m of server.moduleGraph.getModulesByFile(file) ?? []) seeds.add(m);
+    for (const ext of ENTRY_EXTS) {
+      const entry = normalizePath(path.join(slidesRoot, slideId, `index.${ext}`));
+      for (const m of server.moduleGraph.getModulesByFile(entry) ?? []) seeds.add(m);
+    }
+    for (const mod of seeds) invalidateUp(mod);
   };
   let slideChangeTimer: ReturnType<typeof setTimeout> | null = null;
   const pendingSlideChanges = new Set<string>();
@@ -244,7 +289,7 @@ export function openSlidePlugin(opts: OpenSlidePluginOptions): Plugin {
       return null;
     },
     handleHotUpdate(ctx) {
-      const slideId = slideIdForEntry(ctx.file);
+      const slideId = slideIdForFile(ctx.file);
       if (!slideId) return;
       // A speaker-note save writes the slide file itself. The notes plugin
       // records that write so we can recognise it here and skip the
@@ -252,6 +297,8 @@ export function openSlidePlugin(opts: OpenSlidePluginOptions): Plugin {
       // cache-bust token and remount the slide canvas. Genuine source edits
       // are never recorded, so they keep full HMR behaviour.
       if (hasRecentWrite(ctx.file)) return [];
+      if (ctx.modules.length === 0 && !SLIDE_FILE_RE.test(ctx.file)) return;
+      invalidateSlideChain(ctx.server, slideId, ctx.file, ctx.modules, ctx.timestamp);
       queueSlideChanged(ctx.server, slideId);
       return [];
     },
@@ -277,7 +324,17 @@ export function openSlidePlugin(opts: OpenSlidePluginOptions): Plugin {
         // Slides the dev server scaffolds itself already invalidated the
         // module before answering; a reload here would race the client's own
         // navigation into the new slide.
-        if (isSlideEntry(p) && !hasRecentWrite(p)) reload();
+        if (isSlideEntry(p)) {
+          if (!hasRecentWrite(p)) reload();
+          return;
+        }
+        // External tools often save via write-temp + rename, which surfaces as
+        // `add` rather than `change` on inotify.
+        const slideId = slideIdForFile(p);
+        if (slideId && !hasRecentWrite(p) && SLIDE_FILE_RE.test(p)) {
+          invalidateSlideChain(server, slideId, p, [], Date.now());
+          queueSlideChanged(server, slideId);
+        }
       });
       server.watcher.on('unlink', (p) => {
         // A rename the dev server made itself is announced to clients, which
