@@ -57,8 +57,14 @@ if (!flags['skip-build'] || !existsSync(out)) {
   for (const rel of drop) rmSync(path.join(dir, rel), { recursive: true, force: true });
   writeFileSync(
     path.join(dir, 'next.config.mjs'),
-    `import { createMDX } from 'fumadocs-mdx/next';
-export default createMDX()({ reactStrictMode: true, output: 'export', images: { unoptimized: true } });
+    `import { wgslTurbopackRule } from '@vgpu/wgsl/next';
+import { createMDX } from 'fumadocs-mdx/next';
+export default createMDX()({
+  reactStrictMode: true,
+  output: 'export',
+  images: { unoptimized: true },
+  turbopack: { rules: { '*.wgsl': wgslTurbopackRule({ minify: true }) } },
+});
 `,
   );
   const github = path.join(dir, 'lib/github.ts');
