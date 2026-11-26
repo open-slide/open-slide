@@ -1,5 +1,21 @@
 # @open-slide/core
 
+## 2.4.1
+
+### Patch Changes
+
+- [#611](https://github.com/open-slide/open-slide/pull/611) [`8ea9a0d`](https://github.com/open-slide/open-slide/commit/8ea9a0dd0e03a0cf9ccb864104a037f12625eeae) Thanks [@maxmilian](https://github.com/maxmilian)! - Keep the Enter that confirms an IME candidate from sending an agent message in Safari and other WebKit browsers, where that keydown reports `isComposing: false` with `keyCode` 229.
+
+- [#640](https://github.com/open-slide/open-slide/pull/640) [`258506c`](https://github.com/open-slide/open-slide/commit/258506c04571c4e6073ed93371ff675c8bc1138b) Thanks [@maxmilian](https://github.com/maxmilian)! - Codex follow-up replies in the agent panel now appear below your latest message instead of replacing an earlier reply.
+
+- [#639](https://github.com/open-slide/open-slide/pull/639) [`6e66493`](https://github.com/open-slide/open-slide/commit/6e66493ff4f0b03f84f4746a3e1ca56428eb82c8) Thanks [@jowitte](https://github.com/jowitte)! - Keep inline links clickable in the editable PPTX export.
+
+- [#642](https://github.com/open-slide/open-slide/pull/642) [`4e78bd6`](https://github.com/open-slide/open-slide/commit/4e78bd62ac49ef7627bff9e26135ad1a7d841349) Thanks [@umeGe](https://github.com/umeGe)! - Give PPTX list items the same bullet-to-text gap as the preview.
+
+- [#587](https://github.com/open-slide/open-slide/pull/587) [`8a26366`](https://github.com/open-slide/open-slide/commit/8a26366d03a7a687ebff5556913c7bbd7b389979) Thanks [@SusieeTheLinuxUser](https://github.com/SusieeTheLinuxUser)! - Stop the Windows CLI version probe from printing a Node DEP0190 deprecation warning.
+
+- [#629](https://github.com/open-slide/open-slide/pull/629) [`8e52ab5`](https://github.com/open-slide/open-slide/commit/8e52ab52a0d9e8fab8d5e754020fcc3399e79fa1) Thanks [@1weiho](https://github.com/1weiho)! - Show slide compile and render errors in place of a blank page, with the file location, code frame, and a "Copy fix prompt" button; a broken save keeps the last working version on screen.
+
 ## 2.4.0
 
 ### Minor Changes
