@@ -16,8 +16,10 @@ import {
   createDefaultWorkspace,
   createWorkspace,
   detectPackageManager,
+  findNestedWorkspace,
   inspectWorkspace,
   installDependencies,
+  suggestSubfolderName,
 } from './workspace';
 
 type OpenSource = 'restored' | 'created' | 'shell' | 'menu';
@@ -52,26 +54,33 @@ export class WorkspaceController {
     return this.report(this.transition(() => this.switchTo(root, source)));
   }
 
-  async choose(): Promise<{ create: string } | null> {
+  async choose(): Promise<{ create: string; inPlace: boolean; defaultName?: string } | null> {
     this.clearError();
     try {
       const window = await this.opts.ensureWindow();
       const result = await dialog.showOpenDialog(window, {
-        title: 'Open Workspace',
+        title: 'Open Workspace or Project Folder',
         buttonLabel: 'Open',
         properties: ['openDirectory', 'createDirectory'],
       });
       const [dir] = result.filePaths;
       if (result.canceled || !dir) return null;
       const picked = inspectWorkspace(dir);
-      if (picked.kind === 'empty') return { create: picked.path };
+      if (picked.kind === 'empty') return { create: picked.path, inPlace: true };
       if (picked.kind === 'project') {
         await this.open(picked.path, 'shell');
         return null;
       }
-      this.fail(
-        `“${picked.name}” isn’t an open-slide workspace. Pick a folder with one, an empty folder to set up, or create a new workspace.`,
-      );
+      const nested = findNestedWorkspace(picked.path);
+      if (nested) {
+        await this.open(nested, 'shell');
+        return null;
+      }
+      return {
+        create: picked.path,
+        inPlace: false,
+        defaultName: suggestSubfolderName(picked.path),
+      };
     } catch (err) {
       this.fail(errorMessage(err));
     }

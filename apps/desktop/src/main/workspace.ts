@@ -82,6 +82,42 @@ export function needsInstall(root: string): boolean {
   );
 }
 
+const GENERIC_WORKSPACE_NAMES = new Set([
+  'slides',
+  'slide',
+  'deck',
+  'decks',
+  'open-slide',
+  'my-slides',
+  'presentation',
+  'presentations',
+]);
+
+const PREFERRED_SUBFOLDERS = ['slides', 'deck', 'decks', 'open-slide', 'presentation'];
+
+export function workspaceDisplayName(root: string, pkgName?: string): string {
+  const resolved = path.resolve(root);
+  const base = pkgName?.trim() || path.basename(resolved);
+  if (GENERIC_WORKSPACE_NAMES.has(base.toLowerCase())) {
+    const parentDir = path.dirname(resolved);
+    const home = path.resolve(homedir());
+    const defaultRoot = path.join(home, '.open-slide');
+    if (parentDir !== resolved && parentDir !== home && parentDir !== defaultRoot) {
+      const parent = path.basename(parentDir);
+      if (parent) return `${parent} / ${base}`;
+    }
+  }
+  return base;
+}
+
+function safeInspect(dir: string): WorkspaceInspection | null {
+  try {
+    return inspectWorkspace(dir);
+  } catch {
+    return null;
+  }
+}
+
 export function inspectWorkspace(dir: string): WorkspaceInspection {
   const resolved = path.resolve(dir);
   const name = path.basename(resolved);
@@ -90,14 +126,45 @@ export function inspectWorkspace(dir: string): WorkspaceInspection {
   }
   const pkg = readPackageJson(resolved);
   if (pkg && dependencyNames(pkg).includes('@open-slide/core')) {
+    const rawName = typeof pkg.name === 'string' ? pkg.name : name;
     return {
       path: resolved,
-      name: typeof pkg.name === 'string' ? pkg.name : name,
+      name: workspaceDisplayName(resolved, rawName),
       kind: 'project',
     };
   }
   const entries = readdirSync(resolved).filter((entry) => !IGNORED_ENTRIES.has(entry));
   return { path: resolved, name, kind: entries.length === 0 ? 'empty' : 'other' };
+}
+
+export function findNestedWorkspace(dir: string): string | null {
+  const resolved = path.resolve(dir);
+  for (const sub of PREFERRED_SUBFOLDERS) {
+    const candidate = path.join(resolved, sub);
+    if (safeInspect(candidate)?.kind === 'project') return candidate;
+  }
+  try {
+    const found: string[] = [];
+    for (const entry of readdirSync(resolved, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') {
+        continue;
+      }
+      const candidate = path.join(resolved, entry.name);
+      if (safeInspect(candidate)?.kind === 'project') found.push(candidate);
+    }
+    if (found.length === 1) return found[0];
+  } catch {}
+  return null;
+}
+
+export function suggestSubfolderName(dir: string): string {
+  const resolved = path.resolve(dir);
+  for (const candidate of ['slides', 'deck', 'open-slide', 'my-slides']) {
+    const target = path.join(resolved, candidate);
+    if (!existsSync(target)) return candidate;
+    if (safeInspect(target)?.kind === 'empty') return candidate;
+  }
+  return 'slides-deck';
 }
 
 export function detectPackageManager(root: string, fallback: PackageManager): PackageManager {

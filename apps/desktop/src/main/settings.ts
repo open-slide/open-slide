@@ -24,7 +24,7 @@ type Stored = DesktopSettings & {
   crashCheckedAt: number;
 };
 
-const RECENT_LIMIT = 8;
+const RECENT_LIMIT = 20;
 const SAVE_DELAY_MS = 200;
 
 const defaults: Stored = {

@@ -169,7 +169,7 @@ export type ShellApi = {
     pick(id: string | null): void;
   };
   workspace: {
-    choose(): Promise<{ create: string } | null>;
+    choose(): Promise<{ create: string; inPlace: boolean; defaultName?: string } | null>;
     chooseParent(): Promise<string | null>;
     defaultParent(): Promise<string>;
     packageManagers(): Promise<PackageManager[]>;
@@ -178,6 +178,7 @@ export type ShellApi = {
     createDefault(): Promise<TaskResult>;
     install(): Promise<TaskResult>;
     reveal(): void;
+    showPicker(anchor?: { x: number; y: number }): void;
     forget(path: string): void;
     dismissError(id: number): void;
   };

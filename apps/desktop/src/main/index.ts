@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {
   app,
@@ -8,6 +9,8 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
+  Menu,
+  type MenuItemConstructorOptions,
   nativeTheme,
   shell,
   systemPreferences,
@@ -68,8 +71,10 @@ import {
   availablePackageManagers,
   bundledCore,
   detectPackageManager,
+  inspectWorkspace,
   modulesDir,
   syncSkills,
+  workspaceDisplayName,
 } from './workspace';
 import { WorkspaceController } from './workspace-controller';
 
@@ -526,6 +531,74 @@ function registerTabIpc() {
   listen('switcher:pick', (id: unknown) => tabs?.pickSwitch(id));
 }
 
+function tildifyPath(target: string): string {
+  const home = os.homedir();
+  return target === home
+    ? '~'
+    : target.startsWith(home + path.sep)
+      ? `~${target.slice(home.length)}`
+      : target;
+}
+
+function showWorkspacePicker(anchor?: unknown) {
+  if (!window || window.isDestroyed()) return;
+  const activeRoot = workspaces.current?.root ?? null;
+  const recent = settings.recent();
+
+  const items: MenuItemConstructorOptions[] = recent.map((root) => {
+    let labelName = workspaceDisplayName(root);
+    try {
+      labelName = inspectWorkspace(root).name;
+    } catch {}
+    const shortPath = tildifyPath(root);
+    return {
+      label: isMac ? labelName : `${labelName}  (${shortPath})`,
+      ...(isMac ? { sublabel: shortPath } : {}),
+      toolTip: root,
+      type: 'checkbox',
+      checked: root === activeRoot,
+      click: () => {
+        if (root !== activeRoot) void workspaces.open(root, 'shell');
+      },
+    };
+  });
+
+  if (items.length > 0) items.push({ type: 'separator' });
+  items.push(
+    {
+      label: 'Open Folder…',
+      accelerator: 'CmdOrCtrl+O',
+      click: () => sendCommand('open-workspace'),
+    },
+    {
+      label: 'New Workspace…',
+      accelerator: 'CmdOrCtrl+Shift+N',
+      click: () => sendCommand('new-workspace'),
+    },
+  );
+  if (activeRoot) {
+    items.push(
+      { type: 'separator' },
+      {
+        label: isMac ? 'Reveal Workspace in Finder' : 'Show Workspace Folder',
+        click: revealWorkspace,
+      },
+    );
+  }
+
+  const pos =
+    anchor &&
+    typeof anchor === 'object' &&
+    typeof (anchor as { x?: unknown }).x === 'number' &&
+    typeof (anchor as { y?: unknown }).y === 'number'
+      ? {
+          x: Math.round((anchor as { x: number }).x),
+          y: Math.round((anchor as { y: number }).y),
+        }
+      : {};
+  Menu.buildFromTemplate(items).popup({ window, ...pos });
+}
+
 function registerWorkspaceIpc() {
   handle('workspace:choose', () => workspaces.choose());
   handle('workspace:choose-parent', async () => {
@@ -548,6 +621,7 @@ function registerWorkspaceIpc() {
   handle('workspace:create-default', () => workspaces.createDefault());
   handle('workspace:install', () => workspaces.install());
   listen('workspace:reveal', revealWorkspace);
+  listen('workspace:picker', (anchor: unknown) => showWorkspacePicker(anchor));
   listen('workspace:dismiss-error', (id: unknown) => workspaces.dismissError(id));
   listen('workspace:forget', (root: string) => {
     if (settings.recent().includes(root)) forgetWorkspace(root);

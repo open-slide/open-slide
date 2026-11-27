@@ -1,4 +1,4 @@
-import { FolderClosed, LayoutGrid, Presentation, Settings, X } from 'lucide-react';
+import { ChevronDown, FolderClosed, LayoutGrid, Presentation, Settings, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { AppState, TabInfo } from '../../shared/types';
@@ -134,12 +134,21 @@ export function TabStrip({ state, showTabs }: { state: AppState; showTabs: boole
       {state.workspace && (
         <button
           type="button"
-          title={state.workspace.root}
-          onClick={() => desktop.workspace.reveal()}
-          className="no-drag hidden h-7 max-w-[200px] shrink-0 items-center gap-1.5 rounded-[7px] px-2 text-[12px] font-medium text-foreground/55 outline-none transition-colors hover:bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 md:flex"
+          title={`Switch workspace (${state.workspace.root})`}
+          aria-label="Switch workspace"
+          aria-haspopup="menu"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            desktop.workspace.showPicker({
+              x: Math.round(rect.left),
+              y: Math.round(rect.bottom + 4),
+            });
+          }}
+          className="no-drag flex h-7 max-w-[240px] shrink-0 items-center gap-1.5 rounded-[7px] px-2 text-[12px] font-medium text-foreground/70 outline-none transition-colors hover:bg-foreground/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <FolderClosed className="size-3.5 shrink-0" aria-hidden />
           <span className="truncate">{state.workspace.name}</span>
+          <ChevronDown className="size-3 shrink-0 opacity-60" aria-hidden />
         </button>
       )}
 
