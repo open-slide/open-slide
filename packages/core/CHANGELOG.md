@@ -1,5 +1,17 @@
 # @open-slide/core
 
+## 2.5.0
+
+### Minor Changes
+
+- [#656](https://github.com/open-slide/open-slide/pull/656) [`74b58b4`](https://github.com/open-slide/open-slide/commit/74b58b40fc0739a862304580249735084f992b47) Thanks [@1weiho](https://github.com/1weiho)! - Add an embeddable player at `/s/<slide-id>/embed`, with copy embed link and embed code actions in the link menu.
+
+- [#558](https://github.com/open-slide/open-slide/pull/558) [`2362a14`](https://github.com/open-slide/open-slide/commit/2362a14cf9ed76386c09f57af51adc3f1ab80f40) Thanks [@1weiho](https://github.com/1weiho)! - Show new versions in a sidebar card with a cover and release notes, update and restart the dev server in one click behind a locked progress dialog, and open "What's new" after every upgrade.
+
+### Patch Changes
+
+- [#658](https://github.com/open-slide/open-slide/pull/658) [`6408e4b`](https://github.com/open-slide/open-slide/commit/6408e4b7e2b5e9204dbcd52e8465cb16618ee6c0) Thanks [@1weiho](https://github.com/1weiho)! - Use a share icon for the deck share menu button.
+
 ## 2.4.1
 
 ### Patch Changes
