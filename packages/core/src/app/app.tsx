@@ -2,6 +2,7 @@ import config from 'virtual:open-slide/config';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
+import { WhatsNewDialog } from './components/update/whats-new-dialog';
 import { DesktopBridge } from './lib/desktop';
 import { useLocale } from './lib/use-locale';
 import { AssetsPage } from './routes/assets';
@@ -35,6 +36,8 @@ export function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </TooltipProvider>
+      {/* Above the routes so a locked update survives back/forward navigation. */}
+      {import.meta.env.DEV && <WhatsNewDialog />}
       <Toaster />
       <DesktopBridge />
     </BrowserRouter>

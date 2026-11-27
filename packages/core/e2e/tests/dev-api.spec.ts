@@ -46,6 +46,24 @@ test.describe('dev server http api', () => {
     expect(body.current).toBe(pkg.version);
   });
 
+  test('update status is idle and shares the server execution id', async ({ request }) => {
+    const server = (await (await request.get('/__server-status')).json()) as {
+      executionId: string;
+    };
+    const res = await request.get('/__update-package');
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toMatchObject({
+      executionId: server.executionId,
+      phase: 'idle',
+      error: null,
+    });
+  });
+
+  test('release notes reject malformed versions', async ({ request }) => {
+    const res = await request.get('/__release-notes?from=latest&to=2.0.0');
+    expect(res.status()).toBe(400);
+  });
+
   test('folders can be created, assigned, and deleted', async ({ request }) => {
     const empty = (await (await request.get('/__folders')).json()) as {
       folders: unknown[];
