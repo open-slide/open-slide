@@ -124,6 +124,11 @@ export type Locale = {
     moreActions: string;
     toastCopyLinkSuccess: string;
     toastCopyLinkFailed: string;
+    share: string;
+    copyEmbedLink: string;
+    copyEmbedCode: string;
+    toastCopyEmbedLinkSuccess: string;
+    toastCopyEmbedCodeSuccess: string;
     exportAsHtml: string;
     exportAsPdf: string;
     exportAsImagePptx: string;
@@ -189,6 +194,7 @@ export type Locale = {
     presenterAria: string;
     enterFullscreenAria: string;
     exitFullscreenAria: string;
+    openInNewTabAria: string;
     helpAria: string;
     exitAria: string;
     elapsedTime: string;

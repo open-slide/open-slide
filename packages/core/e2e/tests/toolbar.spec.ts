@@ -200,7 +200,7 @@ test.describe('responsive slide toolbar', () => {
     await page.setViewportSize({ width: 1024, height: 900 });
     await expect(page.getByRole('menu')).toBeHidden();
     await expect(moreActions).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Copy link', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Share', exact: true })).toBeVisible();
     await expectToolbarToFit(page);
 
     const download = page.getByRole('button', { name: 'Download', exact: true });
