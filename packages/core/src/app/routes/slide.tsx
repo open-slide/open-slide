@@ -16,7 +16,7 @@ import {
   MoreHorizontal,
   Play,
   Presentation,
-  Share,
+  Share2,
   Sparkles,
   Terminal,
 } from 'lucide-react';
@@ -805,7 +805,7 @@ export function Slide() {
                     className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
                   >
                     <span className="relative grid size-4 place-items-center">
-                      <Share
+                      <Share2
                         className={cn(
                           'col-start-1 row-start-1 size-4 transition-opacity duration-200',
                           linkCopied ? 'opacity-0' : 'opacity-100',
