@@ -7,10 +7,16 @@ import { useTouchSwipe } from '@/components/present/use-touch-swipe';
 import { SlideCanvas } from '@/components/slide-canvas';
 import { SlidePreloadLayer } from '@/components/slide-preload-layer';
 import { SlideTransitionLayer } from '@/components/slide-transition-layer';
-import { hasModifier, isBackwardKey, isForwardKey, isTypingTarget } from '@/lib/keys';
+import {
+  hasModifier,
+  isBackwardKey,
+  isForwardKey,
+  isShortcutControlTarget,
+  isTypingTarget,
+} from '@/lib/keys';
 import { deckUrl } from '@/lib/share-links';
 import { formatLoadError } from '@/lib/slide-errors';
-import type { EntryDirection, StepController } from '@/lib/step-context';
+import type { EntryDirection, StepAggregate, StepController } from '@/lib/step-context';
 import { useClickPageNavigation } from '@/lib/use-click-page-navigation';
 import { useDocumentTitle } from '@/lib/use-document-title';
 import { useLocale } from '@/lib/use-locale';
@@ -31,7 +37,7 @@ export function Embed() {
   const pages = slide?.default ?? [];
   const pageCount = pages.length;
   const [requestedIndex, setRequestedIndex] = useState(
-    () => Number(searchParams.get('p') ?? '1') - 1,
+    () => Math.trunc(Number(searchParams.get('p') ?? '1')) - 1,
   );
   const index = Number.isFinite(requestedIndex)
     ? Math.max(0, Math.min(pageCount - 1, requestedIndex))
@@ -40,6 +46,14 @@ export function Embed() {
   const rootRef = useRef<HTMLDivElement>(null);
   const stepControllerRef = useRef<StepController | null>(null);
   const [entryDirection, setEntryDirection] = useState<EntryDirection>('jump');
+  const [steps, setSteps] = useState<StepAggregate>({ revealed: 0, stepCount: 0 });
+  const handleStepsChange = useCallback((next: StepAggregate) => {
+    setSteps((cur) =>
+      cur.revealed === next.revealed && cur.stepCount === next.stepCount ? cur : next,
+    );
+  }, []);
+  const canPrev = index > 0 || steps.revealed > 0;
+  const canNext = index < pageCount - 1 || steps.revealed < steps.stepCount;
 
   const goTo = useCallback(
     (next: number) => {
@@ -75,6 +89,7 @@ export function Embed() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || hasModifier(e)) return;
+      if (e.key === ' ' && isShortcutControlTarget(e.target)) return;
       if (isForwardKey(e)) {
         e.preventDefault();
         goNext();
@@ -108,7 +123,8 @@ export function Embed() {
   // Starts engaged so viewers see the controls exist before they fade out.
   const [engaged, setEngaged] = useState(true);
   const idle = useIdle(IDLE_HIDE_MS);
-  const chromeVisible = engaged && !idle;
+  const [chromeFocused, setChromeFocused] = useState(false);
+  const chromeVisible = chromeFocused || (engaged && !idle);
 
   if (error && !slide) {
     return (
@@ -164,6 +180,7 @@ export function Embed() {
             disabled={prefersReducedMotion}
             stepControllerRef={stepControllerRef}
             entryDirection={entryDirection}
+            onStepAggregateChange={handleStepsChange}
           />
         </SlideCanvas>
       </div>
@@ -179,12 +196,18 @@ export function Embed() {
           )}
         >
           <div
+            role="toolbar"
+            aria-label={slide.meta?.title ?? slideId}
+            onFocus={(e) => setChromeFocused(e.target.matches(':focus-visible'))}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget)) setChromeFocused(false);
+            }}
             className={cn(
               'flex h-9 items-center gap-0.5 rounded-full border border-white/10 bg-black/60 px-1 text-white/85 shadow-[0_8px_30px_-8px_oklch(0_0_0/0.65)] backdrop-blur-md',
               chromeVisible ? 'pointer-events-auto' : 'pointer-events-none',
             )}
           >
-            <EmbedButton label={t.present.prevSlideAria} onClick={goPrev} disabled={index === 0}>
+            <EmbedButton label={t.present.prevSlideAria} onClick={goPrev} disabled={!canPrev}>
               <ChevronLeft className="size-4" />
             </EmbedButton>
             <span className="min-w-[3.75rem] px-1 text-center font-mono text-[11px] tracking-[0.08em] tabular-nums text-white/80">
@@ -192,11 +215,7 @@ export function Embed() {
               <span className="text-white/35"> / </span>
               <span>{pad2(pageCount)}</span>
             </span>
-            <EmbedButton
-              label={t.present.nextSlideAria}
-              onClick={goNext}
-              disabled={index >= pageCount - 1}
-            >
+            <EmbedButton label={t.present.nextSlideAria} onClick={goNext} disabled={!canNext}>
               <ChevronRight className="size-4" />
             </EmbedButton>
             <span aria-hidden className="mx-0.5 h-3.5 w-px bg-white/15" />

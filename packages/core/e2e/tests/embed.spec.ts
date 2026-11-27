@@ -29,6 +29,7 @@ test.describe('embed', () => {
     await expect(embed.getByText('Alpha page two')).toBeVisible();
     await expect(embed.getByText('02 / 03')).toBeVisible();
 
+    await page.locator('iframe').hover();
     await embed.getByRole('button', { name: 'Next slide' }).click();
     await expect(embed.getByText('Alpha page three')).toBeVisible();
     await expect(embed.getByRole('link', { name: 'Open in new tab' })).toHaveAttribute(
@@ -38,5 +39,19 @@ test.describe('embed', () => {
 
     await page.keyboard.press('ArrowLeft');
     await expect(embed.getByText('Alpha page two')).toBeVisible();
+  });
+
+  test('rounds a fractional start page down', async ({ page }) => {
+    await page.goto('/s/alpha/embed?p=2.7');
+    await expect(page.getByText('Alpha page two')).toBeVisible();
+    await expect(page.getByText('02 / 03')).toBeVisible();
+  });
+
+  test('space activates a focused control instead of advancing the deck', async ({ page }) => {
+    await page.goto('/s/alpha/embed?p=2');
+    await expect(page.getByText('Alpha page two')).toBeVisible();
+    await page.getByRole('button', { name: 'Previous slide' }).focus();
+    await page.keyboard.press('Space');
+    await expect(page.getByText('01 / 03')).toBeVisible();
   });
 });
