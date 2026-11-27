@@ -1,6 +1,8 @@
 import config from 'virtual:open-slide/config';
 import {
+  AppWindow,
   ChevronLeft,
+  Code,
   FileCode2,
   FileImage,
   FileText,
@@ -26,6 +28,8 @@ export type SlideCommandHandlers = {
   onPresentFullscreen: () => void;
   onPresenterView: () => void;
   onCopyLink: () => void;
+  onCopyEmbedLink: () => void;
+  onCopyEmbedCode: () => void;
   onOverview: () => void;
   onToggleDesignPanel: () => void;
   onToggleAgentPanel: () => void;
@@ -89,6 +93,20 @@ export function SlideCommandMenu({
         icon: <Link2 />,
         keywords: ['copy', 'link', 'url', 'share'],
         run: handlers.onCopyLink,
+      },
+      {
+        id: 'copy-embed-link',
+        label: t.slide.copyEmbedLink,
+        icon: <AppWindow />,
+        keywords: ['copy', 'embed', 'notion', 'iframe', 'share'],
+        run: handlers.onCopyEmbedLink,
+      },
+      {
+        id: 'copy-embed-code',
+        label: t.slide.copyEmbedCode,
+        icon: <Code />,
+        keywords: ['copy', 'embed', 'iframe', 'html', 'share'],
+        run: handlers.onCopyEmbedCode,
       },
       {
         id: 'overview',

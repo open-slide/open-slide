@@ -1,8 +1,10 @@
 import config from 'virtual:open-slide/config';
 import {
+  AppWindow,
   Check,
   ChevronDown,
   ChevronLeft,
+  Code,
   Download,
   FileCode2,
   FileImage,
@@ -111,6 +113,7 @@ import {
 } from '../lib/export-pptx';
 import { changeNotesPages } from '../lib/inspector/use-notes';
 import type { SlideModule } from '../lib/sdk';
+import { embedCode, embedUrl } from '../lib/share-links';
 import { getPageError, usePageErrorsVersion } from '../lib/slide-errors';
 import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion';
 import { useSlideModule } from '../lib/use-slide-module';
@@ -616,10 +619,10 @@ export function Slide() {
 
   const title = slide.meta?.title ?? slideId;
 
-  const copyLink = async () => {
+  const copyToClipboard = async (text: string, successMessage: string) => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
-      toast.success(t.slide.toastCopyLinkSuccess);
+      await navigator.clipboard.writeText(text);
+      toast.success(successMessage);
       setLinkCopied(true);
       if (linkCopiedTimerRef.current) clearTimeout(linkCopiedTimerRef.current);
       linkCopiedTimerRef.current = setTimeout(() => setLinkCopied(false), 1200);
@@ -628,6 +631,11 @@ export function Slide() {
       toast.error(t.slide.toastCopyLinkFailed);
     }
   };
+  const slideEmbedUrl = () => embedUrl(window.location.origin, import.meta.env.BASE_URL, slideId);
+  const copyLink = () => copyToClipboard(window.location.href, t.slide.toastCopyLinkSuccess);
+  const copyEmbedLink = () => copyToClipboard(slideEmbedUrl(), t.slide.toastCopyEmbedLinkSuccess);
+  const copyEmbedCode = () =>
+    copyToClipboard(embedCode(slideEmbedUrl(), title), t.slide.toastCopyEmbedCodeSuccess);
 
   const exportHtml = async () => {
     if (!slide || exporting) return;
@@ -788,28 +796,45 @@ export function Slide() {
                 <span aria-hidden className="mx-0.5 hidden h-5 w-px bg-hairline md:block" />
               )}
               {view === 'slides' && !compactToolbar && (
-                <button
-                  type="button"
-                  aria-label={t.slide.copyLink}
-                  title={t.slide.copyLink}
-                  className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
-                  onClick={copyLink}
-                >
-                  <span className="relative grid size-4 place-items-center">
-                    <Link2
-                      className={cn(
-                        'col-start-1 row-start-1 size-4 transition-opacity duration-200',
-                        linkCopied ? 'opacity-0' : 'opacity-100',
-                      )}
-                    />
-                    <Check
-                      className={cn(
-                        'col-start-1 row-start-1 size-4 transition-opacity duration-200',
-                        linkCopied ? 'opacity-100' : 'opacity-0',
-                      )}
-                    />
-                  </span>
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    type="button"
+                    aria-label={t.slide.share}
+                    title={t.slide.share}
+                    className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+                  >
+                    <span className="relative grid size-4 place-items-center">
+                      <Link2
+                        className={cn(
+                          'col-start-1 row-start-1 size-4 transition-opacity duration-200',
+                          linkCopied ? 'opacity-0' : 'opacity-100',
+                        )}
+                      />
+                      <Check
+                        className={cn(
+                          'col-start-1 row-start-1 size-4 transition-opacity duration-200',
+                          linkCopied ? 'opacity-100' : 'opacity-0',
+                        )}
+                      />
+                    </span>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[200px]">
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem onClick={copyLink}>
+                        <Link2 />
+                        {t.slide.copyLink}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={copyEmbedLink}>
+                        <AppWindow />
+                        {t.slide.copyEmbedLink}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={copyEmbedCode}>
+                        <Code />
+                        {t.slide.copyEmbedCode}
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
               {view === 'slides' && allowHtmlDownload && !compactToolbar && (
                 <DropdownMenu>
@@ -866,6 +891,14 @@ export function Slide() {
                       <DropdownMenuItem onClick={copyLink}>
                         <Link2 />
                         {t.slide.copyLink}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={copyEmbedLink}>
+                        <AppWindow />
+                        {t.slide.copyEmbedLink}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={copyEmbedCode}>
+                        <Code />
+                        {t.slide.copyEmbedCode}
                       </DropdownMenuItem>
                     </DropdownMenuGroup>
                     {allowHtmlDownload && <DropdownMenuSeparator />}
@@ -1064,6 +1097,8 @@ export function Slide() {
                   present('window');
                 },
                 onCopyLink: copyLink,
+                onCopyEmbedLink: copyEmbedLink,
+                onCopyEmbedCode: copyEmbedCode,
                 onOverview: () => setOverviewOpen(true),
                 onToggleDesignPanel: () => setDesignOpen((v) => !v),
                 onToggleAgentPanel: toggleAgent,
