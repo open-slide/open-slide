@@ -1,5 +1,11 @@
 # @open-slide/cli
 
+## 2.0.1
+
+### Patch Changes
+
+- [#669](https://github.com/open-slide/open-slide/pull/669) [`0d2b768`](https://github.com/open-slide/open-slide/commit/0d2b768bc607f7b08fc34d4a8c5ee5fc365e81d8) Thanks [@1weiho](https://github.com/1weiho)! - Copy skills from the installed `@open-slide/core` during `init` instead of bundling a snapshot, so new workspaces no longer start with outdated skills.
+
 ## 2.0.0
 
 ### Major Changes

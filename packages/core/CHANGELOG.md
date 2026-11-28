@@ -1,5 +1,21 @@
 # @open-slide/core
 
+## 2.6.0
+
+### Minor Changes
+
+- [#668](https://github.com/open-slide/open-slide/pull/668) [`5c17166`](https://github.com/open-slide/open-slide/commit/5c171663c0785211dd3ed76f420bab565cdb778c) Thanks [@1weiho](https://github.com/1weiho)! - Redesign the Themes gallery and theme viewer with palette swatches, a page filmstrip, and a one-click Copy prompt, and drop the 2–3 page limit on theme demos.
+
+### Patch Changes
+
+- [#664](https://github.com/open-slide/open-slide/pull/664) [`16ed629`](https://github.com/open-slide/open-slide/commit/16ed62926898ee6ab5bc87cb0ae851a6754d7e0f) Thanks [@1weiho](https://github.com/1weiho)! - Even out the asset manager's toolbar padding so side insets match top and bottom.
+
+- [#666](https://github.com/open-slide/open-slide/pull/666) [`7db064b`](https://github.com/open-slide/open-slide/commit/7db064bbf6f903baad82cdce330725e52cf976cd) Thanks [@1weiho](https://github.com/1weiho)! - Fix clipped thumbnails and a broken top divider in the editor's grid overview.
+
+- [#665](https://github.com/open-slide/open-slide/pull/665) [`34f7474`](https://github.com/open-slide/open-slide/commit/34f74744f6117a95f65cc3afda4370ddba99441f) Thanks [@1weiho](https://github.com/1weiho)! - Stop iCloud Passwords from offering AutoFill when focusing the agent composer.
+
+- [#663](https://github.com/open-slide/open-slide/pull/663) [`3c263dd`](https://github.com/open-slide/open-slide/commit/3c263dd10826f5e86a978ae38e10aac482304aa1) Thanks [@1weiho](https://github.com/1weiho)! - Remove the deck header dividers and center the deck title across the full header width.
+
 ## 2.5.0
 
 ### Minor Changes
