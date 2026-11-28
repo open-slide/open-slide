@@ -7,8 +7,8 @@ import { Command } from 'commander';
 import { gitInitAndCommit } from './git.ts';
 import {
   installDependencies,
+  installSkillsFromCore,
   isDirNonEmpty,
-  refreshSkillsFromInstalledCore,
   sanitizeDirName,
   scaffold,
 } from './init.ts';
@@ -170,8 +170,12 @@ async function runInit(dirArg: string | undefined, flags: InitCliFlags): Promise
     const result = await installDependencies(pm, target);
     if (result.ok) {
       installed = true;
-      await refreshSkillsFromInstalledCore(target);
       task.done(`Installed dependencies with ${pm}`);
+      if (!(await installSkillsFromCore(target))) {
+        p.log.warn(
+          `Skills not installed ${chalk.dim('· run `open-slide sync:skills` to add them')}`,
+        );
+      }
     } else {
       task.fail('Dependency install failed');
       p.log.message(chalk.dim(tail(result.output)));

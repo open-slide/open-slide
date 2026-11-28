@@ -3,7 +3,7 @@ import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { refreshSkillsFromInstalledCore, sanitizeDirName } from './init.ts';
+import { installSkillsFromCore, sanitizeDirName } from './init.ts';
 
 describe('sanitizeDirName', () => {
   it('leaves safe names untouched', () => {
@@ -93,44 +93,52 @@ describe('sanitizeDirName', () => {
   });
 });
 
-describe('refreshSkillsFromInstalledCore', () => {
-  let target: string;
+describe('installSkillsFromCore', () => {
+  let root: string;
 
   afterEach(async () => {
-    await rm(target, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true });
   });
 
   async function write(rel: string, content: string) {
-    const file = join(target, rel);
+    const file = join(root, rel);
     await mkdir(join(file, '..'), { recursive: true });
     await writeFile(file, content);
   }
 
-  it('replaces bundled skills with the installed core copy', async () => {
-    target = await mkdtemp(join(tmpdir(), 'open-slide-init-'));
+  const read = (rel: string) => readFile(join(root, rel), 'utf8');
+
+  it('copies skills from the installed core and links them for Claude', async () => {
+    root = await mkdtemp(join(tmpdir(), 'open-slide-init-'));
     await write('.agents/skills/create-slide/SKILL.md', 'stale');
     await write('.agents/skills/user-skill/SKILL.md', 'mine');
     await write('node_modules/@open-slide/core/skills/create-slide/SKILL.md', 'fresh');
     await write('node_modules/@open-slide/core/skills/new-skill/SKILL.md', 'new');
 
-    expect(await refreshSkillsFromInstalledCore(target)).toBe(true);
+    expect(await installSkillsFromCore(root)).toBe(true);
 
-    expect(await readFile(join(target, '.agents/skills/create-slide/SKILL.md'), 'utf8')).toBe(
-      'fresh',
-    );
-    expect(await readFile(join(target, '.agents/skills/new-skill/SKILL.md'), 'utf8')).toBe('new');
-    expect(await readFile(join(target, '.agents/skills/user-skill/SKILL.md'), 'utf8')).toBe('mine');
-    expect(await readFile(join(target, '.claude/skills/new-skill/SKILL.md'), 'utf8')).toBe('new');
+    expect(await read('.agents/skills/create-slide/SKILL.md')).toBe('fresh');
+    expect(await read('.agents/skills/new-skill/SKILL.md')).toBe('new');
+    expect(await read('.agents/skills/user-skill/SKILL.md')).toBe('mine');
+    expect(await read('.claude/skills/new-skill/SKILL.md')).toBe('new');
     if (process.platform !== 'win32') {
-      expect((await lstat(join(target, '.claude/skills/new-skill'))).isSymbolicLink()).toBe(true);
+      expect((await lstat(join(root, '.claude/skills/new-skill'))).isSymbolicLink()).toBe(true);
     }
   });
 
-  it('keeps the bundled skills when core is not installed', async () => {
-    target = await mkdtemp(join(tmpdir(), 'open-slide-init-'));
-    await write('.agents/skills/create-slide/SKILL.md', 'bundled');
+  it('finds core hoisted to a parent node_modules', async () => {
+    root = await mkdtemp(join(tmpdir(), 'open-slide-init-'));
+    await write('node_modules/@open-slide/core/skills/create-slide/SKILL.md', 'hoisted');
+    await mkdir(join(root, 'decks', 'talk'), { recursive: true });
 
-    expect(await refreshSkillsFromInstalledCore(target)).toBe(false);
-    expect(existsSync(join(target, '.agents/skills/create-slide/SKILL.md'))).toBe(true);
+    expect(await installSkillsFromCore(join(root, 'decks', 'talk'))).toBe(true);
+    expect(await read('decks/talk/.agents/skills/create-slide/SKILL.md')).toBe('hoisted');
+  });
+
+  it('reports false when core is not installed', async () => {
+    root = await mkdtemp(join(tmpdir(), 'open-slide-init-'));
+
+    expect(await installSkillsFromCore(root)).toBe(false);
+    expect(existsSync(join(root, '.agents'))).toBe(false);
   });
 });
