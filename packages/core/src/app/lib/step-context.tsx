@@ -245,18 +245,21 @@ export function Steps({ children }: StepsProps) {
 
 export type StepProps = PropsWithChildren<{
   duration?: number;
+  [key: `data-${string}`]: string | number | boolean | undefined;
 }>;
 
 type InternalStepProps = StepProps & { _revealed?: boolean };
 
-export function Step({ children, duration = 180, _revealed }: InternalStepProps) {
+export function Step({ children, duration = 180, _revealed, ...rest }: InternalStepProps) {
   const reduceMotion = usePrefersReducedMotion();
   const revealed = _revealed ?? true;
   const ms = reduceMotion ? 0 : duration;
 
   return (
     <div
+      {...rest}
       data-osd-step={revealed ? 'revealed' : 'pending'}
+      data-osd-step-duration={duration}
       style={{
         opacity: revealed ? 1 : 0,
         visibility: revealed ? 'visible' : 'hidden',

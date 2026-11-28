@@ -48,6 +48,25 @@ const Problem: Page = () => (
 </Steps>
 ```
 
+## PowerPoint export
+
+Each `Step` becomes a click reveal in the editable PPTX export, in document
+order across every `Steps` group on the page. The effect is a fade with a
+`click` trigger, and its duration is the step's authored `duration` (the default
+`180`). Non-`Step` children of `Steps` are visible from slide entry.
+
+An explicit `data-os-anim` on `<Step>` overrides that default fade, e.g.
+`<Step data-os-anim="fly" data-os-anim-direction="left" data-os-anim-duration={240}>`.
+The effect's duration comes from `data-os-anim-duration` (default `500`), not
+the Step's `duration`, so set both when the viewer and PowerPoint should match.
+Its trigger still defaults to `click` inside a step, and the attribute only
+changes the PPTX — the viewer still fades the step. Without an explicit effect,
+the PPTX uses the Step's `duration` even when the exporting machine prefers
+reduced motion; only the viewer collapses the transition.
+
+See [Element animations](/docs/primitive/element-animations) for the other
+entrance effects.
+
 ## Entry state
 
 The starting state depends on how the audience lands on the page:

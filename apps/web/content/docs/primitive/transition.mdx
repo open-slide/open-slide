@@ -96,3 +96,24 @@ export const transition: SlideTransition = {
 
 For the full schema and a reusable family of examples, see
 [SlideTransition](/docs/reference/slide-transitions).
+
+## PPTX export
+
+The editable PPTX export maps the selected transition to a native PowerPoint
+transition:
+
+| Authored motion | PowerPoint |
+| --- | --- |
+| `morph` | Morph, with a plain fade fallback for older builds |
+| Opacity-only `enter`, or a lift under the travel threshold | Fade |
+| Exit-only (no `enter`) | Fade approximation |
+| Translation of at least `24px` (or `2%`) on the dominant axis | Push along that axis, in the direction of travel |
+| `clipPath`-only, compound, or otherwise unrecognised phase | Fade |
+
+A subtle fade-plus-lift stays a fade: travel below `24px` or `2%` is
+decoration, not a push. The exporter reads only the incoming page's transition:
+`morph` wins over `enter`, which wins over `exit`. An exit-only transition is
+approximated as a fade because PowerPoint has no outgoing-slide transition, and
+a deliberate hold emits nothing. Easing is ignored; the duration is
+approximated by PowerPoint's speed presets plus the exact duration where the
+build supports it. The image PPTX export stays static.
