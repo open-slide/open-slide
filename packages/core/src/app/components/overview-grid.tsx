@@ -113,7 +113,7 @@ export function OverviewGrid({
       aria-modal="true"
       aria-label={t.present.overviewDialogAria}
       className={cn(
-        'absolute inset-0 z-50 flex flex-col backdrop-blur-2xl backdrop-saturate-150',
+        'absolute z-50 flex flex-col backdrop-blur-2xl backdrop-saturate-150',
         'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150',
         styles.surface,
       )}
@@ -142,7 +142,7 @@ export function OverviewGrid({
           <div
             className="grid justify-center gap-5"
             style={{
-              gridTemplateColumns: `repeat(auto-fill, ${THUMB_W}px)`,
+              gridTemplateColumns: `repeat(auto-fill, calc(${THUMB_W}px + var(--spacing) * 3))`,
             }}
           >
             {pages.map((PageComp, i) => {
@@ -231,11 +231,11 @@ function OverviewThumb({
       <div
         ref={boxRef}
         className={cn(
-          'relative w-full overflow-hidden rounded-[4px] ring-1 transition-shadow',
+          'relative shrink-0 overflow-hidden rounded-[4px] ring-1 transition-shadow',
           styles.thumbSurface,
           isFocused ? 'ring-2 ring-[var(--brand,#e5484d)]' : styles.thumbRing,
         )}
-        style={{ height: THUMB_H }}
+        style={{ width: THUMB_W, height: THUMB_H }}
       >
         <SlideCanvas
           scale={THUMB_W / CANVAS_WIDTH}
@@ -336,7 +336,7 @@ type OverviewStyles = {
 };
 
 const presentStyles = {
-  surface: 'bg-black/80',
+  surface: 'inset-0 bg-black/80',
   eyebrow: 'text-white/55',
   thumbFocused: 'bg-white/10',
   thumbHover: 'hover:bg-white/5',
@@ -350,7 +350,7 @@ const presentStyles = {
 } as const;
 
 const editorStyles = {
-  surface: 'bg-background/80',
+  surface: 'inset-x-0 -top-px bottom-0 border-t border-hairline bg-background/80',
   eyebrow: 'text-muted-foreground',
   thumbFocused: 'bg-muted',
   thumbHover: 'hover:bg-muted/60',
