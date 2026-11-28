@@ -323,7 +323,7 @@ function nodeXml(node: SceneNode, spid: number, ctx: EmitContext): string {
     case 'picture':
       return pictureXml(node, spid, ctx);
     case 'text':
-      return textXml(node, spid);
+      return textXml(node, spid, ctx);
   }
 }
 
@@ -359,8 +359,7 @@ function cropXml(crop: PictureNode['crop']): string {
   return `<a:srcRect l="${v(crop.l)}" t="${v(crop.t)}" r="${v(crop.r)}" b="${v(crop.b)}"/>`;
 }
 
-function textXml(node: TextNode, ctx: EmitContext): string {
-  const id = ctx.nextId++;
+function textXml(node: TextNode, id: number, ctx: EmitContext): string {
   const paragraphs = node.paragraphs.map((p) => paragraphXml(p, ctx)).join('');
   return `<p:sp><p:nvSpPr>${nvPr(id, node.name)}<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xfrmXml(node)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`;
 }

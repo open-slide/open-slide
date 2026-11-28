@@ -262,6 +262,7 @@ describe('buildPptxFiles', () => {
         {
           background: null,
           notes: null,
+          transition: null,
           nodes: [
             {
               kind: 'text',
@@ -269,6 +270,7 @@ describe('buildPptxFiles', () => {
               box: { x: 0, y: 0, w: 600, h: 100 },
               rotationDeg: 0,
               flipV: false,
+              animation: null,
               paragraphs: [
                 {
                   lineSpacingPx: 48,
