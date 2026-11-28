@@ -5,7 +5,13 @@ import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { gitInitAndCommit } from './git.ts';
-import { installDependencies, isDirNonEmpty, sanitizeDirName, scaffold } from './init.ts';
+import {
+  installDependencies,
+  installSkillsFromCore,
+  isDirNonEmpty,
+  sanitizeDirName,
+  scaffold,
+} from './init.ts';
 import { detectPackageManager, PACKAGE_MANAGERS, type PackageManager } from './package-manager.ts';
 
 async function readVersion(): Promise<string> {
@@ -165,6 +171,11 @@ async function runInit(dirArg: string | undefined, flags: InitCliFlags): Promise
     if (result.ok) {
       installed = true;
       task.done(`Installed dependencies with ${pm}`);
+      if (!(await installSkillsFromCore(target))) {
+        p.log.warn(
+          `Skills not installed ${chalk.dim('· run `open-slide sync:skills` to add them')}`,
+        );
+      }
     } else {
       task.fail('Dependency install failed');
       p.log.message(chalk.dim(tail(result.output)));

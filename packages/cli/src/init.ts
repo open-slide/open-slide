@@ -49,26 +49,44 @@ async function linkOrCopy(relSrc: string, dst: string): Promise<void> {
   await symlink(relSrc, dst);
 }
 
-async function materializeTemplateLinks(target: string): Promise<void> {
+async function linkClaudeMd(target: string): Promise<void> {
   const claudeMd = join(target, 'CLAUDE.md');
   if (!existsSync(claudeMd) && existsSync(join(target, 'AGENTS.md'))) {
     await linkOrCopy('AGENTS.md', claudeMd);
   }
+}
+
+function findInstalledCoreSkills(target: string): string | null {
+  let dir = resolve(target);
+  while (true) {
+    const skills = join(dir, 'node_modules', '@open-slide', 'core', 'skills');
+    if (existsSync(skills)) return skills;
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+// Skills come from the installed core rather than the template so they always
+// match the core version the workspace runs, however old this CLI is.
+export async function installSkillsFromCore(target: string): Promise<boolean> {
+  const coreSkills = findInstalledCoreSkills(target);
+  if (!coreSkills) return false;
+  const entries = await readdir(coreSkills, { withFileTypes: true });
+  const names = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  if (names.length === 0) return false;
 
   const agentsSkills = join(target, '.agents', 'skills');
-  if (!existsSync(agentsSkills)) return;
-
   const claudeSkills = join(target, '.claude', 'skills');
+  await mkdir(agentsSkills, { recursive: true });
   await mkdir(claudeSkills, { recursive: true });
-
-  const entries = await readdir(agentsSkills, { withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    await linkOrCopy(
-      join('..', '..', '.agents', 'skills', entry.name),
-      join(claudeSkills, entry.name),
-    );
+  for (const name of names) {
+    const dst = join(agentsSkills, name);
+    await rm(dst, { recursive: true, force: true });
+    await cp(join(coreSkills, name), dst, { recursive: true });
+    await linkOrCopy(join('..', '..', '.agents', 'skills', name), join(claudeSkills, name));
   }
+  return true;
 }
 
 export async function scaffold(opts: ScaffoldOptions): Promise<void> {
@@ -87,7 +105,7 @@ export async function scaffold(opts: ScaffoldOptions): Promise<void> {
   }
 
   await cp(TEMPLATE_DIR, target, { recursive: true });
-  await materializeTemplateLinks(target);
+  await linkClaudeMd(target);
 
   const pkgPath = join(target, 'package.json');
   if (existsSync(pkgPath)) {

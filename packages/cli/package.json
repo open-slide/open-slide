@@ -12,9 +12,8 @@
     "README.md"
   ],
   "scripts": {
-    "build": "node scripts/sync-template-skills.mjs && tsdown",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit",
-    "sync:template-skills": "node scripts/sync-template-skills.mjs",
     "prepack": "pnpm build"
   },
   "engines": {
