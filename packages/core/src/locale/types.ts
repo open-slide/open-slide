@@ -621,8 +621,26 @@ export type Locale = {
     openThemeAria: string;
     usedBy: string;
     usedByEmpty: string;
-    expandPromptAria: string;
-    collapsePromptAria: string;
+    expandPrompt: string;
+    collapsePrompt: string;
+    galleryHintPrefix: string;
+    galleryHintSuffix: string;
+    /** template: "{count} pages" */
+    pageCount: Plural;
+    /** template: "Used by {count} slides" */
+    usedByCount: Plural;
+    modeDark: string;
+    modeLight: string;
+    prompt: string;
+    palette: string;
+    copyPrompt: string;
+    copied: string;
+    copyFailed: string;
+    /** template: "Copy {hex}" */
+    copyColorAria: string;
+    previewAria: string;
+    /** template: "Go to page {n}" */
+    goToPageAria: string;
   };
 
   agent: {

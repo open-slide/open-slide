@@ -1,10 +1,19 @@
 import { Palette } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { format, useLocale } from '@/lib/use-locale';
+import { useMemo } from 'react';
+import { format, plural, useLocale } from '@/lib/use-locale';
+import { pad2 } from '@/lib/utils';
 import { SlidePageProvider } from '../../lib/page-context';
-import { loadThemeDemo, type Theme, type ThemeDemoModule, themes } from '../../lib/themes';
+import { slidesByTheme } from '../../lib/slides';
+import {
+  type Theme,
+  type ThemeDemoModule,
+  themeSwatches,
+  themes,
+  useThemeDemo,
+} from '../../lib/themes';
 import { SlideCanvas } from '../slide-canvas';
 import { SafePage } from '../slide-error';
+import { ModeBadge, NoDemoState, SwatchStrip } from './theme-parts';
 
 export function ThemesGallery({ onOpen }: { onOpen: (id: string) => void }) {
   const t = useLocale();
@@ -14,7 +23,7 @@ export function ThemesGallery({ onOpen }: { onOpen: (id: string) => void }) {
   }
 
   return (
-    <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(240px,100%),1fr))] gap-x-6 gap-y-9 md:grid-cols-[repeat(auto-fill,minmax(340px,1fr))]">
+    <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(260px,100%),1fr))] gap-x-6 gap-y-10 md:grid-cols-[repeat(auto-fill,minmax(340px,1fr))]">
       {themes.map((theme, i) => (
         <li
           key={theme.id}
@@ -41,37 +50,57 @@ function ThemeCard({
   onOpen: () => void;
   ariaLabel: string;
 }) {
+  const t = useLocale();
+  const demo = useThemeDemo(theme);
+  const swatches = useMemo(() => themeSwatches(theme.body, 6), [theme.body]);
+  const usedBy = useMemo(() => slidesByTheme(theme.id).length, [theme.id]);
+  const pageCount = demo?.default.length ?? 0;
+
   return (
     <button
       type="button"
       onClick={onOpen}
       aria-label={ariaLabel}
-      className="group block w-full rounded-[6px] text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="group block w-full rounded-[8px] text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-4 focus-visible:ring-offset-background"
     >
-      <div className="relative aspect-video overflow-hidden rounded-[6px] border border-hairline bg-card shadow-edge ring-1 ring-foreground/[0.04] group-hover:shadow-floating group-hover:ring-foreground/20 group-active:scale-[0.99] motion-safe:transition-[box-shadow,--tw-ring-color,scale] motion-safe:duration-200">
-        <ThemePreview theme={theme} />
+      <div className="relative aspect-video overflow-hidden rounded-[8px] border border-hairline bg-card shadow-edge ring-1 ring-foreground/[0.04] group-hover:shadow-floating group-hover:ring-foreground/20 group-active:scale-[0.99] motion-safe:transition-[box-shadow,--tw-ring-color,scale] motion-safe:duration-200">
+        <ThemePreview theme={theme} demo={demo} />
+        {pageCount > 1 ? (
+          <span className="nums pointer-events-none absolute right-2 bottom-2 rounded-[4px] bg-black/55 px-1.5 py-0.5 font-mono text-[10px] tracking-[0.04em] text-white/90 opacity-0 backdrop-blur-sm group-hover:opacity-100 group-focus-visible:opacity-100 motion-safe:transition-opacity motion-safe:duration-150">
+            {format(plural(pageCount, t.themes.pageCount), { count: pad2(pageCount) })}
+          </span>
+        ) : null}
       </div>
-      <div className="mt-3">
+
+      <div className="mt-3.5 flex items-center justify-between gap-3">
         <h3 className="min-w-0 truncate font-heading text-[14px] font-medium tracking-tight">
           {theme.name}
         </h3>
+        <SwatchStrip swatches={swatches} className="shrink-0" />
       </div>
       {theme.description ? (
         <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-muted-foreground">
           {theme.description}
         </p>
       ) : null}
+      {theme.mode || usedBy > 0 ? (
+        <div className="mt-2.5 flex min-w-0 items-center gap-2">
+          {theme.mode ? <ModeBadge mode={theme.mode} /> : null}
+          {usedBy > 0 ? (
+            <span className="folio truncate">
+              {format(plural(usedBy, t.themes.usedByCount), { count: usedBy })}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </button>
   );
 }
 
-function ThemePreview({ theme }: { theme: Theme }) {
+function ThemePreview({ theme, demo }: { theme: Theme; demo: ThemeDemoModule | null }) {
   const t = useLocale();
-  const demo = useThemeDemo(theme);
 
-  if (!theme.hasDemo) {
-    return <NoDemoState />;
-  }
+  if (!theme.hasDemo) return <NoDemoState compact />;
   if (!demo) {
     return (
       <div className="grid h-full w-full place-items-center text-[10px] tracking-[0.08em] uppercase text-muted-foreground/60">
@@ -80,7 +109,7 @@ function ThemePreview({ theme }: { theme: Theme }) {
     );
   }
   const FirstPage = demo.default[0];
-  if (!FirstPage) return <NoDemoState />;
+  if (!FirstPage) return <NoDemoState compact />;
 
   return (
     <div className="h-full w-full">
@@ -93,32 +122,14 @@ function ThemePreview({ theme }: { theme: Theme }) {
   );
 }
 
-function NoDemoState() {
-  const t = useLocale();
-  return (
-    <div className="grid h-full w-full place-items-center bg-muted/40 px-6 text-center">
-      <div>
-        <p className="font-heading text-[12px] font-semibold tracking-tight text-foreground/80">
-          {t.themes.noDemoYet}
-        </p>
-        <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground">
-          {t.themes.noDemoHintPrefix}
-          <code className="rounded-[3px] bg-card px-1 py-0.5 font-mono text-[10px] text-foreground">
-            /create-theme
-          </code>
-          {t.themes.noDemoHintSuffix}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function ThemesEmptyState() {
   const t = useLocale();
   return (
-    <div className="rounded-[8px] border border-dashed border-border px-8 py-20">
+    <div className="rounded-[10px] border border-dashed border-border px-8 py-20">
       <div className="mx-auto flex max-w-md flex-col items-center text-center">
-        <Palette className="size-5 text-muted-foreground/60" aria-hidden />
+        <div className="grid size-10 place-items-center rounded-full bg-muted">
+          <Palette className="size-[18px] text-muted-foreground" aria-hidden />
+        </div>
         <p className="mt-4 font-heading text-[14px] font-semibold tracking-tight">
           {t.themes.noThemesTitle}
         </p>
@@ -132,24 +143,4 @@ function ThemesEmptyState() {
       </div>
     </div>
   );
-}
-
-function useThemeDemo(theme: Theme): ThemeDemoModule | null {
-  const [demo, setDemo] = useState<ThemeDemoModule | null>(null);
-  useEffect(() => {
-    if (!theme.hasDemo) {
-      setDemo(null);
-      return;
-    }
-    let cancelled = false;
-    loadThemeDemo(theme.id)
-      .then((mod) => {
-        if (!cancelled) setDemo(mod);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [theme.id, theme.hasDemo]);
-  return demo;
 }
