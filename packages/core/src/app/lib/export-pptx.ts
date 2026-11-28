@@ -96,8 +96,8 @@ export async function exportSlideAsPptx(
       lib.PPTX_MIME,
       slideId,
     );
-  } finally {
     onProgress?.({ phase: 'done', current: total, total, percent: 100 });
+  } finally {
     mounted.dispose();
   }
 }
@@ -162,8 +162,8 @@ export async function exportSlideAsImagePptx(
       lib.PPTX_MIME,
       slideId,
     );
-  } finally {
     onProgress?.({ phase: 'done', current: total, total, percent: 100 });
+  } finally {
     mounted.dispose();
   }
 }
