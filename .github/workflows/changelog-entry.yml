@@ -1,0 +1,90 @@
+name: Changelog Entry
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: changelog-entry
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check what is missing
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./packages/core/package.json').version")
+          branch="changelog/core-v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          if pnpm test:changelog; then
+            echo "The changelog page already covers $version."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "$branch already exists, leaving it to its PR."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Draft the entry and open a PR
+        if: steps.check.outputs.needed == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: >-
+            --max-turns 60
+            --allowedTools "Skill,Read,Edit,Write,Glob,Grep,Bash(pnpm test:changelog),Bash(pnpm --filter web typecheck),Bash(pnpm check),Bash(pnpm check:fix),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git switch:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh pr create:*)"
+          prompt: |
+            @open-slide/core ${{ steps.check.outputs.version }} was just published, and
+            `pnpm test:changelog` reports versions missing from apps/web/lib/changelog.ts.
+
+            Use the changelog-entry skill (.claude/skills/changelog-entry/SKILL.md) to add
+            every missing version to apps/web/lib/changelog.ts. The release has already
+            merged, so this is a follow-up PR to main. Take each version's date from its
+            `chore: release packages` commit on main.
+
+            Skip the screenshot step: this runner can't shoot the UI. If the release earns a
+            shot under the skill's rules, leave `shot` out and say so in the PR body instead.
+
+            Only change apps/web/lib/changelog.ts. When `pnpm test:changelog`,
+            `pnpm --filter web typecheck` and `pnpm check` all pass:
+
+            1. `git switch -c ${{ steps.check.outputs.branch }}`
+            2. Commit with the message `docs(web): add <versions> to the changelog`, where
+               <versions> is the line or versions you added, matching earlier commits like
+               "docs(web): add 2.5 and 2.6 to the changelog".
+            3. `git push -u origin ${{ steps.check.outputs.branch }}`
+            4. `gh pr create --base main --assignee 1weiho --reviewer 1weiho` with the same
+               title as the commit, and a short body listing the versions covered, the
+               CHANGELOG.md line items you folded together or left out and why, and any
+               screenshot the release should still get.
+
+            If a check keeps failing, don't open the PR. Explain what failed instead.

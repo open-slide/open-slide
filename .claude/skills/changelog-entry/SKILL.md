@@ -36,6 +36,12 @@ already merged, open a follow-up PR to `main` instead. Before merging, check
 the release PR's `CHANGELOG.md` diff: it is the source of truth for what
 shipped.
 
+If neither happens, `.github/workflows/changelog-entry.yml` does it: once a
+core release publishes, the Release workflow dispatches it, and it runs this
+skill in Claude Code and opens the follow-up PR from `changelog/core-v<version>`.
+It skips when the page already covers the release or that branch exists, and
+it can't shoot screenshots, so add any `shot` on its PR by hand.
+
 ## Steps
 
 1. **Find what's missing.** Run `pnpm test:changelog`. The
