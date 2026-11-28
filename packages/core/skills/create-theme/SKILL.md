@@ -8,7 +8,7 @@ description: Use this skill when the user wants to create, draft, author, or ext
 This skill produces a **theme bundle** under `themes/`: two paired files that together describe a reusable visual identity.
 
 1. `themes/<id>.md` — agent-facing documentation: palette, typography, layout, fixed Title/Footer/Eyebrow components, motion. This is what `create-slide` reads when an author picks the theme.
-2. `themes/<id>.demo.tsx` — a runnable mini-slide (a normal slide module: `export default Page[]`) that demonstrates the theme on 2–3 pages. The dev UI's **Themes panel** loads this file and renders it as the theme's live preview.
+2. `themes/<id>.demo.tsx` — a runnable mini-slide (a normal slide module: `export default Page[]`) that demonstrates the theme across as many pages as it needs. The dev UI's **Themes panel** loads this file and renders it as the theme's live preview.
 
 Both files share the same stem so the runtime can pair them automatically.
 
@@ -184,7 +184,7 @@ Contract:
 
 - `import { type Page, useSlidePageNumber } from '@open-slide/core';`
 - Inline the **same** `Title`, `Footer`, `Eyebrow` components defined in the theme markdown — verbatim, no abstractions, no imports from elsewhere. The demo and the markdown must stay in lockstep so what the user sees in the panel matches what `create-slide` will paste into a real slide.
-- Export 2–3 `Page` components and a default array. Aim for: a Cover (Eyebrow + Title + subtitle), one Content page exercising body type + accent, and a Closer or "End" card. The "Example usage" block at the bottom of the markdown is a good starting point — extend it.
+- Export as many `Page` components as the theme needs to show itself, plus a default array. There is no page limit. A good baseline is a Cover (Eyebrow + Title + subtitle), a Content page exercising body type + accent, and a Closer or "End" card. Add more when the theme defines more layouts (section dividers, data/chart pages, quotes, image grids, tone variants), one page per layout. The "Example usage" block at the bottom of the markdown is a good starting point; extend it.
 - If the theme has runtime-tweakable tokens worth surfacing in the Design panel later, also `export const design: DesignSystem = {...}` (add `import type { DesignSystem } from '@open-slide/core';` alongside the base import).
 - No asset file imports, no `import` from `@/`, no slides-only helpers (e.g. `WindowShell` from a real slide). Webfont stylesheet `@import`s inside an inline `<style>` are fine here — a deliberate exception to `webfonts.md`'s loader rules, since the demo only mounts in the Themes panel. Demo files must be self-contained.
 
@@ -228,7 +228,7 @@ Run this checklist before finishing:
 - [ ] Motion section commits to one of static / subtle / rich.
 - [ ] Aesthetic paragraph names a single coherent direction.
 - [ ] Both files written: `themes/<id>.md` and `themes/<id>.demo.tsx`. No slide changes, no config changes.
-- [ ] Demo `.tsx` exports 2–3 pages and inlines the same Title/Footer/Eyebrow components defined in the markdown.
+- [ ] Demo `.tsx` exports a page for every layout the theme defines and inlines the same Title/Footer/Eyebrow components defined in the markdown.
 - [ ] Demo `.tsx` will load cleanly in the **Themes** panel: verify it against the Step 4b contract by reading the file — do not start a server.
 
 ## Step 6 — Hand off

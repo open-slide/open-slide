@@ -19,10 +19,12 @@ function resolved(id: string): string {
 type Frontmatter = {
   name: string;
   description: string;
+  mode: 'dark' | 'light' | null;
 };
 
 type ParsedTheme = {
   id: string;
+  file: string;
   frontmatter: Frontmatter;
   body: string;
   demoAbs: string | null;
@@ -53,6 +55,7 @@ function parseFrontmatter(raw: string, themeId: string): { fm: Frontmatter; body
     fm: {
       name: data.name || themeId,
       description: data.description || '',
+      mode: data.mode === 'dark' || data.mode === 'light' ? data.mode : null,
     },
     body: body.trim(),
   };
@@ -65,7 +68,7 @@ async function findThemes(userCwd: string, themesDir: string): Promise<string[]>
   return hits.sort();
 }
 
-async function readTheme(mdAbs: string, themesRoot: string): Promise<ParsedTheme> {
+async function readTheme(mdAbs: string, themesRoot: string, userCwd: string): Promise<ParsedTheme> {
   const id = path.basename(mdAbs, '.md');
   const raw = await fs.readFile(mdAbs, 'utf8');
   const { fm, body } = parseFrontmatter(raw, id);
@@ -78,7 +81,8 @@ async function readTheme(mdAbs: string, themesRoot: string): Promise<ParsedTheme
       break;
     }
   }
-  return { id, frontmatter: fm, body, demoAbs };
+  const file = normalizePath(path.relative(userCwd, mdAbs));
+  return { id, file, frontmatter: fm, body, demoAbs };
 }
 
 function generateThemesModule(themes: ParsedTheme[], isDev: boolean): string {
@@ -86,6 +90,8 @@ function generateThemesModule(themes: ParsedTheme[], isDev: boolean): string {
     id: t.id,
     name: t.frontmatter.name,
     description: t.frontmatter.description,
+    mode: t.frontmatter.mode,
+    file: t.file,
     body: t.body,
     hasDemo: t.demoAbs !== null,
   }));
@@ -133,7 +139,7 @@ export function themesPlugin(opts: ThemesPluginOptions): Plugin {
     async load(id) {
       if (id !== resolved(THEMES_VMOD)) return null;
       const files = await findThemes(userCwd, themesDir);
-      const themes = await Promise.all(files.map((f) => readTheme(f, themesRoot)));
+      const themes = await Promise.all(files.map((f) => readTheme(f, themesRoot, userCwd)));
       return generateThemesModule(themes, isDev);
     },
     configureServer(server) {
