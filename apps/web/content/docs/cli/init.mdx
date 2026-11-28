@@ -23,10 +23,25 @@ provided and doesn't exist, it's created.
 | `--use-bun`               | auto-detected | Install with bun.                                                        |
 | `--no-install`            | off           | Skip dependency installation. You'll have to run `install` yourself.     |
 | `--no-git`                | off           | Skip `git init` and the initial commit.                                  |
+| `--agent <agents>`        | ask           | Connect `claude`, `codex`, `all`, or `none` by installing their SDK.     |
+| `--no-agent`              | off           | Skip the coding agent step.                                              |
 
 When no `--use-*` flag is passed, the scaffolder detects the package manager
 that launched it (via `npm_config_user_agent`) and falls back to `npm`. Pass
 an explicit flag to force one.
+
+## Coding agents
+
+An interactive run asks whether to connect Claude Code, Codex, or both to the
+in-app agent panel. The default is **Not now**. Picking one adds its SDK
+(`@anthropic-ai/claude-agent-sdk` or `@openai/codex-sdk`) as a dev dependency;
+each is roughly 300 MB because it bundles native binaries. If the matching
+`claude` or `codex` CLI isn't on your `PATH`, init prints the command to install
+it. The panel reuses that CLI's sign-in.
+
+Non-interactive runs skip this step unless you pass `--agent`, e.g.
+`--agent claude,codex`. Skipped agents can be connected later from the agent
+panel with one click.
 
 The runtime UI language is picked in-app, not at init.
 

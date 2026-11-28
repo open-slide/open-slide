@@ -111,9 +111,17 @@ export type InstallResult = { ok: true } | { ok: false; output: string };
 // Output is captured rather than inherited so the package manager's own
 // progress UI doesn't fight the spinner; it is shown only on failure.
 export function installDependencies(pm: PackageManager, cwd: string): Promise<InstallResult> {
+  return runPackageManager(pm, ['install'], cwd);
+}
+
+export function runPackageManager(
+  pm: PackageManager,
+  args: string[],
+  cwd: string,
+): Promise<InstallResult> {
   return new Promise((res) => {
     let output = '';
-    const child = spawn(pm, ['install'], {
+    const child = spawn(pm, args, {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: IS_WINDOWS,
@@ -127,7 +135,11 @@ export function installDependencies(pm: PackageManager, cwd: string): Promise<In
     child.on('error', (err) => res({ ok: false, output: err.message }));
     child.on('close', (code) => {
       if (code === 0) res({ ok: true });
-      else res({ ok: false, output: output.trim() || `${pm} install exited with code ${code}` });
+      else
+        res({
+          ok: false,
+          output: output.trim() || `${pm} ${args.join(' ')} exited with code ${code}`,
+        });
     });
   });
 }
