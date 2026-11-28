@@ -51,7 +51,7 @@ export function ContributorsStat({ contributors }: { contributors: Contributor[]
       <motion.div
         initial="rest"
         animate="rest"
-        whileHover={open ? undefined : 'fan'}
+        whileHover={open || reduced ? undefined : 'fan'}
         className="group relative flex flex-col gap-1 bg-[color:var(--color-panel)] px-4 py-4"
       >
         <dt className="caption order-2 flex items-center gap-1 transition-colors group-hover:text-[color:var(--color-text-soft)]">
