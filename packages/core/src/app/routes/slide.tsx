@@ -748,7 +748,7 @@ export function Slide() {
       >
         <SelectionReporter />
         <div className="flex h-dvh flex-col overflow-hidden bg-sidebar text-foreground">
-          <header className="grid min-h-12 shrink-0 grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)] items-center gap-x-2 gap-y-1 px-2 py-2 md:px-3">
+          <header className="grid min-h-12 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2 py-2 sm:grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)] md:px-3">
             <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1.5 md:gap-2">
               {showSlideBrowser && (
                 <button
@@ -909,7 +909,7 @@ export function Slide() {
               )}
               {view === 'slides' && !narrowToolbar && <InspectPanelButton />}
               {view === 'slides' && (
-                <div className="ml-1 inline-flex items-stretch">
+                <div className="inline-flex items-stretch md:ml-1">
                   <Button
                     size="sm"
                     variant="brand"
