@@ -54,6 +54,46 @@ export const eras: Era[] = [
     span: 'Sep – Nov 2026',
     releases: [
       {
+        line: '2.6',
+        version: '2.6.0',
+        date: '2026-11-28',
+        kind: 'feature',
+        title: 'Browse themes by their colours',
+        summary:
+          'The Themes gallery shows every theme’s palette as swatches, and each theme’s page pairs its demo with a page filmstrip, the slides that use it, and a one-click Copy prompt for your agent. Theme demos are no longer limited to two or three pages.',
+        highlights: [
+          '`init` copies skills from the installed `@open-slide/core`, so new workspaces no longer start with outdated skills.',
+          'The deck header drops its dividers and centres the title across the full width.',
+          'The editor’s grid overview no longer clips thumbnails, and the asset manager’s toolbar padding is even on every side.',
+          'iCloud Passwords no longer offers AutoFill in the agent composer.',
+        ],
+        shot: shot(
+          'themes-gallery',
+          848,
+          'The Themes gallery with each theme’s palette shown as colour swatches beside its name',
+        ),
+        docs: { label: 'Themes docs', href: '/docs/core-feature/themes' },
+      },
+      {
+        line: '2.5',
+        version: '2.5.0',
+        date: '2026-11-27',
+        kind: 'feature',
+        title: 'Embed a deck, update in one click',
+        summary:
+          'Every deck now has an embeddable player at `/s/<slide-id>/embed`, and the link menu copies an embed link for Notion or Slack, or a responsive `<iframe>` for your site. When a new version ships, a sidebar card shows its cover and release notes, and one click installs it and restarts the dev server.',
+        highlights: [
+          '“What’s new” opens after every upgrade with the notes for each version you skipped.',
+          'The deck share menu has a share icon.',
+        ],
+        shot: shot(
+          'whats-new',
+          1334,
+          'The What’s new dialog offering an update, with the release cover, notes, and an Update now button',
+        ),
+        docs: { label: 'Embedding docs', href: '/docs/core-feature/present-mode#embedding' },
+      },
+      {
         line: '2.4',
         version: '2.4.0',
         date: '2026-11-25',
