@@ -49,13 +49,10 @@ shipped.
      `x.y` entry, in version order.
    - **Minor** (`x.y.0`): add a new `Release` at the top of the current era's
      `releases`, with `line: 'x.y'`.
-   - **Major** (`x.0.0`): add a new `Era` at the top of `eras` (`id: 'vX'`,
-     `label`, `title: 'open-slide X'`, a one-line `blurb`, `span`), with a
-     `kind: 'major'` release as its first entry. If the major shipped through
-     betas, fold them into its summary or a callout. Prereleases never get
-     their own line.
-   - Extend the era's `span` when a release lands in a new month
-     (`'Sep – Oct 2026'` → `'Sep – Nov 2026'`).
+   - **Major** (`x.0.0`): add a new `Era` at the top of `eras` (`id: 'vX'`),
+     with a `kind: 'major'` release as its first entry. If the major shipped
+     through betas, fold them into its summary or a callout. Prereleases
+     never get their own line.
    - `date` is the release date (`YYYY-MM-DD`). On a release PR that's the
      day you merge it. For a version already on `main`, take the date of its
      `chore: release packages` commit.
