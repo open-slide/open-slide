@@ -403,6 +403,10 @@ export type Locale = {
     searchFonts: string;
     upload: string;
     dropToUpload: string;
+    pasteImage: string;
+    pasteHint: string;
+    toastPasteNoImage: string;
+    toastPasteFailed: string;
     loading: string;
     noAssetsYet: string;
     noAssetsHintPrefix: string;
