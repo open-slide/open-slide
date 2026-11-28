@@ -97,11 +97,6 @@ export function Player({
   const [mobileChromeDeadline, setMobileChromeDeadline] = useState(0);
   const [startedAt] = useState(() => Date.now());
   const [windowed, setWindowed] = useState(!fullscreen);
-  // Mirror windowed into a ref so the fullscreenchange listener can read the
-  // latest value without re-binding — exits from window mode must not call
-  // onExit, but exits initiated by the browser (Esc in fullscreen) must.
-  const windowedRef = useRef(windowed);
-  windowedRef.current = windowed;
 
   const canPrev = index > 0;
   const canNext = index < pages.length - 1;
@@ -260,22 +255,18 @@ export function Player({
     if (windowed) return;
     const el = rootRef.current;
     if (!el) return;
+    const onFsChange = () => {
+      if (!document.fullscreenElement) setWindowed(true);
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
     if (document.fullscreenElement !== el) {
       el.requestFullscreen?.().catch(() => {});
     }
     return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
       if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
     };
   }, [windowed]);
-
-  useEffect(() => {
-    if (!allowExit) return;
-    const onFsChange = () => {
-      if (!document.fullscreenElement && !windowedRef.current) requestExit();
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, [requestExit, allowExit]);
 
   // Wait out the browser's own fullscreen animation before revealing the
   // first slide, otherwise the fade plays while the screen is still resizing.
@@ -366,14 +357,19 @@ export function Player({
         return;
       }
 
-      // Esc → close blackout if any, otherwise exit fullscreen.
       if (e.key === 'Escape') {
         if (controls && blackout) {
           e.preventDefault();
           setBlackout(null);
           return;
         }
-        if (allowExit) requestExit();
+        if (document.fullscreenElement) {
+          if (document.fullscreenElement !== rootRef.current) return;
+          e.preventDefault();
+          setWindowed(true);
+        } else if (allowExit && !e.repeat) {
+          requestExit();
+        }
         return;
       }
 
