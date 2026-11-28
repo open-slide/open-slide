@@ -2,6 +2,8 @@ export type { ImagePlaceholderProps } from './app/components/image-placeholder.t
 export { ImagePlaceholder } from './app/components/image-placeholder.tsx';
 export type { MorphElementProps } from './app/components/morph-element.tsx';
 export { MorphElement } from './app/components/morph-element.tsx';
+export type { SlideAudioProps } from './app/components/slide-audio.tsx';
+export { SlideAudio } from './app/components/slide-audio.tsx';
 export type {
   DesignFonts,
   DesignPalette,
@@ -19,5 +21,10 @@ export type {
   SlideTransition,
   TransitionPhase,
 } from './app/lib/transition.ts';
+export type {
+  SlideNarrationOptions,
+  SlideNarrationResult,
+} from './app/lib/use-slide-narration.ts';
+export { useSlideNarration } from './app/lib/use-slide-narration.ts';
 export type { OpenSlideAgentConfig, OpenSlideConfig } from './config.ts';
 export type { Locale, Plural } from './locale/types.ts';
