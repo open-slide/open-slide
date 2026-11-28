@@ -326,7 +326,7 @@ export function AssetView({ slideId }: Props) {
         }
       }}
     >
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-hairline bg-sidebar px-6 py-3">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-hairline bg-sidebar p-3">
         <div className="flex min-w-0 items-center gap-3">
           {lockedToGlobal ? (
             <span className="eyebrow">{t.asset.eyebrow}</span>
@@ -403,7 +403,7 @@ export function AssetView({ slideId }: Props) {
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-hairline bg-background px-4 py-2.5 sm:px-6">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-hairline bg-background p-3">
         <div className="relative min-w-[180px] flex-1 md:max-w-[280px]">
           <Search
             className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -521,7 +521,7 @@ export function AssetView({ slideId }: Props) {
         ) : (
           <div
             className={cn(
-              'p-4 sm:p-6',
+              'p-3',
               viewMode === 'grid'
                 ? 'grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 lg:grid-cols-[repeat(var(--asset-grid-columns),minmax(0,1fr))]'
                 : 'flex flex-col gap-1',
