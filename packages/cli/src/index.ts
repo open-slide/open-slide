@@ -5,7 +5,13 @@ import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { gitInitAndCommit } from './git.ts';
-import { installDependencies, isDirNonEmpty, sanitizeDirName, scaffold } from './init.ts';
+import {
+  installDependencies,
+  isDirNonEmpty,
+  refreshSkillsFromInstalledCore,
+  sanitizeDirName,
+  scaffold,
+} from './init.ts';
 import { detectPackageManager, PACKAGE_MANAGERS, type PackageManager } from './package-manager.ts';
 
 async function readVersion(): Promise<string> {
@@ -164,6 +170,7 @@ async function runInit(dirArg: string | undefined, flags: InitCliFlags): Promise
     const result = await installDependencies(pm, target);
     if (result.ok) {
       installed = true;
+      await refreshSkillsFromInstalledCore(target);
       task.done(`Installed dependencies with ${pm}`);
     } else {
       task.fail('Dependency install failed');

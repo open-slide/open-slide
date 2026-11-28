@@ -71,6 +71,34 @@ async function materializeTemplateLinks(target: string): Promise<void> {
   }
 }
 
+async function dirNames(dir: string): Promise<string[]> {
+  if (!existsSync(dir)) return [];
+  const entries = await readdir(dir, { withFileTypes: true });
+  return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+}
+
+// The template's skills are a snapshot of core taken when the CLI was built, but
+// the workspace installs the newest core in range, so prefer the installed copy.
+export async function refreshSkillsFromInstalledCore(target: string): Promise<boolean> {
+  const coreSkills = join(target, 'node_modules', '@open-slide', 'core', 'skills');
+  const names = await dirNames(coreSkills);
+  if (names.length === 0) return false;
+
+  const agentsSkills = join(target, '.agents', 'skills');
+  const claudeSkills = join(target, '.claude', 'skills');
+  const bundled = await dirNames(join(TEMPLATE_DIR, '.agents', 'skills'));
+  for (const name of new Set([...bundled, ...names])) {
+    await rm(join(agentsSkills, name), { recursive: true, force: true });
+    await rm(join(claudeSkills, name), { recursive: true, force: true });
+  }
+
+  for (const name of names) {
+    await cp(join(coreSkills, name), join(agentsSkills, name), { recursive: true });
+  }
+  await materializeTemplateLinks(target);
+  return true;
+}
+
 export async function scaffold(opts: ScaffoldOptions): Promise<void> {
   const { target, force, name } = opts;
 
