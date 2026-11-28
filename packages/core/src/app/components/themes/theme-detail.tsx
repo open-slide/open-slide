@@ -39,6 +39,22 @@ export function ThemeDetail({ themeId, onBack }: { themeId: string; onBack: () =
   const totalPages = pages.length;
   const usedBySlideIds = useMemo(() => (theme ? slidesByTheme(theme.id) : []), [theme]);
   const swatches = useMemo(() => (theme ? themeSwatches(theme.body, 12) : []), [theme]);
+  const stripRef = useRef<HTMLOListElement>(null);
+
+  // scrollIntoView would also scroll the page; only the strip should move.
+  useEffect(() => {
+    const strip = stripRef.current;
+    const item = strip?.children[pageIndex] as HTMLElement | undefined;
+    if (!strip || !item) return;
+    const pad = (strip.firstElementChild as HTMLElement).offsetLeft;
+    const left = item.offsetLeft - pad;
+    const right = item.offsetLeft + item.offsetWidth + pad;
+    if (left < strip.scrollLeft) {
+      strip.scrollTo({ left });
+    } else if (right > strip.scrollLeft + strip.clientWidth) {
+      strip.scrollTo({ left: right - strip.clientWidth });
+    }
+  }, [pageIndex]);
 
   useEffect(() => {
     if (totalPages <= 1) return;
@@ -149,7 +165,10 @@ export function ThemeDetail({ themeId, onBack }: { themeId: string; onBack: () =
 
         {demo && totalPages > 1 ? (
           <div className="flex items-center gap-4">
-            <ol className="-m-1 flex min-w-0 flex-1 gap-2 overflow-x-auto p-1 [scrollbar-width:thin]">
+            <ol
+              ref={stripRef}
+              className="relative -m-1 flex min-w-0 flex-1 gap-2 overflow-x-auto p-1 [scrollbar-width:thin]"
+            >
               {pages.map((page, i) => (
                 <li key={String(i)} className="shrink-0">
                   <PageThumb
@@ -240,15 +259,8 @@ function PageThumb({
   label: string;
   onSelect: () => void;
 }) {
-  const ref = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (active) ref.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [active]);
-
   return (
     <button
-      ref={ref}
       type="button"
       aria-label={label}
       aria-current={active ? 'true' : undefined}
