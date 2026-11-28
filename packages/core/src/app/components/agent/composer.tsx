@@ -58,24 +58,34 @@ export function Composer({
         )}
       >
         {context && <div className="flex flex-wrap items-center gap-1 px-2 pt-2">{context}</div>}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          rows={1}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              if (canSend) onSend();
-            }
-          }}
-          placeholder={placeholder}
+        {/* The placeholder is CSS-generated because iCloud Passwords reads "Code" in a native
+            placeholder ("Claude Code") as a one-time-code field and pops AutoFill on focus. */}
+        <div
+          data-placeholder={value ? undefined : placeholder}
           className={cn(
-            'w-full resize-none bg-transparent px-3 text-[12.5px] leading-[1.5] outline-none placeholder:text-muted-foreground/60',
-            context ? 'pt-1.5' : 'pt-2.5',
+            'relative before:pointer-events-none before:absolute before:inset-x-3 before:truncate before:text-[12.5px] before:leading-[1.5] before:text-muted-foreground/60 before:content-[attr(data-placeholder)]',
+            context ? 'before:top-1.5' : 'before:top-2.5',
           )}
-        />
+        >
+          <textarea
+            ref={textareaRef}
+            value={value}
+            rows={1}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (canSend) onSend();
+              }
+            }}
+            aria-placeholder={placeholder}
+            className={cn(
+              'block w-full resize-none bg-transparent px-3 text-[12.5px] leading-[1.5] outline-none',
+              context ? 'pt-1.5' : 'pt-2.5',
+            )}
+          />
+        </div>
         <div className="flex items-center justify-between gap-1 px-1.5 pb-1.5">
           <div className="flex min-w-0 items-center gap-0.5">{controls}</div>
           {running ? (
