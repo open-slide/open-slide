@@ -165,7 +165,7 @@ test.describe('agent panel', () => {
     await openSlide(page, 'alpha');
     await page.keyboard.press('a');
     const dock = page.locator('[data-agent-dock]');
-    await expect(dock.getByPlaceholder(/Ask Claude Code/)).toBeVisible();
+    await expect(dock.locator('textarea[aria-placeholder*="Ask Claude Code"]')).toBeVisible();
     expect(requested).toEqual(['claude']);
   });
 
@@ -289,7 +289,7 @@ test.describe('agent panel', () => {
     await expect(dock.getByRole('heading', { name: 'Tighten the alpha cover' })).toBeVisible();
 
     await openSlide(page, 'steps');
-    await expect(dock.getByPlaceholder(/Ask Claude Code/)).toBeVisible();
+    await expect(dock.locator('textarea[aria-placeholder*="Ask Claude Code"]')).toBeVisible();
     await expect(dock.getByText('Tighten the alpha cover')).toHaveCount(0);
 
     await dock.getByRole('button', { name: 'History', exact: true }).click();
@@ -325,7 +325,7 @@ test.describe('agent panel', () => {
 
     const dock = page.locator('[data-agent-dock]');
     await expect(dock.getByRole('heading', { name: "What's this deck about?" })).toBeVisible();
-    await expect(dock.getByPlaceholder('A 10-minute talk on…')).toBeFocused();
+    await expect(dock.locator('textarea[aria-placeholder="A 10-minute talk on…"]')).toBeFocused();
 
     await dock.getByRole('button', { name: /^Opus/ }).click();
     const menu = page.locator('[data-agent-model-menu]');
