@@ -748,7 +748,7 @@ export function Slide() {
       >
         <SelectionReporter />
         <div className="flex h-dvh flex-col overflow-hidden bg-sidebar text-foreground">
-          <header className="grid min-h-12 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2 py-2 md:px-3">
+          <header className="grid min-h-12 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2 py-2 sm:grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)] md:px-3">
             <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1.5 md:gap-2">
               {showSlideBrowser && (
                 <button
@@ -761,7 +761,6 @@ export function Slide() {
                   <ChevronLeft className="size-4" />
                 </button>
               )}
-              <span aria-hidden className="mx-0.5 hidden h-5 w-px bg-hairline md:block" />
               {import.meta.env.DEV && (
                 <Tabs
                   value={view}
@@ -793,9 +792,6 @@ export function Slide() {
 
             <div className="col-start-3 row-start-1 flex items-center justify-end gap-1">
               {view === 'slides' && !narrowToolbar && <InspectModeSwitcher />}
-              {import.meta.env.DEV && view === 'slides' && !compactToolbar && (
-                <span aria-hidden className="mx-0.5 hidden h-5 w-px bg-hairline md:block" />
-              )}
               {view === 'slides' && !compactToolbar && (
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -912,9 +908,8 @@ export function Slide() {
                 <DesignToggleButton active={designOpen} onToggle={() => setDesignOpen((v) => !v)} />
               )}
               {view === 'slides' && !narrowToolbar && <InspectPanelButton />}
-              <span aria-hidden className="mx-0.5 hidden h-5 w-px bg-hairline md:block" />
               {view === 'slides' && (
-                <div className="inline-flex items-stretch">
+                <div className="inline-flex items-stretch md:ml-1">
                   <Button
                     size="sm"
                     variant="brand"
