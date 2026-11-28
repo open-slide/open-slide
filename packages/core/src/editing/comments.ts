@@ -5,9 +5,29 @@ import { findJsxAncestors, type JsxContainer, parseSource } from './babel-walk.t
 const MARKER_RE =
   /\{\/\*\s*@slide-comment\s+id="(c-[a-f0-9]+)"\s+ts="([^"]+)"\s+text="([A-Za-z0-9_-]+={0,2})"\s*\*\/\}/;
 
+export const COMMENT_INTENTS = [
+  'delete',
+  'duplicate',
+  'move-before',
+  'move-after',
+  'wrap',
+] as const;
+
+export type CommentIntent = (typeof COMMENT_INTENTS)[number];
+
+export function isCommentIntent(value: unknown): value is CommentIntent {
+  return typeof value === 'string' && (COMMENT_INTENTS as readonly string[]).includes(value);
+}
+
 export type CommentRect = { x: number; y: number; w: number; h: number };
 export type CommentTarget = { line: number; column: number };
-export type CommentPayload = { note: string; hint?: string; rect?: CommentRect; page?: number };
+export type CommentPayload = {
+  note: string;
+  hint?: string;
+  rect?: CommentRect;
+  page?: number;
+  intent?: CommentIntent;
+};
 
 export type Comment = {
   id: string;
@@ -17,6 +37,7 @@ export type Comment = {
   hint?: string;
   rect?: CommentRect;
   page?: number;
+  intent?: CommentIntent;
   // Source location of the JSX element the marker sits in, matching the
   // `data-slide-loc` the loc-tags plugin stamps on the rendered element.
   target?: CommentTarget | null;
@@ -70,6 +91,9 @@ export function parseMarkers(source: string): Comment[] {
         hint: payload.hint,
         rect: parseCommentRect(payload.rect),
         page: parseCommentPage(payload.page),
+        // An unrecognised intent (hand-edited, or from a newer writer) degrades to a
+        // plain note rather than hiding the comment.
+        intent: isCommentIntent(payload.intent) ? payload.intent : undefined,
       });
     } catch {}
   }

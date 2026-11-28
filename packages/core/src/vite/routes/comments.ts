@@ -4,7 +4,9 @@ import {
   b64urlEncode,
   buildMarker,
   type CommentPayload,
+  COMMENT_INTENTS,
   findInsertion,
+  isCommentIntent,
   newCommentId,
   offsetToLine,
   parseCommentPage,
@@ -24,7 +26,7 @@ import {
 } from './context.ts';
 
 // GET    /__comments        list markers for ?slideId=…
-// POST   /__comments/add    add marker { slideId, line, column?, text, hint?, rect?, page? }
+// POST   /__comments/add    add marker { slideId, line, column?, text, hint?, rect?, page?, intent? }
 // PUT    /__comments/:id    replace note { slideId, text }
 // DELETE /__comments/:id    remove marker
 
@@ -36,6 +38,7 @@ type AddCommentBody = {
   hint?: string;
   rect?: unknown;
   page?: unknown;
+  intent?: unknown;
 };
 
 export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): void {
@@ -66,6 +69,18 @@ export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): v
         if (!body.text || typeof body.text !== 'string') {
           return json(res, 400, { error: 'missing text' });
         }
+        const hint = body.hint;
+        if (hint !== undefined && typeof hint !== 'string') {
+          return json(res, 400, { error: 'invalid hint' });
+        }
+        // An intent is machine-set, so a null from a client that always sends the
+        // key means "none"; a hint is free text and must be a string when present.
+        const intent = body.intent ?? undefined;
+        if (intent !== undefined && !isCommentIntent(intent)) {
+          return json(res, 400, {
+            error: `invalid intent; expected one of ${COMMENT_INTENTS.join(', ')}`,
+          });
+        }
 
         const source = await readSlideSource(file);
         if (source === null) return json(res, 404, { error: 'slide not found' });
@@ -86,6 +101,7 @@ export function registerCommentRoutes(server: ViteDevServer, ctx: ApiContext): v
           hint: body.hint,
           rect: parseCommentRect(body.rect),
           page: parseCommentPage(body.page),
+          intent,
         };
         const encoded = b64urlEncode(JSON.stringify(payload));
         const marker = buildMarker(plan, id, ts, encoded);
