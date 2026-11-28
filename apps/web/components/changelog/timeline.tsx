@@ -52,18 +52,17 @@ export function Rich({ text }: { text: string }) {
 }
 
 export function Timeline({ eras, latest }: { eras: Era[]; latest: string }) {
-  const indicatorEntries: IndicatorEntry[] = eras.flatMap((era) =>
-    era.releases.map((release) => ({
-      id: `v${release.line}`,
-      version: versionLabel(release),
-      date: formatDate(release.date),
-    })),
-  );
+  const releases = eras.flatMap((era) => era.releases);
+  const indicatorEntries: IndicatorEntry[] = releases.map((release) => ({
+    id: `v${release.line}`,
+    version: versionLabel(release),
+    date: formatDate(release.date),
+  }));
 
   return (
     <div className="cl-timeline relative">
       <ReleaseIndicator entries={indicatorEntries} />
-      <div className="mb-12 flex flex-wrap items-center justify-between gap-4 sm:mb-16">
+      <div className="mb-12 sm:mb-16">
         <fieldset className="cl-filter inline-flex items-center gap-0.5 rounded-full bg-[color:var(--color-panel)] p-1 shadow-[var(--shadow-edge)]">
           <legend className="sr-only">Show</legend>
           <label>
@@ -81,48 +80,32 @@ export function Timeline({ eras, latest }: { eras: Era[]; latest: string }) {
             <span>Highlights</span>
           </label>
         </fieldset>
-        <p className="caption">Newest first</p>
       </div>
 
-      {eras.map((era, eraIndex) => (
-        <section key={era.id} aria-labelledby={`era-${era.id}`}>
-          <EraHeader era={era} first={eraIndex === 0} />
-          {era.releases.map((release, i) => (
-            <Entry
-              key={release.line}
-              release={release}
-              latest={latest}
-              last={eraIndex === eras.length - 1 && i === era.releases.length - 1}
-            />
-          ))}
-        </section>
+      {releases.map((release, i) => (
+        <Entry
+          key={release.line}
+          release={release}
+          latest={latest}
+          first={i === 0}
+          last={i === releases.length - 1}
+        />
       ))}
     </div>
   );
 }
 
-function EraHeader({ era, first }: { era: Era; first: boolean }) {
-  return (
-    <div className={`cl-rail relative pb-14 pl-8 sm:pl-12 ${first ? 'cl-rail-start' : 'pt-6'}`}>
-      <span aria-hidden className="cl-node cl-node-era" />
-      <p className="caption nums mb-3 flex items-center gap-2">
-        <span className="normal-case text-[color:var(--color-text)]">{era.label}</span>
-        <span aria-hidden>·</span>
-        <span>{era.span}</span>
-      </p>
-      <h2
-        id={`era-${era.id}`}
-        data-reveal
-        className="max-w-[24ch] text-balance text-[26px] font-medium leading-[1.15] tracking-[-0.03em] sm:text-[32px]"
-      >
-        <span className="text-[color:var(--color-text)]">{era.title}.</span>{' '}
-        <span className="text-[color:var(--color-muted)]">{era.blurb}</span>
-      </h2>
-    </div>
-  );
-}
-
-function Entry({ release, latest, last }: { release: Release; latest: string; last: boolean }) {
+function Entry({
+  release,
+  latest,
+  first,
+  last,
+}: {
+  release: Release;
+  latest: string;
+  first: boolean;
+  last: boolean;
+}) {
   const major = release.kind === 'major';
   const highlight = isHighlight(release);
   const isLatest = release.version === latest;
@@ -154,7 +137,7 @@ function Entry({ release, latest, last }: { release: Release; latest: string; la
       </header>
 
       <div
-        className={`cl-rail relative pl-8 sm:pl-12 ${last ? 'cl-rail-end pb-4' : 'pb-16 sm:pb-24'}`}
+        className={`cl-rail relative pl-8 sm:pl-12 ${first ? 'cl-rail-start' : ''} ${last ? 'cl-rail-end pb-4' : 'pb-16 sm:pb-24'}`}
       >
         <span
           aria-hidden

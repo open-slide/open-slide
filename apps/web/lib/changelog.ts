@@ -31,10 +31,6 @@ export type Release = {
 
 export type Era = {
   id: string;
-  label: string;
-  title: string;
-  blurb: string;
-  span: string;
   releases: Release[];
 };
 
@@ -48,10 +44,6 @@ const shot = (name: string, height: number, alt: string): Shot => ({
 export const eras: Era[] = [
   {
     id: 'v2',
-    label: 'v2',
-    title: 'open-slide 2',
-    blurb: 'React 19, an editor that edits, and an agent that lives next to your slides.',
-    span: 'Sep – Nov 2026',
     releases: [
       {
         line: '2.6',
@@ -233,11 +225,6 @@ export const eras: Era[] = [
   },
   {
     id: 'v1',
-    label: 'v1',
-    title: 'open-slide 1',
-    blurb:
-      'From a canvas and a skill file to themes, transitions, a real presenter, and a command menu.',
-    span: 'May – Aug 2026',
     releases: [
       {
         line: '1.19',
@@ -632,10 +619,6 @@ export const eras: Era[] = [
   },
   {
     id: 'preview',
-    label: '0.x',
-    title: 'Preview',
-    blurb: 'Sixteen releases in two weeks, built in the open.',
-    span: 'Apr 2026',
     releases: [
       {
         line: '0.0',
@@ -654,6 +637,15 @@ export const eras: Era[] = [
 export const latestVersion =
   eras[0].releases[0].patches?.at(-1)?.version ?? eras[0].releases[0].version;
 
-export const contributorCount = new Set(
-  eras.flatMap((era) => era.releases.flatMap((release) => release.contributors ?? [])),
-).size;
+export type Contributor = { handle: string; since: string };
+
+export const contributors: Contributor[] = (() => {
+  const seen = new Map<string, Contributor>();
+  const oldestFirst = eras.flatMap((era) => era.releases).reverse();
+  for (const release of oldestFirst) {
+    for (const handle of release.contributors ?? []) {
+      if (!seen.has(handle)) seen.set(handle, { handle, since: `v${release.line}` });
+    }
+  }
+  return [...seen.values()];
+})();

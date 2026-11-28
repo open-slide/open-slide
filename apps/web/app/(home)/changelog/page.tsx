@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
+import { ContributorsStat } from '@/components/changelog/contributors-stat';
 import { Timeline } from '@/components/changelog/timeline';
 import { Footer } from '@/components/landing/footer';
 import { Nav } from '@/components/landing/nav';
 import { ScrollReveal } from '@/components/landing/scroll-reveal';
-import { contributorCount, eras, latestVersion } from '@/lib/changelog';
+import { contributors, eras, latestVersion } from '@/lib/changelog';
 import { coreDir, readCoreRelease } from '@/lib/changelog-source';
 import { fetchGitHubStars, formatStarCount } from '@/lib/github';
 import { gitConfig } from '@/lib/shared';
@@ -28,7 +29,6 @@ export default async function ChangelogPage() {
   const stats = [
     { value: `v${latestVersion}`, label: 'Latest release' },
     { value: String(releaseCount), label: 'Releases' },
-    { value: String(contributorCount), label: 'Contributors' },
     { value: 'Apr 19, 2026', label: 'First commit' },
   ];
 
@@ -58,16 +58,12 @@ export default async function ChangelogPage() {
               className="rise mt-10 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-[color:var(--color-rule-soft)] shadow-[var(--shadow-edge)] sm:grid-cols-4"
               style={{ animationDelay: '240ms' }}
             >
-              {stats.map((stat) => (
-                <div
-                  key={stat.label}
-                  className="flex flex-col gap-1 bg-[color:var(--color-panel)] px-4 py-4"
-                >
-                  <dt className="caption order-2">{stat.label}</dt>
-                  <dd className="nums order-1 font-[family-name:var(--font-mono)] text-[17px] font-medium text-[color:var(--color-text)]">
-                    {stat.value}
-                  </dd>
-                </div>
+              {stats.slice(0, 2).map((stat) => (
+                <Stat key={stat.label} {...stat} />
+              ))}
+              <ContributorsStat contributors={contributors} />
+              {stats.slice(2).map((stat) => (
+                <Stat key={stat.label} {...stat} />
               ))}
             </dl>
 
@@ -94,5 +90,16 @@ export default async function ChangelogPage() {
       </main>
       <Footer />
     </>
+  );
+}
+
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="flex flex-col gap-1 bg-[color:var(--color-panel)] px-4 py-4">
+      <dt className="caption order-2">{label}</dt>
+      <dd className="nums order-1 font-[family-name:var(--font-mono)] text-[17px] font-medium text-[color:var(--color-text)]">
+        {value}
+      </dd>
+    </div>
   );
 }
